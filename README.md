@@ -1,10 +1,22 @@
 # Agent Skills
 
-A collection of [agentskills.io](https://agentskills.io/) skills for
-AI coding agents in VS Code with GitHub Copilot. These skills
-provide structured workflows for specification writing, TDD
-implementation, code review, and PR review across multiple tech
-stacks.
+A collection of [agentskills.io](https://agentskills.io/) skills for AI coding
+agents. These skills provide structured workflows for specification writing, TDD
+implementation, code review, and PR review across multiple tech stacks.
+
+## Compatibility
+
+The [agentskills.io](https://agentskills.io/) format is supported by a growing
+number of AI coding tools:
+
+- **VS Code** with GitHub Copilot (agent mode)
+- **Claude Code** (Anthropic CLI)
+- **Cursor**
+- **Windsurf**
+
+The examples below use VS Code, but the concepts apply to any supported tool.
+Check your tool's documentation for details on skill discovery paths and
+configuration.
 
 ## Setup
 
@@ -14,16 +26,15 @@ Clone this repository to `~/.agents`:
 git clone https://github.com/wtsi-hgi/agentskills.git ~/.agents
 ```
 
-VS Code with GitHub Copilot automatically discovers skills in
-`~/.agents/skills/`. Once cloned, the skills are immediately
-available in all your workspaces.
+Tools that support agentskills.io automatically discover skills in
+`~/.agents/skills/`. For example, VS Code with GitHub Copilot picks them up
+immediately across all workspaces.
 
 ### Per-project overrides
 
-Projects can also have their own skills in `.github/skills/`. Any
-project-level skills supplement or override the global ones from
-`~/.agents/skills/`. This is useful for project-specific conventions
-that don't belong in the shared set.
+Projects can also have their own skills in `.github/skills/`. Any project-level
+skills supplement or override the global ones from `~/.agents/skills/`. This is
+useful for project-specific conventions that don't belong in the shared set.
 
 ## Skill Inventory
 
@@ -56,8 +67,7 @@ Skills for Go projects using GoConvey testing:
 
 ### Next.js + FastAPI
 
-Skills for full-stack projects with Next.js 16 (App Router) +
-FastAPI:
+Skills for full-stack projects with Next.js 16 (App Router) + FastAPI:
 
 | Skill | Purpose |
 |---|---|
@@ -69,48 +79,44 @@ FastAPI:
 
 The skills form a layered system:
 
-1. **agent-conduct** provides universal safety rules that all other
-   skills reference.
-2. **Conventions skills** (`go-conventions`,
-   `nextjs-fastapi-conventions`) define tech-stack-specific
-   standards, acting as a single source of truth for code quality,
-   testing patterns, and commands.
-3. **Implementor/reviewer skills** provide the TDD cycle and review
-   checklists, referencing their conventions skill to avoid
-   duplicating rules.
-4. **Workflow skills** (`orchestrator`, `pr-reviewer`,
-   `spec-writer`, etc.) coordinate multi-step processes by
-   launching subagents with the appropriate tech-stack skills.
+1. **agent-conduct** provides universal safety rules that all other skills
+   reference.
+2. **Conventions skills** (`go-conventions`, `nextjs-fastapi-conventions`)
+   define tech-stack-specific standards, acting as a single source of truth for
+   code quality, testing patterns, and commands.
+3. **Implementor/reviewer skills** provide the TDD cycle and review checklists,
+   referencing their conventions skill to avoid duplicating rules.
+4. **Workflow skills** (`orchestrator`, `pr-reviewer`, `spec-writer`, etc.)
+   coordinate multi-step processes by launching subagents with the appropriate
+   tech-stack skills.
 
 The workflow skills are generic - they discover which
-implementor/reviewer/conventions skills to use based on the project
-context. This means the same orchestrator can drive a Go project or
-a Next.js+FastAPI project without modification.
+implementor/reviewer/conventions skills to use based on the project context.
+This means the same orchestrator can drive a Go project or a Next.js+FastAPI
+project without modification.
 
 ### Typical workflow
 
-1. **spec-writer** takes a feature description and produces a
-   detailed spec with acceptance tests, then creates phase plan
-   documents.
-2. **orchestrator** processes each phase: launches implementor
-   subagents for TDD implementation, then reviewer subagents for
-   verification.
-3. **pr-reviewer** performs a final holistic review of all changes,
-   fixing issues via implementor subagents.
+1. **spec-writer** takes a feature description and produces a detailed spec with
+   acceptance tests, then creates phase plan documents.
+2. **orchestrator** processes each phase: launches implementor subagents for TDD
+   implementation, then reviewer subagents for verification.
+3. **pr-reviewer** performs a final holistic review of all changes, fixing
+   issues via implementor subagents.
 
 ## Adding New Tech Stacks
 
 To add support for a new tech stack (e.g. Rust, Django):
 
-1. Create a `<stack>-conventions` skill with code quality standards,
-   testing patterns, architecture principles, and commands.
-2. Create a `<stack>-implementor` skill with the TDD cycle,
-   referencing your conventions skill and agent-conduct.
-3. Create a `<stack>-reviewer` skill with the review checklist,
-   referencing your conventions skill and agent-conduct.
+1. Create a `<stack>-conventions` skill with code quality standards, testing
+   patterns, architecture principles, and commands.
+2. Create a `<stack>-implementor` skill with the TDD cycle, referencing your
+   conventions skill and agent-conduct.
+3. Create a `<stack>-reviewer` skill with the review checklist, referencing your
+   conventions skill and agent-conduct.
 
-The generic workflow skills (orchestrator, pr-reviewer, spec-writer,
-etc.) will automatically work with the new stack.
+The generic workflow skills (orchestrator, pr-reviewer, spec-writer, etc.) will
+automatically work with the new stack.
 
 ## License
 
