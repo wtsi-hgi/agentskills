@@ -101,12 +101,72 @@ resolve each thread.
 **d.** Commit each fix (single-line imperative message, max 72 chars). Batch
 purely cosmetic fixes into one style-cleanup commit.
 
+### 8. Copilot re-review loop
+
+If any resolved threads in step 7 were authored by Copilot (`login` =
+`"copilot"` or `"github-actions[bot]"` with Copilot indicators), enter the
+re-review loop. Track a **cycle counter** starting at 1.
+
+**a. Push fixes.**
+`git push` the current branch. This is an allowed exception to the
+agent-conduct no-push rule (see agent-conduct § Git Safety).
+
+**b. Wait for GitHub to see the push.**
+Poll until the PR head SHA matches the local HEAD:
+```bash
+until [ "$(gh api repos/{owner}/{repo}/pulls/{number} --jq .head.sha)" = "$(git rev-parse HEAD)" ]; do sleep 5; done
+```
+
+**c. Request Copilot re-review.**
+```bash
+gh api repos/{owner}/{repo}/pulls/{number}/requested_reviewers \
+  -f 'reviewers[]=copilot' || true
+```
+If Copilot is configured as a required reviewer it may already be queued;
+the `|| true` handles "already requested" errors.
+
+**d. Wait for new Copilot review.**
+Poll for a Copilot review submitted after the push timestamp:
+```bash
+PUSH_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+# Poll until a Copilot review appears after PUSH_TIME
+while true; do
+  LATEST=$(gh api repos/{owner}/{repo}/pulls/{number}/reviews --paginate \
+    --jq '[.[] | select(.user.login=="copilot-pull-request-reviewer[bot]") | select(.submitted_at > "'"$PUSH_TIME"'") | .id] | last')
+  [ -n "$LATEST" ] && break
+  sleep 15
+done
+```
+Timeout after 20 minutes; if no review appears, log a warning and exit the
+loop.
+
+**e. Check for new Copilot comments.**
+Re-fetch PR comments (step 2 recipe). Filter for unresolved threads authored
+by Copilot that were not present in the previous cycle.
+
+- If **no new Copilot comments** exist, the loop ends.
+- If **new Copilot comments** exist, increment the cycle counter and process
+  them as in step 7 (fix, reply, resolve, commit), then return to step 8a.
+
+**f. Escalation for persistent issues.**
+If the cycle counter reaches **3 or more**, the implementor subagent prompts
+must prepend this instruction:
+> Consider the problem holistically. The same area has attracted repeated
+> reviewer findings across multiple fix cycles. Rather than patching
+> individual comments, refactor the surrounding code so that reviewers do not
+> keep finding issues.
+
+After **20 cycles**, stop the loop, push whatever has been committed, and
+report that Copilot keeps raising issues - manual review is needed.
+
 ## Rules
 
 - NEVER implement fixes directly - use implementor subagents.
 - NEVER skip findings.
 - One fix per commit (cosmetic batches excepted).
 - Reply+resolve PR threads before committing fixes that address them.
+- `git push` is ONLY permitted during the Copilot re-review loop (step 8).
+  This is the sole exception to the agent-conduct no-push rule.
 
 ## Appendix: GitHub API Recipes
 
@@ -152,3 +212,28 @@ gh api graphql -f query='mutation {
   }
 }'
 ```
+
+### Request Copilot re-review
+```bash
+gh api repos/{owner}/{repo}/pulls/{number}/requested_reviewers \
+  -f 'reviewers[]=copilot' || true
+```
+
+### Poll for Copilot review after a push
+```bash
+PUSH_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+while true; do
+  LATEST=$(gh api repos/{owner}/{repo}/pulls/{number}/reviews --paginate \
+    --jq '[.[] | select(.user.login=="copilot-pull-request-reviewer[bot]") | select(.submitted_at > "'"$PUSH_TIME"'") | .id] | last')
+  [ -n "$LATEST" ] && break
+  sleep 15
+done
+```
+
+### Filter new unresolved Copilot comments
+```bash
+gh api repos/{owner}/{repo}/pulls/{number}/comments --paginate \
+  --jq '[.[] | select(.user.login=="copilot-pull-request-reviewer[bot]") | select(.in_reply_to_id == null)] | .[] | "\(.id) \(.path) \(.body[:80])"'
+```
+Cross-reference with resolved thread IDs from the GraphQL query to find only
+unresolved ones.
