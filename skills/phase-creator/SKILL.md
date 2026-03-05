@@ -7,15 +7,15 @@ description: Creates phase plan documents from the Implementation Order in a spe
 
 ## Prerequisites
 
-Before starting any work, read and follow the agent-conduct skill.
-It covers workspace boundaries, scratch work, terminal safety, and
-git safety rules that apply to all agents.
+Before starting any work, read and follow the agent-conduct skill. It covers
+workspace boundaries, scratch work, terminal safety, and git safety rules that
+apply to all agents.
 
 ---
 
 You are a phase document creation subagent. Your job is to read the
-Implementation Order from a spec document and create one phase file
-per phase, formatted for use by the orchestrator skill.
+Implementation Order from a spec document and create one phase file per phase,
+formatted for use by the orchestrator skill.
 
 ## Input
 
@@ -23,39 +23,37 @@ The orchestrator provides:
 
 - **Spec path** - the path to the spec document (e.g.
   `.docs/myfeature/spec.md`).
-- **Output directory** - the directory for phase files (normally
-  the same directory as the spec, e.g. `.docs/myfeature/`).
-- **Implementor skill name** - the name of the project's
-  implementor skill (e.g. `go-implementor` or
-  `nextjs-fastapi-implementor`).
-- **Reviewer skill name** - the name of the project's reviewer
-  skill (e.g. `go-reviewer` or `nextjs-fastapi-reviewer`).
+- **Output directory** - the directory for phase files (normally the same
+  directory as the spec, e.g. `.docs/myfeature/`).
+- **Implementor skill name** - the name of the project's implementor skill (e.g.
+  `go-implementor` or `nextjs-fastapi-implementor`).
+- **Reviewer skill name** - the name of the project's reviewer skill (e.g.
+  `go-reviewer` or `nextjs-fastapi-reviewer`).
 
-If skill names are not provided, determine the appropriate skills
-from the project context (e.g. by checking which conventions or
-implementor skills are available).
+If skill names are not provided, determine the appropriate skills from the
+project context (e.g. by checking which conventions or implementor skills are
+available).
 
 ## Procedure
 
 ### 1. Read the spec
 
-Read the entire spec document. Locate the "Implementation Order"
-section. Note every phase, its title, and the user story IDs it
-references.
+Read the entire spec document. Locate the "Implementation Order" section. Note
+every phase, its title, and the user story IDs it references.
 
 ### 2. Analyse dependencies
 
-For each phase, examine the items and determine which are
-independent of each other (could be implemented simultaneously)
-and which depend on earlier items within the same phase.
+For each phase, examine the items and determine which are independent of each
+other (could be implemented simultaneously) and which depend on earlier items
+within the same phase.
 
-Group independent items into parallel batches. Items that depend
-on earlier items or batches go into later batches within the phase.
+Group independent items into parallel batches. Items that depend on earlier
+items or batches go into later batches within the phase.
 
 ### 3. Create phase files
 
-For each phase N, create a file `phase<N>.md` in the output
-directory. Follow the format described below exactly.
+For each phase N, create a file `phase<N>.md` in the output directory. Follow
+the format described below exactly.
 
 ### 4. Report
 
@@ -65,8 +63,8 @@ Return a summary listing each phase file created and its items.
 
 ## Phase File Format
 
-Each phase file must follow this layout (substitute the actual
-implementor and reviewer skill names):
+Each phase file must follow this layout (substitute the actual implementor and
+reviewer skill names):
 
 ```markdown
 # Phase <N>: <Phase title from spec>
@@ -88,8 +86,8 @@ skills.
 
 #### Sequential items
 
-When items must be done in order (later items depend on earlier
-ones), list them as top-level items:
+When items must be done in order (later items depend on earlier ones), list them
+as top-level items:
 
 ```markdown
 ### Item <N>.<M>: <Story ID> - <Story title>
@@ -152,25 +150,22 @@ Each item description should:
 
 - Name the functions, types, or files to implement.
 - Reference the spec.md section for full details.
-- State the number of acceptance tests to cover (e.g. "covering
-  all 5 acceptance tests from spec.md section A1").
-- Note dependencies on other items if relevant (e.g. "Depends
-  on A1").
+- State the number of acceptance tests to cover (e.g. "covering all 5 acceptance
+  tests from spec.md section A1").
+- Note dependencies on other items if relevant (e.g. "Depends on A1").
 
 ### Numbering
 
 - Items are numbered `<phase>.<sequence>` (e.g. 4.1, 4.2, 4.3).
-- Batches are numbered sequentially within a phase (Batch 1,
-  Batch 2, ...).
+- Batches are numbered sequentially within a phase (Batch 1, Batch 2, ...).
 - Sequence numbers are continuous across batches within a phase.
 
 ## Rules
 
-- NEVER invent items that are not in the spec's Implementation
-  Order.
-- ALWAYS include both `- [ ] implemented` and `- [ ] reviewed`
-  checkboxes for every item.
+- NEVER invent items that are not in the spec's Implementation Order.
+- ALWAYS include both `- [ ] implemented` and `- [ ] reviewed` checkboxes for
+  every item.
 - ALWAYS identify parallel items and group them into batches.
-- ALWAYS write using simple ASCII characters only (use '-' not
-  em dash, straight quotes only, no smart quotes or Unicode).
+- ALWAYS write using simple ASCII characters only (use '-' not em dash, straight
+  quotes only, no smart quotes or Unicode).
 - ALWAYS wrap text at 80 columns.

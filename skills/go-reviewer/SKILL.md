@@ -9,17 +9,17 @@ description: Review Go implementations against spec acceptance tests. Provides t
 
 Before starting any work:
 
-1. Read and follow the agent-conduct skill. It covers workspace
-   boundaries, scratch work, terminal safety, and git safety rules.
-2. Read the go-conventions skill. It defines code quality standards,
-   GoConvey testing patterns, copyright boilerplate, architecture
-   principles, and commands that all Go code must follow.
+1. Read and follow the agent-conduct skill. It covers workspace boundaries,
+   scratch work, terminal safety, and git safety rules.
+2. Read the go-conventions skill. It defines code quality standards, GoConvey
+   testing patterns, copyright boilerplate, architecture principles, and
+   commands that all Go code must follow.
 
 ---
 
-You are a review subagent with clean context - no memory of
-implementation decisions. Your job is to independently verify that
-implemented code meets the specification and quality standards.
+You are a review subagent with clean context - no memory of implementation
+decisions. Your job is to independently verify that implemented code meets the
+specification and quality standards.
 
 ## Review Procedure
 
@@ -27,8 +27,8 @@ For each item under review:
 
 ### 1. Read the specification
 
-- Read spec.md for the referenced sections (acceptance tests,
-  function signatures, types, package structure).
+- Read spec.md for the referenced sections (acceptance tests, function
+  signatures, types, package structure).
 - Read all implemented source and test files for the item(s).
 
 ### 2. Run the tests
@@ -42,46 +42,41 @@ CGO_ENABLED=1 go test -tags netgo --count 1 ./<path> -v -run <TestFunc>
 
 ### 3. Verify acceptance test coverage
 
-- For every acceptance test listed in spec.md for the referenced
-  user stories, confirm there is a corresponding GoConvey test.
+- For every acceptance test listed in spec.md for the referenced user stories,
+  confirm there is a corresponding GoConvey test.
 - Do not accept missing, stubbed-out, or circumvented tests.
-- Do not accept hardcoded expected results in implementations that
-  make tests pass artificially.
-- Do not accept test helpers that silently swallow failures or
-  build tags that exclude tests.
+- Do not accept hardcoded expected results in implementations that make tests
+  pass artificially.
+- Do not accept test helpers that silently swallow failures or build tags that
+  exclude tests.
 
 ### 4. Verify implementation correctness
 
-- Confirm the implementation matches the spec: correct packages,
-  files, function signatures, types, escaping (e.g.
-  `strconv.Quote`), status values, field names, and format strings.
-- For streaming code, confirm entries are streamed via callbacks
-  and not accumulated in slices. Memory-bounded tests must use
-  `runtime.ReadMemStats` with `runtime.GC()` as specified.
-- For mock-based tests, confirm the mock correctly implements the
-  interface and tests exercise the interface properly.
-- For filesystem tests, confirm file permissions, GID handling,
-  symlink management, and atomicity as specified.
+- Confirm the implementation matches the spec: correct packages, files, function
+  signatures, types, escaping (e.g. `strconv.Quote`), status values, field
+  names, and format strings.
+- For streaming code, confirm entries are streamed via callbacks and not
+  accumulated in slices. Memory-bounded tests must use `runtime.ReadMemStats`
+  with `runtime.GC()` as specified.
+- For mock-based tests, confirm the mock correctly implements the interface and
+  tests exercise the interface properly.
+- For filesystem tests, confirm file permissions, GID handling, symlink
+  management, and atomicity as specified.
 
 ### 5. Verify code quality
 
-Apply all code quality rules from the go-conventions skill. In
-particular check:
+Apply all code quality rules from the go-conventions skill. In particular check:
 
-- **Modern Go (1.25+):** Range over integers
-  (`for i := range n`), `slices`/`maps` packages,
-  `fmt.Errorf` with `%w`, `errors.Is`/`As`. No C-style for loops
-  in new code.
-- **Style:** 100-col code, 80-col comments, short functions, low
-  cyclomatic complexity, self-documenting names, doc comments on
-  exports.
-- **Import grouping:** stdlib, third-party, project - separated by
-  blank lines.
-- **Boilerplate:** All new files start with the copyright header
-  (2026, Genome Research Ltd, Sendu Bala).
-- **GoConvey:** Proper nested `Convey` blocks, `So` assertions
-  (no bare `if` checks), independent test blocks, `t.TempDir()`
-  for temp files.
+- **Modern Go (1.25+):** Range over integers (`for i := range n`),
+  `slices`/`maps` packages, `fmt.Errorf` with `%w`, `errors.Is`/`As`. No C-style
+  for loops in new code.
+- **Style:** Short functions, low cyclomatic complexity, self-documenting names,
+  doc comments on exports.
+- **Import grouping:** stdlib, third-party, project - separated by blank lines.
+- **Boilerplate:** All new files start with the copyright header (2026, Genome
+  Research Ltd, Sendu Bala).
+- **GoConvey:** Proper nested `Convey` blocks, `So` assertions (no bare `if`
+  checks), independent test blocks, `t.TempDir()` for temp files.
 
 ### 6. Run the linter
 
@@ -96,8 +91,7 @@ golangci-lint run
 
 Return one of:
 
-- **PASS** - Optionally note minor suggestions that do not block
-  approval.
+- **PASS** - Optionally note minor suggestions that do not block approval.
 - **FAIL** - Provide specific, actionable feedback listing:
   - Which acceptance tests are missing or incorrect.
   - Which spec requirements are not met.
