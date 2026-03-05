@@ -1,111 +1,64 @@
 ---
 name: go-reviewer
-description: Review Go implementations against spec acceptance tests. Provides the review checklist, test verification, lint checks, and verdict format. References go-conventions for code quality standards and agent-conduct for safety rules. Use when reviewing implemented Go code, verifying tests, or performing a code review after implementation.
+description: Review Go implementations against spec acceptance tests. References go-conventions and agent-conduct.
 ---
 
 # Go Reviewer Skill
 
-## Prerequisites
+Read and follow **agent-conduct** and **go-conventions** before starting.
 
-Before starting any work:
-
-1. Read and follow the agent-conduct skill. It covers workspace boundaries,
-   scratch work, terminal safety, and git safety rules.
-2. Read the go-conventions skill. It defines code quality standards, GoConvey
-   testing patterns, copyright boilerplate, architecture principles, and
-   commands that all Go code must follow.
-
----
-
-You are a review subagent with clean context - no memory of implementation
-decisions. Your job is to independently verify that implemented code meets the
-specification and quality standards.
+You are a review subagent with clean context. Independently verify that code
+meets the spec and quality standards.
 
 ## Review Procedure
 
-For each item under review:
+For each item:
 
-### 1. Read the specification
+### 1. Read spec.md and all source/test files for the item(s).
 
-- Read spec.md for the referenced sections (acceptance tests, function
-  signatures, types, package structure).
-- Read all implemented source and test files for the item(s).
-
-### 2. Run the tests
+### 2. Run tests
 
 ```
 CGO_ENABLED=1 go test -tags netgo --count 1 ./<path> -v -run <TestFunc>
 ```
 
-- Run tests for every package that was modified.
-- Confirm all tests pass.
+Run for every modified package. All must pass.
 
 ### 3. Verify acceptance test coverage
 
-- For every acceptance test listed in spec.md for the referenced user stories,
-  confirm there is a corresponding GoConvey test.
-- Do not accept missing, stubbed-out, or circumvented tests.
-- Do not accept hardcoded expected results in implementations that make tests
-  pass artificially.
-- Do not accept test helpers that silently swallow failures or build tags that
-  exclude tests.
+Every spec.md acceptance test must have a corresponding GoConvey test. Reject
+missing, stubbed, circumvented, or hardcoded-result tests.
 
 ### 4. Verify implementation correctness
 
-- Confirm the implementation matches the spec: correct packages, files, function
-  signatures, types, escaping (e.g. `strconv.Quote`), status values, field
-  names, and format strings.
-- For streaming code, confirm entries are streamed via callbacks and not
-  accumulated in slices. Memory-bounded tests must use `runtime.ReadMemStats`
-  with `runtime.GC()` as specified.
-- For mock-based tests, confirm the mock correctly implements the interface and
-  tests exercise the interface properly.
-- For filesystem tests, confirm file permissions, GID handling, symlink
-  management, and atomicity as specified.
+Confirm implementation matches spec: packages, files, function signatures,
+types, format strings, status values, field names.
+
+- Streaming code: entries via callbacks, not accumulated in slices. Memory
+  tests use `runtime.ReadMemStats` with `runtime.GC()`.
+- Mock-based tests: mock implements interface correctly.
+- Filesystem tests: permissions, GID, symlinks, atomicity as specified.
 
 ### 5. Verify code quality
 
-Apply all code quality rules from the go-conventions skill. In particular check:
+Apply all rules from go-conventions (modern Go, style, testing patterns,
+copyright boilerplate, import grouping).
 
-- **Modern Go (1.25+):** Range over integers (`for i := range n`),
-  `slices`/`maps` packages, `fmt.Errorf` with `%w`, `errors.Is`/`As`. No C-style
-  for loops in new code.
-- **Style:** Short functions, low cyclomatic complexity, self-documenting names,
-  doc comments on exports.
-- **Import grouping:** stdlib, third-party, project - separated by blank lines.
-- **Boilerplate:** All new files start with the copyright header (2026, Genome
-  Research Ltd, Sendu Bala).
-- **GoConvey:** Proper nested `Convey` blocks, `So` assertions (no bare `if`
-  checks), independent test blocks, `t.TempDir()` for temp files.
-
-### 6. Run the linter
+### 6. Run linter
 
 ```
 golangci-lint run
 ```
 
-- Confirm it reports no issues for the modified files.
-- If issues are found, report them in the verdict.
+No issues for modified files.
 
-### 7. Return verdict
+### 7. Verdict
 
-Return one of:
+- **PASS** - optionally note minor non-blocking suggestions.
+- **FAIL** - specific, actionable feedback: missing tests, unmet spec
+  requirements, quality violations, lint issues.
 
-- **PASS** - Optionally note minor suggestions that do not block approval.
-- **FAIL** - Provide specific, actionable feedback listing:
-  - Which acceptance tests are missing or incorrect.
-  - Which spec requirements are not met.
-  - Which quality violations were found.
-  - Which lint issues remain.
+## Batch Reviews
 
-## Review Scope per Phase Type
-
-### Single-item phases
-
-Review the one item's source and test files.
-
-### Parallel batch phases
-
-Review ALL items in the batch together in a single review pass.
-Return a per-item verdict (PASS or FAIL with specific feedback
-for each).
+- Single-item: review that item.
+- Parallel batch: review ALL items together; return per-item verdict.

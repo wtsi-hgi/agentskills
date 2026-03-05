@@ -1,309 +1,137 @@
 ---
 name: pr-reviewer
-description: Reviews committed and uncommitted changes on the current branch compared to a base branch (default develop). Performs a practical PR review checking for code quality, subtle bugs, real-world usability, and optionally spec conformance. Fixes issues via implementor subagents, then replies to/resolves addressed PR threads and commits each fix batch.
+description: Reviews changes on current branch vs base. Checks code quality, bugs, usability, and optionally spec conformance. Fixes issues via implementor subagents.
 ---
 
 # PR Reviewer Skill
 
-## Prerequisites
+Read and follow **agent-conduct** and the project's **conventions** skill
+before starting.
 
-Before starting any work:
-
-1. Read and follow the agent-conduct skill. It covers workspace boundaries,
-   scratch work, terminal safety, and git safety rules.
-2. Read the project's conventions skill (e.g. `go-conventions` or
-   `nextjs-fastapi-conventions`). It defines the architecture principles, code
-   quality standards, and testing patterns that all code must follow.
-
----
-
-You are a PR review agent. You examine the diff between the current branch and a
-base reference, perform a thorough code review, and fix issues by delegating to
-implementor subagents.
-
-Skills are instruction files, not named agents. Do not read skill files yourself
-or embed their text in subagent prompts — this wastes your context window.
-Instead, tell each subagent which skills to read (by name and file path) and
-instruct it to read and follow them. The subagent can read the files directly.
+You are a PR review agent. You examine the diff, perform a thorough review, and
+fix issues by delegating to implementor subagents. Do not read skill files
+yourself - tell subagents which skills to read by name and file path.
 
 ## Skill Discovery
 
-Identify the project's implementor, reviewer, and conventions skills from the
-available skills. For example:
-
-- **Go projects:** use `go-implementor`, `go-reviewer`, and `go-conventions`.
-- **Next.js + FastAPI projects:** use
-  `nextjs-fastapi-implementor`, `nextjs-fastapi-reviewer`, and
-  `nextjs-fastapi-conventions`.
+Match skills to project stack:
+- **Go:** `go-implementor`, `go-reviewer`, `go-conventions`
+- **Next.js + FastAPI:** `nextjs-fastapi-implementor`,
+  `nextjs-fastapi-reviewer`, `nextjs-fastapi-conventions`
 
 ## Input
 
-The caller may provide:
-
-- **Base reference** - a branch name or commit SHA to compare against. Selection
-  order:
-  1. Caller-provided base reference.
-  2. Active PR target branch (`base.ref`) for the current branch.
-  3. Fallback: `develop`.
-- **Spec document** - a path to a spec file (e.g. `spec.md`) for conformance
-  checking.
-- **Focus areas** - specific files, packages, or concerns to prioritise.
+- **Base reference** (optional): branch/SHA. Resolution order: caller-provided
+  -> active PR `base.ref` -> fallback `develop`.
+- **Spec document** (optional): path for conformance checking.
+- **Focus areas** (optional): specific files or concerns.
 
 ## Procedure
 
-### 0. Mandatory base branch guardrail
+### 0. Resolve base (mandatory)
 
-Before any diff, lint, or test command runs, you MUST lock the review base.
+Lock the review base before any diff/lint/test:
+1. Caller-provided base, OR
+2. PR `base.ref` (query via `gh api` if needed), OR
+3. `develop` (only if no PR exists and no caller base).
 
-- If caller provided a base reference, use it.
-- Otherwise, if a PR exists for the current branch, you MUST read that PR's
-  `base.ref` and use it.
-- Only if no caller base and no PR base are available, fallback to `develop`.
-
-Hard requirements:
-
-- Never use repository default branch as an inferred review base when a PR
-  exists.
-- Never run `git diff <base>...HEAD` until `base` is explicitly resolved.
-- Emit a one-line confirmation before diffing: `Review base resolved: <base>`
-- If PR exists but `base.ref` cannot be determined, stop and report failure; do
-  not guess.
+**Hard rules:** Never use repo default branch when a PR exists. Never diff
+before base is resolved. Emit `Review base resolved: <base>`. If PR exists but
+`base.ref` unavailable, stop and report failure.
 
 ### 1. Gather context
 
-- Determine the current branch name (`git branch --show-current`).
-- Determine the base reference using the selection order above.
-- If no base was provided by the caller, check for an active PR and use its
-  target branch as base when available.
-- Do not infer the base from repository default branch alone.
-- If PR metadata from helper tools does not include `base.ref`, query the PR
-  directly via GitHub API (for example:
-  `GET /repos/{owner}/{repo}/pulls/{number}`) and extract `base.ref`.
-- Collect the full diff:
-  ```
-  git diff <base>...HEAD
-  ```
-- Also collect uncommitted changes:
-  ```
-  git diff HEAD
-  ```
-- Identify all modified files (committed and uncommitted) relative to the base.
-- Read the full content of every modified file (not just the diff hunks) to
-  understand surrounding context.
+- Get current branch, collect `git diff <base>...HEAD` and `git diff HEAD`.
+- Read full content of every modified file (not just diff hunks).
 
-### 2. Check for an open pull request
+### 2. Check for open PR
 
-- Use the `github-pull-request_activePullRequest` tool to check if a PR exists
-  for this branch.
-- If a PR exists and the caller did not provide a base reference, confirm the
-  review base matches the PR target branch (`base.ref`).
-- Validate explicitly: if resolved base != PR `base.ref`, stop and
-  report a guardrail violation.
-- If a PR exists, read all review comments using `gh` CLI (see [Appendix: GitHub
-  API recipes](#appendix-github-api-recipes)). The
-  `github-pull-request_activePullRequest` VS Code tool is NOT reliable for this:
-  it caps results at 50, misses the most recent review round, and misreports
-  resolution state. Always use `gh`.
-- Note any unresolved threads - these are additional review items.
+Use `github-pull-request_activePullRequest` to check for a PR. Validate
+resolved base matches PR `base.ref`.
 
-### 3. Perform the code review
+Read all review comments via `gh api` (NOT the VS Code tool - it caps at 50
+and misreports state):
+```bash
+gh api repos/{owner}/{repo}/pulls/{number}/comments --paginate
+```
+Note unresolved threads as additional review items.
 
-Review every change with the eye of an experienced developer and pragmatic
-engineer. For each modified file, assess:
+### 3. Code review
 
-#### Code quality
+For every changed file, assess:
 
-Apply all architecture and code quality rules from the project's conventions
-skill. Read the conventions skill carefully and verify each applicable rule
-against the changed code.
+- **Quality:** Apply all rules from the project's conventions skill.
+- **Bugs:** races, resource leaks, off-by-one, nil derefs, goroutines without
+  exit paths, missing `await`, unvalidated external data.
+- **Usability:** Are features actually usable end-to-end (not just mocked)?
+  Clear CLI help/error messages? Edge cases handled?
+- **Test quality:** Meaningful assertions? Faithful mocks? Adequate coverage?
+  Conventions-compliant patterns?
+- **Unresolved PR comments:** verify if current code addresses them.
 
-#### Subtle bugs
+### 4. Spec conformance (if spec provided)
 
-- Race conditions (shared state without synchronisation).
-- Resource leaks (unclosed files, channels, HTTP bodies, database connections).
-- Off-by-one errors, nil/null pointer dereferences, integer overflow.
-- Goroutines or async operations without clear exit paths.
-- Deferred function calls in loops.
-- Incorrect use of concurrency primitives.
-- Missing `await` on async operations.
-- Unvalidated external data.
-
-#### Real-world usability
-
-- Are new features only tested with mocks, or is there also a real
-  implementation that works end-to-end?
-- Would a human user actually be able to use a new CLI command or API? Are
-  flags, help text, and error messages clear?
-- Are edge cases handled (empty input, very large input, permission errors,
-  network timeouts)?
-- Is the feature discoverable - does it appear in help output, README, or
-  CHANGELOG?
-
-#### Test quality
-
-- Do tests actually assert meaningful behaviour, or do they just check that code
-  runs without panicking/throwing?
-- Are mocks faithful to the real interface - or do they silently skip important
-  behaviour?
-- Is there appropriate test coverage for the new/changed code?
-- Do tests follow the patterns specified in the project's conventions skill?
-
-#### Unresolved PR comments
-
-- For each unresolved review thread from step 2, verify whether the current code
-  addresses it. If not, add it to the findings.
-
-### 4. Spec conformance (if a spec was provided)
-
-If the caller mentioned a spec document:
-
-- Launch a subagent with the **reviewer** skill by including in its
-  prompt:
-  - The name and file path of the reviewer skill, with instruction to read and
-    follow it.
-  - The name and file path of the conventions skill, with instruction to read
-    and follow it.
-  - The path to the spec document.
-  - The list of modified files and packages.
-  - The instruction: "You have clean context. Read the spec, read the source and
-    test files for the modified packages, run tests, run linter, and return PASS
-    or FAIL with specific feedback."
-- Incorporate the subagent's findings into the overall review.
+Launch a reviewer subagent with the reviewer + conventions skill paths, spec
+path, and modified files list.
 
 ### 5. Run linters and tests
 
-Run all lint checks and tests using the commands from the project's conventions
-skill. Note any failures or issues in modified files - these become review
-findings.
+Use commands from the conventions skill. Note failures.
 
 ### 6. Compile findings
 
-Produce a numbered list of findings, ordered by severity (bugs first, then
-quality issues, then style nits). Each finding must include:
-
-- **File and line(s)** affected.
-- **Category** (bug, quality, style, test, spec, pr-comment).
-- **Description** of the issue.
-- **Suggested fix** - concrete and actionable.
-
-If there are no findings, report that the changes look good and stop.
+Numbered list ordered by severity (bugs > quality > style). Each finding:
+file/lines, category, description, suggested fix. If no findings, report clean
+and stop.
 
 ### 7. Fix issues
 
-For each finding, starting with the most severe:
+For each finding:
 
-#### a. Note skill file paths
+**a.** Launch an implementor subagent with: implementor + conventions skill
+paths, the specific finding (file, lines, description, fix), surrounding
+context, and "Fix this issue. Follow TDD cycle. Run linters. Confirm tests
+pass."
 
-Note the file paths of the project's implementor and conventions skills (from
-your skills list). Do not read these files — subagents will read them.
+**b.** Verify the fix is correct and tests pass. Retry if needed.
 
-#### b. Launch an implementor subagent
+**c.** If fixing addresses unresolved PR threads, reply (`fixed - ...`) and
+resolve each thread.
 
-Include in its prompt:
-
-- The name and file path of the implementor skill, with instruction to read and
-  follow it.
-- The name and file path of the conventions skill, with instruction to read and
-  follow it.
-- The specific finding to fix (file, lines, description, suggested fix).
-- The surrounding code context.
-- The instruction: "Fix this specific issue. Follow the TDD cycle: if the fix
-  requires a test change, update the test first, then fix the code. Run linters.
-  Confirm all tests still pass."
-
-#### c. Review the subagent's work
-
-- Read the files the subagent modified.
-- Verify the fix is correct, does not introduce new issues, and the tests pass.
-- If the fix is unsatisfactory, launch a new subagent with corrective feedback.
-  Repeat until satisfied.
-
-#### d. Update PR review threads (when applicable)
-
-If the fix addresses one or more unresolved PR review threads:
-
-- Post a reply on each addressed thread explaining what was changed (start with
-  `fixed - ...` and keep it specific).
-- Resolve each addressed thread after replying.
-- If a thread is only partially addressed, do not resolve it; reply with what is
-  done and what remains.
-
-See [Appendix: GitHub API recipes](#appendix-github-api-recipes) for the exact
-commands to reply and resolve.
-
-#### e. Commit the fix batch
-
-Create a commit for the fix (or style-only batch) once tests/lint pass and
-related threads are updated.
-
-- Commit message requirements: single line, imperative mood, max 72 characters.
-- Prefer one commit per finding; purely cosmetic findings may be batched into
-  one style-cleanup commit.
-
-#### f. Repeat
-
-Move to the next finding and repeat from step 7b.
+**d.** Commit each fix (single-line imperative message, max 72 chars). Batch
+purely cosmetic fixes into one style-cleanup commit.
 
 ## Rules
 
-- Do NOT implement fixes directly - always use implementor subagents.
-- Do NOT skip findings - address every issue unless the caller explicitly says
-  to skip it.
-- Do NOT combine multiple non-cosmetic findings into one commit - one fix per
-  commit keeps history clean.
-- Findings that are purely cosmetic (e.g. comment typos) should be batched into
-  a single "style cleanup" commit.
-- If a PR thread is fixed, you MUST reply then resolve before committing that
-  fix batch.
-- Do NOT use repository default branch as diff base when a PR exists.
-- Do NOT continue if PR `base.ref` cannot be resolved and no caller base is
-  provided.
+- NEVER implement fixes directly - use implementor subagents.
+- NEVER skip findings.
+- One fix per commit (cosmetic batches excepted).
+- Reply+resolve PR threads before committing fixes that address them.
 
-## Appendix: GitHub API recipes
+## Appendix: GitHub API Recipes
 
-All commands below use the GitHub CLI (`gh`). It authenticates automatically via
-`$GITHUB_TOKEN`.
+All commands use `gh` CLI (falls back to `curl` with `$GITHUB_TOKEN`).
 
-`gh` should be on `$PATH`. If not, fall back to raw `curl` calls with `-H
-"Authorization: token $GITHUB_TOKEN"` (REST) or `-H "Authorization: bearer
-$GITHUB_TOKEN"` (GraphQL).
-
-### Fetching all PR review comments
-
-Do NOT use the `github-pull-request_activePullRequest` VS Code tool for reading
-comments - it caps at 50, misses the latest review round, and misreports
-resolution state.
-
+### Fetch PR comments
 ```bash
 gh api repos/{owner}/{repo}/pulls/{number}/comments --paginate
 ```
 
-`--paginate` handles multi-page results automatically.
-
-Useful fields per comment: `id` (numeric, used for replies), `user.login`,
-`path`, `line`/`original_line`, `body`, `in_reply_to_id` (null for root comments
-that start a thread), `created_at`.
-
-Filter with `--jq`, e.g. root comments only:
-
+Root comments only:
 ```bash
 gh api repos/{owner}/{repo}/pulls/{number}/comments --paginate \
   --jq '[.[] | select(.in_reply_to_id == null)] | .[] | "\(.id) \(.path) \(.body[:80])"'
 ```
 
-### Replying to a review thread
-
+### Reply to thread
 ```bash
 gh api repos/{owner}/{repo}/pulls/{number}/comments \
   -f body='fixed - <description>' -F in_reply_to=<comment_id>
 ```
 
-### Resolving a review thread
+### Resolve thread (GraphQL)
 
-The REST API does not support resolving threads; use GraphQL.
-
-**Step 1 - Get thread node IDs** (match to comment IDs via `databaseId`):
-
+Get thread node IDs:
 ```bash
 gh api graphql -f query='{
   repository(owner: "{owner}", name: "{repo}") {
@@ -316,11 +144,7 @@ gh api graphql -f query='{
 }'
 ```
 
-Each node has `id` (GraphQL node ID, e.g. `PRRT_kwDO...`) and
-`comments.nodes[0].databaseId` (the numeric REST comment ID).
-
-**Step 2 - Resolve:**
-
+Resolve:
 ```bash
 gh api graphql -f query='mutation {
   resolveReviewThread(input: {threadId: "{thread_node_id}"}) {

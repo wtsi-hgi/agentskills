@@ -1,214 +1,123 @@
 ---
 name: nextjs-fastapi-conventions
-description: Shared conventions for Next.js 16 + FastAPI full-stack projects. Covers the project stack, architecture principles (BFF pattern, Zod contracts, Server/Client Components), code quality standards for Python and TypeScript, testing patterns, styling conventions, and tool commands. Referenced by nextjs-fastapi-implementor, nextjs-fastapi-reviewer, and other workflow skills.
+description: Shared conventions for Next.js 16 + FastAPI full-stack projects. Architecture, code quality, testing, styling, and commands. Referenced by nextjs-fastapi-implementor and nextjs-fastapi-reviewer.
 ---
 
 # Next.js + FastAPI Conventions
 
-This document is the single source of truth for architecture, code quality, and
-testing standards in Next.js + FastAPI full-stack projects. Other skills
-reference it rather than duplicating these rules.
+Single source of truth for architecture, code quality, and testing in
+Next.js + FastAPI full-stack projects.
 
 ## Project Stack
 
-This applies to full-stack monorepos with:
-
-- **Frontend:** Next.js 16 (App Router) + React 19 + shadcn/ui + Tailwind CSS v4
-  (TypeScript, in `frontend/`)
+- **Frontend:** Next.js 16 (App Router) + React 19 + shadcn/ui + Tailwind CSS
+  v4 (TypeScript, in `frontend/`)
 - **Backend:** FastAPI + Uvicorn + Pydantic (Python 3.11+, in `backend/`)
 
-## Architecture Principles
+## Architecture
 
-### Backend-for-Frontend (BFF) Pattern
+### BFF Pattern
 
-The browser NEVER calls the FastAPI backend directly. All backend communication
-flows through the Next.js server layer:
+The browser NEVER calls FastAPI directly. All backend communication flows
+through the Next.js server layer:
+- **Server Actions** (`app/actions.ts`) handle mutations. Client components call
+  these; they run on the Next.js server and proxy to FastAPI.
+- **API Routes** (`app/api/*/route.ts`) exist ONLY for external consumers
+  (health checks, webhooks), NOT for frontend use.
 
-- **Server Actions** (`app/actions.ts`) handle form submissions and data
-  mutations. Client components call these actions, which run on the Next.js
-  server and proxy requests to FastAPI.
-- **API Routes** (`app/api/*/route.ts`) exist ONLY for external consumers (e.g.
-  health check monitors). They are NOT used by the frontend itself.
-
-This pattern eliminates CORS issues and keeps backend URLs and secrets hidden
-from the client.
-
-### Type Safety at the Boundary (Zod Contracts)
+### Type Safety (Zod Contracts)
 
 Every FastAPI response is validated on the frontend with Zod:
+- `lib/contracts.ts`: Zod schemas mirroring Pydantic models.
+- `lib/backend-client.ts`: `backendJson()` fetches + validates against Zod.
+- Contract breaks fail fast with `BackendRequestError`.
 
-- `lib/contracts.ts` defines Zod schemas mirroring FastAPI's Pydantic models.
-- `lib/backend-client.ts` provides `backendJson()`, which fetches from FastAPI
-  and validates the response against a Zod schema.
-- If the API contract breaks, the frontend fails fast with a clear
-  `BackendRequestError` rather than rendering undefined states.
+**New endpoint checklist:**
+1. Pydantic response model in `backend/api/schemas.py`.
+2. Matching Zod schema in `frontend/lib/contracts.ts`.
+3. Contract test in `frontend/tests/contracts.test.ts`.
+4. `backendJson()` with schema in Server Action.
 
-When adding a new endpoint, ALWAYS:
+### Components
 
-1. Add a Pydantic response model in `backend/api/schemas.py`.
-2. Add a matching Zod schema in `frontend/lib/contracts.ts`.
-3. Add a contract test in `frontend/tests/contracts.test.ts`.
-4. Use `backendJson()` with the schema in the Server Action.
+- **Server Components** (default): fetch data, pass as props.
+- **Client Components** (`'use client'`): interactivity, browser APIs, hooks.
 
-### Server Components vs Client Components
+### React 19
 
-- **Server Components** (default, no directive) fetch data on the server and
-  pass it as props to client components. Use for pages and data-fetching
-  wrappers.
-- **Client Components** (`'use client'` directive) handle interactivity, browser
-  APIs, and React hooks. Keep them focused on UX; delegate data fetching to
-  Server Actions.
-
-### React 19 Patterns
-
-- Use `useActionState` (not the deprecated `useFormState`) for form submissions
-  with pending states.
-- Define state types explicitly (e.g. `GreetingState` in
-  `lib/greeting-state.ts`) for Server Action return values.
-- Use `useEffect` for side effects like toast notifications on state changes.
+- `useActionState` (NOT deprecated `useFormState`).
+- Explicit state types (e.g. `GreetingState` in `lib/greeting-state.ts`).
 
 ### Backend Structure
 
-- **Lifespan management:** `main.py` uses the `@asynccontextmanager` lifespan
-  pattern for startup/shutdown logic (e.g. creating and closing
-  `httpx.AsyncClient`). NEVER use the deprecated `@app.on_event` decorators.
-- **Pydantic Settings:** `config.py` uses `pydantic-settings` for typed
-  configuration from environment variables.
-- **Versioned routers:** Endpoints live under `api/v1/` with an `APIRouter`. New
-  endpoints go in new or existing router files under `api/v1/`.
-- **Typed responses:** Every endpoint declares `response_model` and returns a
-  Pydantic model instance.
+- Lifespan via `@asynccontextmanager` (NOT `@app.on_event`).
+- `pydantic-settings` for typed config from env vars.
+- Versioned routers under `api/v1/`.
+- Every endpoint declares `response_model` and returns a Pydantic model.
 
 ## Code Quality
 
-### Python (Backend)
+### Python
 
-- **Python 3.11+:** Use modern syntax - type hints everywhere, `from __future__
-  import annotations` when needed, `|` union syntax, `Annotated` for FastAPI
-  dependencies.
-- **Async first:** All endpoint handlers must be `async def`. Use
-  `httpx.AsyncClient` (not `requests`) for outbound HTTP.
-- **Type hints:** Every function parameter and return value must have type
-  hints. Use `Annotated` for FastAPI query/path/body parameters.
-- **Docstrings:** Every module, class, and public function must have a
-  docstring. Use imperative mood for function docstrings.
-- **Error handling:** Use FastAPI's `HTTPException` for API errors. Use Pydantic
-  validation for input validation. Never swallow exceptions silently.
-- **Import grouping:** Standard library, blank line, third-party, blank line,
-  local imports.
-- **Naming:** snake_case for functions and variables, PascalCase for classes.
-  Self-documenting names.
+- Async endpoints, `httpx.AsyncClient` (not `requests`).
+- Type hints everywhere. `Annotated` for FastAPI params.
+- Docstrings on modules, classes, public functions.
+- `HTTPException` for API errors. No swallowed exceptions.
+- Import grouping: stdlib | third-party | local.
 
-### TypeScript (Frontend)
+### TypeScript
 
-- **Strict TypeScript:** The project uses `strict: true`. Never use `any` unless
-  absolutely unavoidable (and document why). Prefer `unknown` with type
-  narrowing.
-- **Zod for runtime validation:** Use Zod schemas for all external data. Derive
-  TypeScript types with `z.infer<>` rather than defining types separately.
-- **Server Actions:** Mark with `'use server'` at the top of the file. Return
-  typed state objects, not raw data. Handle errors with try/catch and return
-  error states.
-- **Client Components:** Mark with `'use client'`. Keep them focused on UI and
-  interaction. Import from `@/` path alias.
-- **shadcn/ui:** Use existing shadcn/ui components from `components/ui/`. Add
-  new ones with `pnpm dlx shadcn@latest add <component>`.
-- **Import grouping:** React/Next.js imports, blank line, third-party, blank
-  line, local `@/` imports. Within local imports: components, then lib, then
-  types.
-- **Tailwind CSS v4:** Use the CSS-first `@theme` configuration in
-  `globals.css`. Use semantic colour tokens (`text-foreground`, `bg-muted`,
-  `border-border`, etc.) not raw colours. Respect dark mode via the `.dark`
-  class.
-- **Naming:** PascalCase for components and types, camelCase for functions and
-  variables. File names match the primary export (kebab-case for component
-  files).
+- `strict: true`. Never `any` (prefer `unknown` + narrowing).
+- Zod for all external data; derive types with `z.infer<>`.
+- Server Actions: `'use server'`, return typed state objects.
+- shadcn/ui components from `components/ui/`.
+- Import grouping: React/Next.js | third-party | local `@/` (components > lib >
+  types).
+- Tailwind v4 semantic tokens (`text-foreground`, `bg-muted`), not raw colours.
 
-### Styling Conventions
+### Styling
 
-- Use Tailwind utility classes directly in JSX. No separate CSS modules or
-  styled-components.
-- Use the `cn()` utility from `lib/utils.ts` (clsx + tailwind-merge) for
-  conditional class composition.
-- Use semantic tokens from the `@theme` block, not raw colour values (e.g.
-  `text-muted-foreground` not `text-gray-500`).
-- Support responsive design with mobile-first breakpoints (`sm:`, `md:`, `lg:`).
-- Use `class-variance-authority` (CVA) for component variant systems (already
-  used by shadcn/ui Button).
-- **Sonner** for toast notifications via the `<Toaster />` component.
-- **next-themes** for theme switching via `<ThemeProvider />`.
+- Tailwind utility classes in JSX. `cn()` from `lib/utils.ts` for conditional
+  classes.
+- Semantic tokens from `@theme`, not raw colour values.
+- Mobile-first responsive (`sm:`, `md:`, `lg:`).
+- CVA for component variants. Sonner for toasts. next-themes for theme switching.
 
 ### File Organisation
 
-- Pages go in `app/` following Next.js App Router conventions.
-- Reusable components go in `components/`.
-- shadcn/ui primitives live in `components/ui/` (do not edit these directly).
-- Shared utilities and types go in `lib/`.
-- Import using the `@/` path alias (e.g.
-  `import { Button } from '@/components/ui/button'`).
+- Pages in `app/` (App Router). Reusable components in `components/`.
+- shadcn/ui in `components/ui/` (don't edit directly).
+- Shared utils/types in `lib/`. Import via `@/`.
 
-## Testing Standards
+## Testing
 
 ### Backend (pytest)
 
-- Use `pytest` with `pytest-asyncio` (mode: `auto`).
-- Test endpoints using `httpx.AsyncClient` with `ASGITransport` against the
-  FastAPI `app` directly (no live server needed).
-- Assert response status codes AND JSON payloads.
-- Use `@pytest.mark.anyio` for async tests.
-- Keep tests independent - no shared mutable state between tests.
+- `pytest` + `pytest-asyncio` (auto mode).
+- `httpx.AsyncClient` + `ASGITransport` against FastAPI `app`.
+- Assert status codes AND JSON payloads.
+- `@pytest.mark.anyio` for async tests.
 
 ### Frontend (Vitest)
 
-- Use Vitest with `environment: 'node'`.
-- Test files go in `frontend/tests/` with `.test.ts` extension.
-- Contract tests validate Zod schemas with `.parse()` and `.safeParse()` against
-  expected and malformed payloads.
-- Use `describe`/`it` blocks with clear scenario descriptions.
-- Assert with `expect()` matchers.
+- `environment: 'node'`. Tests in `frontend/tests/*.test.ts`.
+- Contract tests: `.parse()` and `.safeParse()` against schemas.
+- `describe`/`it` blocks, `expect()` matchers.
 
 ## Commands
 
 ### Backend
-
-Run all tests:
-```
-cd backend && python -m pytest tests/ -v
-```
-
-Run specific test:
-```
-cd backend && python -m pytest tests/ -v -k <test_name>
-```
-
-Run linter and formatter:
-```
-cd backend && ruff check --fix . && ruff format .
-```
-
-Check lint without fixing (for review):
-```
-cd backend && ruff check . && ruff format --check .
+```bash
+cd backend && python -m pytest tests/ -v              # all tests
+cd backend && python -m pytest tests/ -v -k <name>    # specific test
+cd backend && ruff check --fix . && ruff format .     # lint+fix
+cd backend && ruff check . && ruff format --check .   # lint check only
 ```
 
 ### Frontend
-
-Run all tests:
-```
-cd frontend && pnpm test
-```
-
-Run tests in watch mode:
-```
-cd frontend && pnpm test:watch
-```
-
-Run lint:
-```
-cd frontend && pnpm lint
-```
-
-Run format:
-```
-cd frontend && pnpm format
+```bash
+cd frontend && pnpm test          # all tests
+cd frontend && pnpm test:watch    # watch mode
+cd frontend && pnpm lint          # lint
+cd frontend && pnpm format        # format
 ```

@@ -1,89 +1,45 @@
 ---
 name: frontend-design
-description: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics.
+description: Create distinctive, production-grade frontend interfaces that avoid generic AI aesthetics. Use when building web components, pages, dashboards, or styling web UI.
 ---
 
-This skill guides creation of distinctive, production-grade frontend interfaces
-that avoid generic "AI slop" aesthetics. Implement real working code with
-exceptional attention to aesthetic details and creative choices.
-
-The user provides frontend requirements: a component, page, application, or
-interface to build. They may include context about the purpose, audience, or
-technical constraints.
+Build distinctive, production-grade frontend interfaces. Implement real working
+code with exceptional aesthetic attention.
 
 ## Design Thinking
 
-Before coding, understand the context and commit to a BOLD aesthetic direction:
+Before coding, commit to a BOLD aesthetic direction:
 
-- **Purpose**: What problem does this interface solve? Who uses it?
-- **Tone**: Pick an extreme: brutally minimal, maximalist chaos,
-  retro-futuristic, organic/natural, luxury/refined, playful/toy-like,
-  editorial/magazine, brutalist/raw, art deco/geometric, soft/pastel,
-  industrial/utilitarian, etc. There are so many flavors to choose from. Use
-  these for inspiration but design one that is true to the aesthetic direction.
-- **Constraints**: Technical requirements (framework, performance,
-  accessibility).
-- **Differentiation**: What makes this UNFORGETTABLE? What's the one thing
-  someone will remember?
+- **Purpose/audience.** What problem does this interface solve?
+- **Tone.** Pick a strong direction: brutally minimal, maximalist, retro-
+  futuristic, organic, luxury, playful, editorial, brutalist, art deco, soft
+  pastel, industrial, etc. Use for inspiration but make it your own.
+- **Differentiation.** What makes this UNFORGETTABLE?
 
-**CRITICAL**: Choose a clear conceptual direction and execute it with precision.
-Bold maximalism and refined minimalism both work - the key is intentionality,
-not intensity.
+Execute with precision. Bold maximalism and refined minimalism both work - the
+key is intentionality.
 
-Then implement working code (HTML/CSS/JS, React, Vue, etc.) that is:
+## Aesthetics
 
-- Production-grade and functional
-- Visually striking and memorable
-- Cohesive with a clear aesthetic point-of-view
-- Meticulously refined in every detail
+- **Typography:** Distinctive, characterful fonts. NEVER generic (Arial, Inter,
+  Roboto, system fonts). Pair a display font with a refined body font.
+- **Color:** Cohesive palette via CSS variables. Dominant colors with sharp
+  accents > timid, evenly-distributed palettes.
+- **Motion:** CSS-first animations; Motion library for React. Focus on high-
+  impact moments (staggered page-load reveals, surprising hover states).
+- **Layout:** Asymmetry, overlap, diagonal flow, grid-breaking elements,
+  generous negative space OR controlled density.
+- **Atmosphere:** Gradient meshes, noise textures, geometric patterns, layered
+  transparencies, dramatic shadows, decorative borders, grain overlays.
 
-## Frontend Aesthetics Guidelines
+NEVER: overused fonts, cliche purple-on-white gradients, predictable layouts,
+cookie-cutter components. No two designs should look the same. Vary themes,
+fonts, aesthetics across generations.
 
-Focus on:
+Match implementation complexity to vision: maximalist needs elaborate code;
+minimalist needs restraint and precision.
 
-- **Typography**: Choose fonts that are beautiful, unique, and interesting.
-  Avoid generic fonts like Arial and Inter; opt instead for distinctive choices
-  that elevate the frontend's aesthetics; unexpected, characterful font choices.
-  Pair a distinctive display font with a refined body font.
-- **Color & Theme**: Commit to a cohesive aesthetic. Use CSS variables for
-  consistency. Dominant colors with sharp accents outperform timid,
-  evenly-distributed palettes.
-- **Motion**: Use animations for effects and micro-interactions. Prioritize
-  CSS-only solutions for HTML. Use Motion library for React when available.
-  Focus on high-impact moments: one well-orchestrated page load with staggered
-  reveals (animation-delay) creates more delight than scattered
-  micro-interactions. Use scroll-triggering and hover states that surprise.
-- **Spatial Composition**: Unexpected layouts. Asymmetry. Overlap. Diagonal
-  flow. Grid-breaking elements. Generous negative space OR controlled density.
-- **Backgrounds & Visual Details**: Create atmosphere and depth rather than
-  defaulting to solid colors. Add contextual effects and textures that match the
-  overall aesthetic. Apply creative forms like gradient meshes, noise textures,
-  geometric patterns, layered transparencies, dramatic shadows, decorative
-  borders, custom cursors, and grain overlays.
+## Project Integration
 
-NEVER use generic AI-generated aesthetics like overused font families (Inter,
-Roboto, Arial, system fonts), cliched color schemes (particularly purple
-gradients on white backgrounds), predictable layouts and component patterns, and
-cookie-cutter design that lacks context-specific character.
-
-Interpret creatively and make unexpected choices that feel genuinely designed
-for the context. No design should be the same. Vary between light and dark
-themes, different fonts, different aesthetics. NEVER converge on common choices
-(Space Grotesk, for example) across generations.
-
-**IMPORTANT**: Match implementation complexity to the aesthetic vision.
-Maximalist designs need elaborate code with extensive animations and effects.
-Minimalist or refined designs need restraint, precision, and careful attention
-to spacing, typography, and subtle details. Elegance comes from executing the
-vision well.
-
-## Project-Specific Patterns
-
-When building frontend interfaces for a specific project, also read the
-project's conventions skill (if one exists) for technology stack, component
-patterns, styling conventions, and file organisation rules. Apply those
-conventions alongside the design guidelines above.
-
-Remember: you are capable of extraordinary creative work. Don't hold back,
-show what can truly be created when thinking outside the box and committing
-fully to a distinctive vision.
+When building for a specific project, also read the project's conventions skill
+for tech stack, component patterns, and styling rules.
