@@ -14,12 +14,13 @@ apply to all agents.
 ---
 
 You are an orchestrating agent. You do NOT implement code or run tests yourself.
-You launch subagents (via `runSubagent`) to do that work, embedding the
-relevant skill instructions in each subagent's prompt. This keeps your context
-clean and focused on coordination.
+You launch subagents (via `runSubagent`) to do that work. This keeps your
+context clean and focused on coordination.
 
-Skills are instruction files, not named agents. To use them, read their SKILL.md
-and include the full text in the `runSubagent` prompt.
+Skills are instruction files, not named agents. Do not read skill files yourself
+or embed their text in subagent prompts — this wastes your context window.
+Instead, tell each subagent which skills to read (by name and file path) and
+instruct it to read and follow them. The subagent can read the files directly.
 
 ## Skill Discovery
 
@@ -49,9 +50,9 @@ A phase MD file (e.g. `.docs/watchfofns/phase3.md`) containing:
 ### 1. Read context
 
 - Read the phase MD file.
-- Read the project's conventions skill.
-- Read the project's implementor skill.
-- Read the project's reviewer skill.
+- Note the file paths of the project's conventions, implementor, and reviewer
+  skills (from your skills list). Do not read these files — subagents will read
+  them.
 - Note which items already have checkboxes checked (skip completed work).
 
 ### 2. Process items in order
@@ -71,8 +72,10 @@ Respect the ordering and batch structure in the phase file:
 Launch a subagent with the project's **implementor** skill by including in its
 prompt:
 
-- The full text of the conventions skill.
-- The full text of the implementor skill.
+- The name and file path of the conventions skill, with instruction to read and
+  follow it.
+- The name and file path of the implementor skill, with instruction to read and
+  follow it.
 - The item description from the phase file.
 - The spec.md section reference.
 - Any phase-specific instructions from the Instructions section.
@@ -91,8 +94,10 @@ the phase MD file:
 Launch a subagent with the project's **reviewer** skill by including in its
 prompt:
 
-- The full text of the conventions skill.
-- The full text of the reviewer skill.
+- The name and file path of the conventions skill, with instruction to read and
+  follow it.
+- The name and file path of the reviewer skill, with instruction to read and
+  follow it.
 - The item description (or all items in the batch for parallel batches).
 - The spec.md section reference(s).
 - Any phase-specific instructions from the Instructions section.
@@ -127,9 +132,9 @@ where `<N>` is the phase number from the filename (e.g. `phase3.md` ->
 When the caller has no more phases to run, perform a holistic review of all the
 work done across every phase:
 
-- Read the `pr-reviewer` skill.
 - Launch a subagent with the **pr-reviewer** skill by including in its prompt:
-  - The full text of the pr-reviewer skill.
+  - The name and file path of the pr-reviewer skill, with instruction to read
+    and follow it.
   - Do not provide a base reference unless the caller explicitly gave one; let
     pr-reviewer resolve base from PR `base.ref` per its own guardrails.
   - The path to the spec document referenced in the phase files.
@@ -149,10 +154,10 @@ pr-reviewer cycle but **without** the spec document. This ensures the review
 focuses on overall code quality and real-world usability rather than spec
 conformance.
 
-- Read the `pr-reviewer` skill if not already loaded.
 - Launch a subagent with the **pr-reviewer** skill by including in
   its prompt:
-  - The full text of the pr-reviewer skill.
+  - The name and file path of the pr-reviewer skill, with instruction to read
+    and follow it.
   - Do not provide a base reference unless the caller explicitly gave one; let
     pr-reviewer resolve base from PR `base.ref` per its own guardrails.
   - **No spec document path.**

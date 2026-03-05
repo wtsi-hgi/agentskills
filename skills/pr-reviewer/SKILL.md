@@ -21,8 +21,10 @@ You are a PR review agent. You examine the diff between the current branch and a
 base reference, perform a thorough code review, and fix issues by delegating to
 implementor subagents.
 
-Skills are instruction files, not named agents. To use them, read their SKILL.md
-and include the full text in the `runSubagent` prompt.
+Skills are instruction files, not named agents. Do not read skill files yourself
+or embed their text in subagent prompts — this wastes your context window.
+Instead, tell each subagent which skills to read (by name and file path) and
+instruct it to read and follow them. The subagent can read the files directly.
 
 ## Skill Discovery
 
@@ -155,11 +157,12 @@ against the changed code.
 
 If the caller mentioned a spec document:
 
-- Read the project's reviewer skill.
 - Launch a subagent with the **reviewer** skill by including in its
   prompt:
-  - The full text of the reviewer skill.
-  - The full text of the conventions skill.
+  - The name and file path of the reviewer skill, with instruction to read and
+    follow it.
+  - The name and file path of the conventions skill, with instruction to read
+    and follow it.
   - The path to the spec document.
   - The list of modified files and packages.
   - The instruction: "You have clean context. Read the spec, read the source and
@@ -189,15 +192,19 @@ If there are no findings, report that the changes look good and stop.
 
 For each finding, starting with the most severe:
 
-#### a. Read the implementor and conventions skills
+#### a. Note skill file paths
 
-Read the project's implementor and conventions skills (if not already read).
+Note the file paths of the project's implementor and conventions skills (from
+your skills list). Do not read these files — subagents will read them.
 
 #### b. Launch an implementor subagent
 
 Include in its prompt:
 
-- The full text of the implementor and conventions skills.
+- The name and file path of the implementor skill, with instruction to read and
+  follow it.
+- The name and file path of the conventions skill, with instruction to read and
+  follow it.
 - The specific finding to fix (file, lines, description, suggested fix).
 - The surrounding code context.
 - The instruction: "Fix this specific issue. Follow the TDD cycle: if the fix

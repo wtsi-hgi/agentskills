@@ -14,12 +14,13 @@ apply to all agents.
 ---
 
 You are an orchestrating agent. You do NOT write specs or review them yourself -
-you launch subagents (via `runSubagent`) to do that work, embedding the relevant
-skill instructions in each subagent's prompt. This keeps your context clean and
-focused on coordination.
+you launch subagents (via `runSubagent`) to do that work. This keeps your
+context clean and focused on coordination.
 
-Skills are instruction files, not named agents. To use them, read their SKILL.md
-and include the full text in the `runSubagent` prompt.
+Skills are instruction files, not named agents. Do not read skill files yourself
+or embed their text in subagent prompts — this wastes your context window.
+Instead, tell each subagent which skills to read (by name and file path) and
+instruct it to read and follow them. The subagent can read the files directly.
 
 ## Skill Discovery
 
@@ -70,10 +71,10 @@ change the spec.
 After receiving answers, proceed. Do not ask further rounds of questions unless
 answers reveal a fundamental ambiguity.
 
-### 2. Read skill files
+### 2. Note skill file paths
 
-Read the following skill files so you can include their full text in subagent
-prompts:
+Note the file paths of the following skills from your skills list (do not read
+these files — subagents will read them):
 
 - The project's conventions skill.
 - `spec-author` skill.
@@ -86,8 +87,10 @@ prompts:
 
 Launch a subagent with the **spec-author** skill by including in its prompt:
 
-- The full text of the spec-author skill.
-- The full text of the project's conventions skill.
+- The name and file path of the spec-author skill, with instruction to read and
+  follow it.
+- The name and file path of the project's conventions skill, with instruction to
+  read and follow it.
 - The feature description (including all clarifying Q&A).
 - The output path.
 - The instruction: "You have clean context. Research the codebase, then write
@@ -98,8 +101,10 @@ Launch a subagent with the **spec-author** skill by including in its prompt:
 
 Launch a subagent with the **spec-reviewer** skill by including in its prompt:
 
-- The full text of the spec-reviewer skill.
-- The full text of the project's conventions skill.
+- The name and file path of the spec-reviewer skill, with instruction to read
+  and follow it.
+- The name and file path of the project's conventions skill, with instruction to
+  read and follow it.
 - The feature description (including all clarifying Q&A).
 - The spec path.
 - The instruction: "You have clean context. Read the spec and the feature
@@ -112,8 +117,10 @@ PASS, move to step 5. Otherwise, repeat this step with a fresh subagent.
 **On FAIL:** Reset the consecutive pass count to 0. Launch a new spec-author
 subagent with the reviewer's feedback included in the prompt:
 
-- The full text of the spec-author skill.
-- The full text of the project's conventions skill.
+- The name and file path of the spec-author skill, with instruction to read and
+  follow it.
+- The name and file path of the project's conventions skill, with instruction to
+  read and follow it.
 - The feature description.
 - The output path.
 - The reviewer's specific feedback.
@@ -127,7 +134,8 @@ Then repeat this step (launch a fresh spec-reviewer subagent).
 Launch a subagent with the **spec-proofreader** skill by including in its
 prompt:
 
-- The full text of the spec-proofreader skill.
+- The name and file path of the spec-proofreader skill, with instruction to read
+  and follow it.
 - The spec path.
 - The instruction: "You have clean context. Read the spec and review it for text
   quality issues. Fix any errors you find directly in the document. Return PASS
@@ -145,7 +153,8 @@ fresh spec-proofreader subagent.
 
 Launch a subagent with the **phase-creator** skill by including in its prompt:
 
-- The full text of the phase-creator skill.
+- The name and file path of the phase-creator skill, with instruction to read
+  and follow it.
 - The spec path.
 - The output directory (same directory as the spec).
 - The names of the project's implementor and reviewer skills (e.g. "Use
@@ -159,7 +168,8 @@ Launch a subagent with the **phase-creator** skill by including in its prompt:
 For each phase file created, launch a subagent with the **phase-reviewer** skill
 by including in its prompt:
 
-- The full text of the phase-reviewer skill.
+- The name and file path of the phase-reviewer skill, with instruction to read
+  and follow it.
 - The phase file path.
 - The spec path.
 - The instruction: "You have clean context. Read the phase file and the spec.
