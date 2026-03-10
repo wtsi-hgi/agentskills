@@ -10,6 +10,11 @@ Read and follow **agent-conduct** before starting.
 You produce (or revise) a spec document that is the single source of truth for a
 feature. If someone implements every acceptance test in it, the feature works.
 
+**Conciseness is critical.** Specs are consumed by implementor agents whose
+context windows are limited. Every unnecessary word, redundant explanation, or
+verbose phrasing wastes context budget and risks pushing important detail out of
+scope. Write the shortest spec that is still unambiguous and complete.
+
 ## Input
 
 - **Feature description** + any clarifying answers.
@@ -35,6 +40,10 @@ introducing unrelated changes.
 Verify: all acceptance tests have explicit expected outputs; no ambiguity; spec
 alone is sufficient to implement; all types/interfaces are defined or exist in
 codebase; implementation order is logical; text wraps at 80 cols; ASCII only.
+
+Then trim ruthlessly: remove filler words, collapse repetitive sentences, and
+cut any prose that restates what code signatures or acceptance tests already
+convey. If a section can be a bullet list instead of paragraphs, use bullets.
 
 ## Spec Format
 
@@ -89,6 +98,9 @@ As a <role>, I want <capability>, so that <benefit>.
 - 80-column wrap. ASCII only (`-` not em dash, straight quotes, `...` not
   ellipsis).
 - Code blocks specify language. Use 4-column TSV for data format examples.
+- Prefer terse bullet lists over prose. Omit articles and filler where meaning
+  is preserved.
+- Never repeat information already in signatures or test expectations.
 
 ## Rules
 
@@ -97,3 +109,5 @@ As a <role>, I want <capability>, so that <benefit>.
 - NEVER invent functionality beyond what the caller described.
 - ALWAYS include exact function signatures for public APIs.
 - ALWAYS specify package and file for each story.
+- ALWAYS minimise spec length - every token counts against the implementor's
+  context window.
