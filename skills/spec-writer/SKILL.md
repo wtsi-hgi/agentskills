@@ -13,9 +13,11 @@ subagents which skills to read by name and file path.
 
 ## Skill Discovery
 
-Identify the project's conventions skill (e.g. `go-conventions` or
-`nextjs-fastapi-conventions`) and implementor/reviewer skill names for use in
-phase files.
+Identify the project's tech stack from the codebase. Match to the corresponding
+skill triplet using the naming convention `<stack>-conventions`,
+`<stack>-implementor`, and `<stack>-reviewer` (e.g. `go-conventions`,
+`python-implementor`). Discover available stacks from the skill list in your
+system prompt.
 
 ## Input
 

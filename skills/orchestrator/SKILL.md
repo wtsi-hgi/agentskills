@@ -14,10 +14,11 @@ file path.
 
 ## Skill Discovery
 
-Match skills to the project stack:
-- **Go:** `go-implementor`, `go-reviewer`, `go-conventions`
-- **Next.js + FastAPI:** `nextjs-fastapi-implementor`,
-  `nextjs-fastapi-reviewer`, `nextjs-fastapi-conventions`
+Identify the project's tech stack from the codebase. Match to the corresponding
+skill triplet using the naming convention `<stack>-conventions`,
+`<stack>-implementor`, and `<stack>-reviewer` (e.g. `go-conventions`,
+`python-implementor`). Discover available stacks from the skill list in your
+system prompt.
 
 Use skills named in the phase file's Instructions section if specified.
 
