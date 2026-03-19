@@ -1,0 +1,152 @@
+{
+  "name": "copilot-conductor",
+  "displayName": "Copilot Conductor",
+  "publisher": "wtsi-hgi",
+  "version": "0.0.1",
+  "description": "Deterministic orchestration for AI coding workflows.",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:conductor.sidebar",
+    "onCommand:conductor.start",
+    "onCommand:conductor.pause",
+    "onCommand:conductor.resume",
+    "onCommand:conductor.status",
+    "onCommand:conductor.dashboard"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "conductor",
+          "title": "Conductor",
+          "icon": "media/conductor.svg"
+        }
+      ]
+    },
+    "views": {
+      "conductor": [
+        {
+          "id": "conductor.sidebar",
+          "name": "Run Progress"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "conductor.start",
+        "title": "Conductor: Start"
+      },
+      {
+        "command": "conductor.pause",
+        "title": "Conductor: Pause"
+      },
+      {
+        "command": "conductor.resume",
+        "title": "Conductor: Resume"
+      },
+      {
+        "command": "conductor.status",
+        "title": "Conductor: Status"
+      },
+      {
+        "command": "conductor.dashboard",
+        "title": "Conductor: Dashboard"
+      }
+    ],
+    "configuration": {
+      "title": "Conductor",
+      "properties": {
+        "conductor.specDir": {
+          "type": "string",
+          "default": ".docs/conductor",
+          "description": "Path to the conductor specification directory."
+        },
+        "conductor.skillsDir": {
+          "type": "string",
+          "default": "~/.agents/skills/",
+          "description": "Path to the shared skills directory."
+        },
+        "conductor.conventionsSkill": {
+          "type": "string",
+          "default": "",
+          "description": "Optional conventions skill name."
+        },
+        "conductor.maxTurns": {
+          "type": "number",
+          "default": 50,
+          "description": "Maximum model/tool turns per invocation."
+        },
+        "conductor.maxRetries": {
+          "type": "number",
+          "default": 3,
+          "description": "Maximum retries before advancing."
+        },
+        "conductor.testCommand": {
+          "type": "string",
+          "default": "npm test",
+          "description": "Command used to run project tests."
+        },
+        "conductor.requireApproval": {
+          "type": "boolean",
+          "default": false,
+          "description": "Require explicit approval before advancing."
+        },
+        "conductor.models.implementor": {
+          "type": "object",
+          "default": {
+            "vendor": "",
+            "family": ""
+          },
+          "description": "Model assignment for the implementor role."
+        },
+        "conductor.models.reviewer": {
+          "type": "object",
+          "default": {
+            "vendor": "",
+            "family": ""
+          },
+          "description": "Model assignment for the reviewer role."
+        },
+        "conductor.models.specWriter": {
+          "type": "object",
+          "default": {
+            "vendor": "",
+            "family": ""
+          },
+          "description": "Model assignment for the spec-writer role."
+        },
+        "conductor.server.port": {
+          "type": "number",
+          "default": 8484,
+          "description": "Port for the optional Conductor team server."
+        },
+        "conductor.server.authToken": {
+          "type": "string",
+          "default": "",
+          "description": "Shared secret for the optional Conductor team server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.2",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "fast-glob": "^3.3.3"
+  }
+}

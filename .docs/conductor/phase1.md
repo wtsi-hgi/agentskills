@@ -25,7 +25,13 @@ types in `src/types.ts`. Test file:
 tests from A1.
 
 - [ ] implemented
+- [x] implemented
 - [ ] reviewed
+- [x] reviewed
+- [x] reviewed
+- [x] reviewed
+- [x] reviewed
+- [x] reviewed
 
 ### Batch 1 (parallel)
 
@@ -41,7 +47,9 @@ tools with path-traversal protection. Test file:
 acceptance tests from B1.
 
 - [ ] implemented
+- [x] implemented
 - [ ] reviewed
+- [x] reviewed
 
 #### Item 1.3: B2 - Bash Tool with Security Enforcement [parallel]
 
@@ -55,7 +63,9 @@ timeout enforcement. Test file:
 tests from B2.
 
 - [ ] implemented
+- [x] implemented
 - [ ] reviewed
+- [x] reviewed
 
 #### Item 1.4: C1 - Model Selection and Prompt Assembly [parallel]
 
@@ -70,7 +80,9 @@ Depends on A1 configuration settings. Test files:
 tests from C1.
 
 - [ ] implemented
+- [x] implemented
 - [ ] reviewed
+- [x] reviewed
 
 #### Item 1.5: D1 - Phase File Parser [parallel]
 
@@ -84,7 +96,9 @@ batch grouping. Test file:
 acceptance tests from D1.
 
 - [ ] implemented
+- [x] implemented
 - [ ] reviewed
+- [x] reviewed
 
 #### Item 1.6: E1 - State, Audit, Addendum, and Transcripts [parallel]
 
@@ -104,6 +118,7 @@ directory. Test files:
 acceptance tests from E1.
 
 - [ ] implemented
+- [x] implemented
 - [ ] reviewed
 
 For parallel batch items, use separate subagents per item.
@@ -125,6 +140,7 @@ items 1.2 (B1), 1.3 (B2), and 1.4 (C1). Test file:
 tests from C2.
 
 - [ ] implemented
+- [x] implemented
 - [ ] reviewed
 
 ### Item 1.8: D2 - Orchestration State Machine
@@ -141,6 +157,7 @@ file: `src/test/orchestrator/machine.test.ts`, covering
 all 18 acceptance tests from D2.
 
 - [ ] implemented
+- [x] implemented
 - [ ] reviewed
 
 ### Item 1.9: F1 - TreeView Provider
@@ -155,4 +172,5 @@ Test file: `src/test/views/treeProvider.test.ts`, covering
 all 5 acceptance tests from F1.
 
 - [ ] implemented
+- [x] implemented
 - [ ] reviewed
