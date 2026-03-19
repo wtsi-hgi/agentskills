@@ -81,9 +81,67 @@ function createContext(): ExtensionContextLike {
   };
 }
 
+function createStubOrchestrator(initialState?: Partial<OrchestratorState>): Orchestrator {
+  const state: OrchestratorState = {
+    specDir: ".docs/conductor",
+    currentPhase: 1,
+    currentItemIndex: 0,
+    consecutivePasses: {},
+    status: "idle",
+    modelAssignments: [],
+    itemStatuses: {},
+    ...initialState,
+  };
+
+  return {
+    async run() {},
+    pause() {},
+    resume() {},
+    skip() {},
+    retry() {},
+    changeModel() {},
+    approve() {},
+    reject() {},
+    addNote() {},
+    getState() {
+      return state;
+    },
+    async getPhase() {
+      return {
+        number: 1,
+        title: "Phase 1: Kickoff",
+        items: [
+          { id: "A1", title: "Initialize extension", specSection: "A1", implemented: false, reviewed: false },
+        ],
+        batches: [],
+      };
+    },
+    async getAuditEntries() {
+      return [];
+    },
+    async getTranscripts() {
+      return [];
+    },
+    onStateChange: (() => ({ dispose() {} })) as never,
+    onAuditEntry: (() => ({ dispose() {} })) as never,
+    onTranscript: (() => ({ dispose() {} })) as never,
+  };
+}
+
 async function writeDefaultSpecFixtures(workspaceDir: string): Promise<void> {
   const specDir = path.join(workspaceDir, ".docs", "conductor");
   await mkdir(specDir, { recursive: true });
+  await writeFile(
+    path.join(specDir, "spec.md"),
+    [
+      "# Spec",
+      "",
+      "### A1: Initialize extension",
+      "Acceptance placeholder.",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
   await writeFile(
     path.join(specDir, "phase1.md"),
     [
@@ -136,8 +194,14 @@ describe("Conductor extension A1", () => {
   it("creates .conductor/state.json with running status on Start", async () => {
     const workspaceDir = await createWorkspace();
     workspacesToCleanup.push(workspaceDir);
+    await writeDefaultSpecFixtures(workspaceDir);
     const fakeVscode = createFakeVscode(workspaceDir);
-    const controller = createExtensionController({ vscode: fakeVscode.api });
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      createOrchestrator() {
+        return createStubOrchestrator();
+      },
+    });
     const context = createContext();
 
     await controller.activate(context);
@@ -150,8 +214,14 @@ describe("Conductor extension A1", () => {
   it("writes paused status on Pause", async () => {
     const workspaceDir = await createWorkspace();
     workspacesToCleanup.push(workspaceDir);
+    await writeDefaultSpecFixtures(workspaceDir);
     const fakeVscode = createFakeVscode(workspaceDir);
-    const controller = createExtensionController({ vscode: fakeVscode.api });
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      createOrchestrator() {
+        return createStubOrchestrator();
+      },
+    });
     const context = createContext();
 
     await controller.activate(context);
@@ -165,8 +235,14 @@ describe("Conductor extension A1", () => {
   it("writes running status on Resume", async () => {
     const workspaceDir = await createWorkspace();
     workspacesToCleanup.push(workspaceDir);
+    await writeDefaultSpecFixtures(workspaceDir);
     const fakeVscode = createFakeVscode(workspaceDir);
-    const controller = createExtensionController({ vscode: fakeVscode.api });
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      createOrchestrator() {
+        return createStubOrchestrator();
+      },
+    });
     const context = createContext();
 
     await controller.activate(context);
@@ -318,8 +394,14 @@ describe("Conductor extension A1", () => {
   it("stores an absolute workspace-rooted specDir on Start", async () => {
     const workspaceDir = await createWorkspace();
     workspacesToCleanup.push(workspaceDir);
+    await writeDefaultSpecFixtures(workspaceDir);
     const fakeVscode = createFakeVscode(workspaceDir);
-    const controller = createExtensionController({ vscode: fakeVscode.api });
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      createOrchestrator() {
+        return createStubOrchestrator();
+      },
+    });
 
     await controller.activate(createContext());
     await fakeVscode.commands.get("conductor.start")?.();
@@ -333,7 +415,12 @@ describe("Conductor extension A1", () => {
     workspacesToCleanup.push(workspaceDir);
     await writeDefaultSpecFixtures(workspaceDir);
     const fakeVscode = createFakeVscode(workspaceDir);
-    const controller = createExtensionController({ vscode: fakeVscode.api });
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      createOrchestrator() {
+        return createStubOrchestrator();
+      },
+    });
 
     await controller.activate(createContext());
     await fakeVscode.commands.get("conductor.start")?.();
@@ -386,8 +473,14 @@ describe("Conductor extension A1", () => {
   it("records startedBy from the OS username on Start", async () => {
     const workspaceDir = await createWorkspace();
     workspacesToCleanup.push(workspaceDir);
+    await writeDefaultSpecFixtures(workspaceDir);
     const fakeVscode = createFakeVscode(workspaceDir);
-    const controller = createExtensionController({ vscode: fakeVscode.api });
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      createOrchestrator() {
+        return createStubOrchestrator();
+      },
+    });
 
     await controller.activate(createContext());
     await fakeVscode.commands.get("conductor.start")?.();
@@ -396,20 +489,28 @@ describe("Conductor extension A1", () => {
     expect(state.startedBy).toBe(os.userInfo().username);
   });
 
-  it("shows the Phase 1 dashboard no-op message before Phase 2 exists", async () => {
+  it("opens the real dashboard panel when the dashboard command executes", async () => {
     const workspaceDir = await createWorkspace();
     workspacesToCleanup.push(workspaceDir);
     const fakeVscode = createFakeVscode(workspaceDir);
-    const controller = createExtensionController({ vscode: fakeVscode.api });
+    const panels: Array<{ context: ExtensionContextLike; orchestrator: Orchestrator }> = [];
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      createDashboardPanel(context, orchestrator) {
+        panels.push({
+          context: context as unknown as ExtensionContextLike,
+          orchestrator,
+        });
+        return { dispose() {} } as never;
+      },
+    });
 
-    await controller.activate(createContext());
+    const context = createContext();
+    await controller.activate(context);
     await fakeVscode.commands.get("conductor.dashboard")?.();
 
-    expect(fakeVscode.infoMessages).toEqual([
-      {
-        message: "Dashboard not yet available",
-        options: [],
-      },
-    ]);
+    expect(fakeVscode.infoMessages).toEqual([]);
+    expect(panels).toHaveLength(1);
+    expect(panels[0]?.context).toBe(context);
   });
 });

@@ -14,12 +14,11 @@ import type {
 } from "./types";
 import { createOrchestrator, type Orchestrator } from "./orchestrator/machine";
 import { ConductorTreeProvider } from "./views/treeProvider";
+import { createDashboardPanel } from "./webview/panel";
 
 const CONDUCTOR_DIR = ".conductor";
 const STATE_FILE = "state.json";
 const RESUME_PROMPT = "Resume previous Conductor run?";
-const DASHBOARD_MESSAGE = "Dashboard not yet available";
-
 const COMMAND_START = "conductor.start";
 const COMMAND_PAUSE = "conductor.pause";
 const COMMAND_RESUME = "conductor.resume";
@@ -42,8 +41,14 @@ type CreateOrchestratorLike = (
   context: vscode.ExtensionContext,
 ) => Orchestrator;
 
+type CreateDashboardPanelLike = (
+  context: vscode.ExtensionContext,
+  orchestrator: Orchestrator,
+) => vscode.WebviewPanel;
+
 type ControllerDependencies = ExtensionDependencies & {
   createOrchestrator: CreateOrchestratorLike;
+  createDashboardPanel: CreateDashboardPanelLike;
 };
 
 interface ExtensionController {
@@ -55,6 +60,15 @@ let activeController: ExtensionController | undefined;
 
 function loadVscodeApi(): VscodeApiLike {
   return require("vscode") as VscodeApiLike;
+}
+
+function createFallbackCancellationToken(): vscode.CancellationToken {
+  return {
+    isCancellationRequested: false,
+    onCancellationRequested: () => ({
+      dispose() {},
+    }),
+  };
 }
 
 function withDefaultDependencies(overrides: Partial<ExtensionDependencies> & Pick<ExtensionDependencies, "vscode">): ExtensionDependencies {
@@ -72,6 +86,7 @@ function withControllerDependencies(
   return {
     ...withDefaultDependencies(overrides),
     createOrchestrator: overrides.createOrchestrator ?? createOrchestrator,
+    createDashboardPanel: overrides.createDashboardPanel ?? createDashboardPanel,
   };
 }
 
@@ -262,8 +277,17 @@ async function handleStatus(deps: ExtensionDependencies): Promise<void> {
   );
 }
 
-async function handleDashboard(deps: ExtensionDependencies): Promise<void> {
-  await deps.vscode.window.showInformationMessage(DASHBOARD_MESSAGE);
+async function handleDashboard(
+  deps: ControllerDependencies,
+  context: ExtensionContextLike,
+  orchestrator: Orchestrator | undefined,
+): Promise<void> {
+  if (!orchestrator) {
+    await showWorkspaceRequiredMessage(deps.vscode);
+    return;
+  }
+
+  deps.createDashboardPanel(context as vscode.ExtensionContext, orchestrator);
 }
 
 export function createExtensionController(
@@ -281,6 +305,7 @@ export function createExtensionController(
       const orchestrator = workspaceDir && currentState
         ? deps.createOrchestrator(createOrchestratorConfig(deps, workspaceDir, currentState), context as vscode.ExtensionContext)
         : undefined;
+      const runToken = createFallbackCancellationToken();
       const treeProvider = workspaceDir && orchestrator
         ? new ConductorTreeProvider(() => orchestrator.getState(), {
             onStateChange: orchestrator.onStateChange,
@@ -315,24 +340,27 @@ export function createExtensionController(
 
       register(COMMAND_START, async () => {
         await handleStart(deps);
+        void orchestrator?.run(runToken);
         if (workspaceDir) {
           updateTreeState(await readState(deps, workspaceDir));
         }
       });
       register(COMMAND_PAUSE, async () => {
         await handlePause(deps);
+        orchestrator?.pause();
         if (workspaceDir) {
           updateTreeState(await readState(deps, workspaceDir));
         }
       });
       register(COMMAND_RESUME, async () => {
         await handleResume(deps);
+        orchestrator?.resume();
         if (workspaceDir) {
           updateTreeState(await readState(deps, workspaceDir));
         }
       });
       register(COMMAND_STATUS, () => handleStatus(deps));
-      register(COMMAND_DASHBOARD, () => handleDashboard(deps));
+      register(COMMAND_DASHBOARD, () => handleDashboard(deps, context, orchestrator));
       registerTreeProvider();
 
       if (workspaceDir) {

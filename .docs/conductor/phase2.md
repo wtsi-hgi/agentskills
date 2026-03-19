@@ -26,5 +26,5 @@ Requires Phase 1 complete. Test file:
 `src/test/webview/panel.test.ts`, covering all 12
 acceptance tests from G1.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed

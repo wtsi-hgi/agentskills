@@ -128,8 +128,10 @@ export type ClientMessage =
 
 export type ServerMessage =
   | { type: "state"; data: OrchestratorState }
+  | { type: "phase"; data: Phase }
   | { type: "audit"; entry: AuditEntry }
-  | { type: "addendum"; entry: AddendumEntry };
+  | { type: "addendum"; entry: AddendumEntry }
+  | { type: "transcript"; entry: RunTranscript };
 
 export interface DisposableLike {
   dispose(): void;

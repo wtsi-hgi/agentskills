@@ -7,9 +7,9 @@ import { invokeWithToolLoop } from "../llm/invoke";
 import { selectModelForRole } from "../llm/select";
 import { parsePhaseFile } from "./parser";
 import { appendAddendum } from "../state/addendum";
-import { appendAudit } from "../state/audit";
+import { appendAudit, readAudit } from "../state/audit";
 import { loadState, saveState } from "../state/persistence";
-import { saveTranscript } from "../state/transcript";
+import { loadTranscripts, saveTranscript } from "../state/transcript";
 import { executeBash } from "../tools/bash";
 import { getToolDefinitions } from "../tools/schema";
 import type {
@@ -40,8 +40,10 @@ type OrchestratorDependencies = {
   loadState: typeof loadState;
   saveState: typeof saveState;
   appendAudit: typeof appendAudit;
+  readAudit: typeof readAudit;
   appendAddendum: typeof appendAddendum;
   saveTranscript: typeof saveTranscript;
+  loadTranscripts: typeof loadTranscripts;
   selectModelForRole: typeof selectModelForRole;
   assembleSystemPrompt: typeof assembleSystemPrompt;
   invokeWithToolLoop: typeof invokeWithToolLoop;
@@ -61,7 +63,12 @@ export interface Orchestrator {
   reject(itemId: string, feedback: string): void;
   addNote(itemId: string, text: string, author?: string): void;
   getState(): OrchestratorState;
+  getPhase(): Promise<Phase>;
+  getAuditEntries(): Promise<AuditEntry[]>;
+  getTranscripts(): Promise<RunTranscript[]>;
   onStateChange: vscode.Event<OrchestratorState>;
+  onAuditEntry: vscode.Event<AuditEntry>;
+  onTranscript: vscode.Event<RunTranscript>;
 }
 
 class SimpleEventEmitter<T> {
@@ -271,14 +278,18 @@ export function createOrchestrator(
   const conductorDir = path.join(config.projectDir, CONDUCTOR_DIR);
   const specPath = path.join(config.specDir, "spec.md");
   const stateEmitter = new SimpleEventEmitter<OrchestratorState>();
+  const auditEmitter = new SimpleEventEmitter<AuditEntry>();
+  const transcriptEmitter = new SimpleEventEmitter<RunTranscript>();
   const deps: OrchestratorDependencies = {
     readFile,
     writeFile,
     loadState,
     saveState,
     appendAudit,
+    readAudit,
     appendAddendum,
     saveTranscript,
+    loadTranscripts,
     selectModelForRole,
     assembleSystemPrompt,
     invokeWithToolLoop,
@@ -318,6 +329,14 @@ export function createOrchestrator(
 
   const emitState = () => {
     stateEmitter.fire(cloneState(state));
+  };
+
+  const emitAudit = (entry: AuditEntry) => {
+    auditEmitter.fire(entry);
+  };
+
+  const emitTranscript = (transcript: RunTranscript) => {
+    transcriptEmitter.fire(transcript);
   };
 
   const getPhasePath = (phaseNumber: number): string => path.join(config.specDir, `phase${phaseNumber}.md`);
@@ -411,14 +430,13 @@ export function createOrchestrator(
       token,
     });
 
-    await deps.saveTranscript(
-      conductorDir,
-      buildTranscript(timestamp, role, modelLabel, itemId, systemPrompt, userPrompt, result.messages),
-    );
-    await deps.appendAudit(
-      conductorDir,
-      buildAuditEntry(timestamp, role, modelLabel, itemId, userPrompt, result),
-    );
+    const transcript = buildTranscript(timestamp, role, modelLabel, itemId, systemPrompt, userPrompt, result.messages);
+    const auditEntry = buildAuditEntry(timestamp, role, modelLabel, itemId, userPrompt, result);
+
+    await deps.saveTranscript(conductorDir, transcript);
+    emitTranscript(transcript);
+    await deps.appendAudit(conductorDir, auditEntry);
+    emitAudit(auditEntry);
 
     if (role === "reviewer" && result.addendum) {
       await deps.appendAddendum(conductorDir, {
@@ -439,7 +457,7 @@ export function createOrchestrator(
     await persistState();
 
     if (message) {
-      await deps.appendAudit(conductorDir, {
+      const auditEntry = {
         timestamp: deps.now(),
         role: "reviewer",
         model: "system",
@@ -449,7 +467,9 @@ export function createOrchestrator(
         tokensIn: 0,
         tokensOut: 0,
         durationMs: 0,
-      });
+      } satisfies AuditEntry;
+      await deps.appendAudit(conductorDir, auditEntry);
+      emitAudit(auditEntry);
     }
   };
 
@@ -984,6 +1004,28 @@ export function createOrchestrator(
       return cloneState(state);
     },
 
+    async getPhase(): Promise<Phase> {
+      await ensureInitialized();
+      await ensurePhaseLoaded();
+
+      return {
+        number: cachedPhase?.number ?? state.currentPhase,
+        title: cachedPhase?.title ?? "",
+        items: (cachedPhase?.items ?? []).map((item) => ({ ...item })),
+        batches: (cachedPhase?.batches ?? []).map((batch) => batch.map((item) => ({ ...item }))),
+      };
+    },
+
+    async getAuditEntries(): Promise<AuditEntry[]> {
+      return await deps.readAudit(conductorDir);
+    },
+
+    async getTranscripts(): Promise<RunTranscript[]> {
+      return await deps.loadTranscripts(conductorDir);
+    },
+
     onStateChange: stateEmitter.event as vscode.Event<OrchestratorState>,
+    onAuditEntry: auditEmitter.event as vscode.Event<AuditEntry>,
+    onTranscript: transcriptEmitter.event as vscode.Event<RunTranscript>,
   };
 }
