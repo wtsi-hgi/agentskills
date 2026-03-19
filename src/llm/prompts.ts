@@ -46,6 +46,15 @@ function formatToolDefinitions(tools: ToolDefinition[]): string {
     .join("\n");
 }
 
+const AGENT_CONDUCT_LINE = /^read and follow \*{0,2}agent-conduct\*{0,2}(?: and \*{0,2}[^*]+\*{0,2})? before starting\.?\s*$/i;
+
+function stripAgentConductReferences(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => !AGENT_CONDUCT_LINE.test(line.trim()))
+    .join("\n");
+}
+
 export async function assembleSystemPrompt(
   role: Role,
   skillsDir: string,
@@ -56,10 +65,10 @@ export async function assembleSystemPrompt(
   const sections: string[] = [];
 
   if (conventionsSkill) {
-    sections.push(await loadSkill(skillsDir, conventionsSkill));
+    sections.push(stripAgentConductReferences(await loadSkill(skillsDir, conventionsSkill)));
   }
 
-  sections.push(await loadSkill(skillsDir, deriveRoleSkillName(role, conventionsSkill)));
+  sections.push(stripAgentConductReferences(await loadSkill(skillsDir, deriveRoleSkillName(role, conventionsSkill))));
   sections.push(["# Tool Definitions", formatToolDefinitions(tools)].join("\n\n"));
   sections.push(["# Tool Call Wire Format", TOOL_CALL_INSTRUCTIONS].join("\n\n"));
   sections.push(["# Item Context", itemContext].join("\n\n"));

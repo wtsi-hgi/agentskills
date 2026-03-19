@@ -140,4 +140,30 @@ describe("assembleSystemPrompt", () => {
 
     expect(prompt).toContain("# Spec Writer");
   });
+
+  it("strips agent-conduct references from loaded skills", async () => {
+    const skillsDir = await createSkillsDir();
+    await writeSkill(
+      skillsDir,
+      "go-conventions",
+      "# Go Conventions\n\nTeam rules.\n",
+    );
+    await writeSkill(
+      skillsDir,
+      "go-implementor",
+      "Read and follow **agent-conduct** and **go-conventions** before starting.\n\n# Go Implementor\n\nFollow TDD.\n",
+    );
+
+    const prompt = await assembleSystemPrompt(
+      "implementor",
+      skillsDir,
+      "go-conventions",
+      "Context",
+      [],
+    );
+
+    expect(prompt).toContain("# Go Implementor");
+    expect(prompt).toContain("Follow TDD.");
+    expect(prompt).not.toContain("agent-conduct");
+  });
 });

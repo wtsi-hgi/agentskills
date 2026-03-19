@@ -123,11 +123,23 @@ differently from the manual workflow:
 
 | Skill category | Manual workflow | Conductor |
 |---|---|---|
-| Conventions (`*-conventions`) | Loaded by agents | Loaded by extension |
-| Implementor/reviewer (`*-implementor`, `*-reviewer`) | Loaded by agents | Loaded by extension |
-| Orchestrator, pr-reviewer | Agent reads and follows | Replaced by extension code |
-| Spec-writer | Agent reads and follows | Used manually before starting Conductor |
-| Agent-conduct | Referenced by all agents | Enforced by extension's bash security |
+| Conventions (`*-conventions`) | Loaded by agents | Loaded by extension into system prompt |
+| Implementor/reviewer (`*-implementor`, `*-reviewer`) | Loaded by agents | Loaded by extension into system prompt |
+| Orchestrator, pr-reviewer, spec-writer | Agent reads and follows | Replaced by extension code |
+| Agent-conduct | Agent reads and follows | Redundant — safety enforced by extension's bash tool |
+
+The orchestrator, pr-reviewer, and spec-writer skills are all orchestrating
+workflows that coordinate subagents. Conductor replaces all three with its own
+state machine. Use the manual spec-writer skill to create your spec and phase
+files *before* starting a Conductor run.
+
+**Note on agent-conduct:** The implementor, reviewer, and spec-writer skills all
+begin with "Read and follow **agent-conduct**…". When Conductor loads these
+skills into the LLM's system prompt, the model may waste a tool turn attempting
+to read the agent-conduct file, even though the extension already enforces those
+safety rules in code (bash command validation, file path restrictions). To avoid
+this, Conductor strips agent-conduct references from skill text before prompt
+assembly.
 
 ## Adding New Tech Stacks
 
