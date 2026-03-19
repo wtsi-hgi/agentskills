@@ -27,8 +27,8 @@ files: `src/test/server/http.test.ts`,
 `src/test/server/auth.test.ts`, covering all 8 acceptance
 tests from H1.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 3.2: H2 - Browser Dashboard SPA
 
@@ -43,5 +43,5 @@ Depends on item 3.1 (H1). Test file:
 `src/test/server/app.test.ts`, covering all 6 acceptance
 tests from H2.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed

@@ -13,6 +13,7 @@ import type {
   VscodeApiLike,
 } from "./types";
 import { createOrchestrator, type Orchestrator } from "./orchestrator/machine";
+import { startServer } from "./server/http";
 import { ConductorTreeProvider } from "./views/treeProvider";
 import { createDashboardPanel } from "./webview/panel";
 
@@ -25,6 +26,7 @@ const COMMAND_RESUME = "conductor.resume";
 const COMMAND_STATUS = "conductor.status";
 const COMMAND_DASHBOARD = "conductor.dashboard";
 const SIDEBAR_VIEW_ID = "conductor.sidebar";
+const SERVER_APP_DIR = ["src", "server", "app"];
 
 const DEFAULTS = {
   specDir: ".docs/conductor",
@@ -34,6 +36,8 @@ const DEFAULTS = {
   maxRetries: 3,
   testCommand: "npm test",
   requireApproval: false,
+  serverPort: 8484,
+  serverAuthToken: "",
 };
 
 type CreateOrchestratorLike = (
@@ -46,9 +50,12 @@ type CreateDashboardPanelLike = (
   orchestrator: Orchestrator,
 ) => vscode.WebviewPanel;
 
+type StartServerLike = typeof startServer;
+
 type ControllerDependencies = ExtensionDependencies & {
   createOrchestrator: CreateOrchestratorLike;
   createDashboardPanel: CreateDashboardPanelLike;
+  startServer: StartServerLike;
 };
 
 interface ExtensionController {
@@ -87,6 +94,7 @@ function withControllerDependencies(
     ...withDefaultDependencies(overrides),
     createOrchestrator: overrides.createOrchestrator ?? createOrchestrator,
     createDashboardPanel: overrides.createDashboardPanel ?? createDashboardPanel,
+    startServer: overrides.startServer ?? startServer,
   };
 }
 
@@ -222,16 +230,20 @@ async function showWorkspaceRequiredMessage(vscodeApi: VscodeApiLike): Promise<v
   await vscodeApi.window.showInformationMessage("Open a workspace folder to use Conductor.");
 }
 
-async function maybePromptToResume(deps: ExtensionDependencies, workspaceDir: string): Promise<void> {
+async function maybePromptToResume(deps: ExtensionDependencies, workspaceDir: string): Promise<boolean> {
   const state = await readState(deps, workspaceDir);
   if (!state || (state.status !== "paused" && state.status !== "running")) {
-    return;
+    return false;
   }
 
   const choice = await deps.vscode.window.showInformationMessage(RESUME_PROMPT, "Yes", "No");
   if (choice === "Yes") {
     await updateStateStatus(deps, workspaceDir, "running");
+    return true;
   }
+
+  await updateStateStatus(deps, workspaceDir, "idle");
+  return false;
 }
 
 async function handleStart(deps: ExtensionDependencies): Promise<void> {
@@ -295,6 +307,13 @@ export function createExtensionController(
 ): ExtensionController {
   const deps = withControllerDependencies(overrides);
   const registrations = new Set<{ dispose(): void }>();
+  let serverHandle: { close(): void } | undefined;
+  let serverStartPromise: Promise<void> | undefined;
+
+  const stopServer = () => {
+    serverHandle?.close();
+    serverHandle = undefined;
+  };
 
   return {
     async activate(context: ExtensionContextLike): Promise<void> {
@@ -338,25 +357,83 @@ export function createExtensionController(
         treeProvider?.refresh();
       };
 
+      const syncServer = async (state: OrchestratorState | undefined) => {
+        if (!workspaceDir || !orchestrator || !state) {
+          stopServer();
+          return;
+        }
+
+        if (state.status !== "running" && state.status !== "paused") {
+          stopServer();
+          return;
+        }
+
+        const staticDir = deps.path.join(workspaceDir, ...SERVER_APP_DIR);
+        const appEntry = deps.path.join(staticDir, "index.html");
+        if (!(await fileExists(deps, appEntry))) {
+          return;
+        }
+
+        if (serverHandle || serverStartPromise) {
+          return;
+        }
+
+        const configuration = deps.vscode.workspace.getConfiguration("conductor");
+        const port = configuration.get("server.port", DEFAULTS.serverPort);
+        const authToken = configuration.get("server.authToken", DEFAULTS.serverAuthToken);
+
+        serverStartPromise = (async () => {
+          try {
+            serverHandle = await deps.startServer(port, staticDir, authToken, orchestrator);
+          } catch (error) {
+            if (deps.vscode.window.showErrorMessage) {
+              await deps.vscode.window.showErrorMessage(`Failed to start Conductor server: ${String(error)}`);
+            }
+          } finally {
+            serverStartPromise = undefined;
+            if (currentState && currentState.status !== "running" && currentState.status !== "paused") {
+              stopServer();
+            }
+          }
+        })();
+
+        await serverStartPromise;
+      };
+
+      if (orchestrator) {
+        const disposable = orchestrator.onStateChange((state) => {
+          updateTreeState(state);
+          void syncServer(state);
+        });
+        registrations.add(disposable);
+        context.subscriptions.push(disposable);
+      }
+
       register(COMMAND_START, async () => {
         await handleStart(deps);
         void orchestrator?.run(runToken);
         if (workspaceDir) {
-          updateTreeState(await readState(deps, workspaceDir));
+          const nextState = await readState(deps, workspaceDir);
+          updateTreeState(nextState);
+          await syncServer(nextState);
         }
       });
       register(COMMAND_PAUSE, async () => {
         await handlePause(deps);
         orchestrator?.pause();
         if (workspaceDir) {
-          updateTreeState(await readState(deps, workspaceDir));
+          const nextState = await readState(deps, workspaceDir);
+          updateTreeState(nextState);
+          await syncServer(nextState);
         }
       });
       register(COMMAND_RESUME, async () => {
         await handleResume(deps);
         orchestrator?.resume();
         if (workspaceDir) {
-          updateTreeState(await readState(deps, workspaceDir));
+          const nextState = await readState(deps, workspaceDir);
+          updateTreeState(nextState);
+          await syncServer(nextState);
         }
       });
       register(COMMAND_STATUS, () => handleStatus(deps));
@@ -364,12 +441,18 @@ export function createExtensionController(
       registerTreeProvider();
 
       if (workspaceDir) {
-        await maybePromptToResume(deps, workspaceDir);
-        updateTreeState(await readState(deps, workspaceDir));
+        const shouldResume = await maybePromptToResume(deps, workspaceDir);
+        if (shouldResume) {
+          orchestrator?.resume();
+        }
+        const nextState = await readState(deps, workspaceDir);
+        updateTreeState(nextState);
+        await syncServer(nextState);
       }
     },
 
     dispose(): void {
+      stopServer();
       for (const registration of registrations) {
         registration.dispose();
       }

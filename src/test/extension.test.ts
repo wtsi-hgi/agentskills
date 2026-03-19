@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createExtensionController } from "../extension";
-import { createOrchestrator as createMachineOrchestrator, type Orchestrator } from "../orchestrator/machine";
+import type { Orchestrator } from "../orchestrator/machine";
 import type {
   ConfigurationLike,
   DisposableLike,
@@ -116,6 +116,18 @@ function createStubOrchestrator(initialState?: Partial<OrchestratorState>): Orch
         batches: [],
       };
     },
+    async getPhases() {
+      return [
+        {
+          number: 1,
+          title: "Phase 1: Kickoff",
+          items: [
+            { id: "A1", title: "Initialize extension", specSection: "A1", implemented: false, reviewed: false },
+          ],
+          batches: [],
+        },
+      ];
+    },
     async getAuditEntries() {
       return [];
     },
@@ -124,7 +136,28 @@ function createStubOrchestrator(initialState?: Partial<OrchestratorState>): Orch
     },
     onStateChange: (() => ({ dispose() {} })) as never,
     onAuditEntry: (() => ({ dispose() {} })) as never,
+    onAddendum: (() => ({ dispose() {} })) as never,
     onTranscript: (() => ({ dispose() {} })) as never,
+  };
+}
+
+function createTrackedStubOrchestrator(initialState?: Partial<OrchestratorState>): {
+  orchestrator: Orchestrator;
+  calls: {
+    resume: number;
+  };
+} {
+  const calls = { resume: 0 };
+  const orchestrator = createStubOrchestrator(initialState);
+
+  return {
+    orchestrator: {
+      ...orchestrator,
+      resume() {
+        calls.resume += 1;
+      },
+    },
+    calls,
   };
 }
 
@@ -155,6 +188,12 @@ async function writeDefaultSpecFixtures(workspaceDir: string): Promise<void> {
     ].join("\n"),
     "utf8",
   );
+}
+
+async function writeServerAppFixture(workspaceDir: string): Promise<void> {
+  const appDir = path.join(workspaceDir, "src", "server", "app");
+  await mkdir(appDir, { recursive: true });
+  await writeFile(path.join(appDir, "index.html"), "<html><body>server</body></html>", "utf8");
 }
 
 async function createWorkspace(): Promise<string> {
@@ -309,6 +348,86 @@ describe("Conductor extension A1", () => {
     ]);
   });
 
+  it("does not start the team server when resume is declined", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    await writeServerAppFixture(workspaceDir);
+    await mkdir(path.join(workspaceDir, ".conductor"), { recursive: true });
+    await writeFile(
+      path.join(workspaceDir, ".conductor", "state.json"),
+      JSON.stringify({
+        specDir: ".docs/conductor",
+        currentPhase: 1,
+        currentItemIndex: 0,
+        consecutivePasses: {},
+        status: "running",
+        modelAssignments: [],
+        itemStatuses: {},
+      }),
+      "utf8",
+    );
+
+    const fakeVscode = createFakeVscode(workspaceDir);
+    fakeVscode.enqueueInfoResponse("No");
+    const startServerCalls: Array<{ port: number; staticDir: string; authToken: string }> = [];
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      createOrchestrator() {
+        return createStubOrchestrator({ status: "running" });
+      },
+      async startServer(port, staticDir, authToken) {
+        startServerCalls.push({ port, staticDir, authToken });
+        return { close() {} };
+      },
+    });
+
+    await controller.activate(createContext());
+
+    expect(startServerCalls).toEqual([]);
+    expect((await readState(workspaceDir)).status).toBe("idle");
+  });
+
+  it("resumes the orchestrator and starts the team server when resume is accepted", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    await writeServerAppFixture(workspaceDir);
+    await mkdir(path.join(workspaceDir, ".conductor"), { recursive: true });
+    await writeFile(
+      path.join(workspaceDir, ".conductor", "state.json"),
+      JSON.stringify({
+        specDir: ".docs/conductor",
+        currentPhase: 1,
+        currentItemIndex: 0,
+        consecutivePasses: {},
+        status: "paused",
+        modelAssignments: [],
+        itemStatuses: {},
+      }),
+      "utf8",
+    );
+
+    const fakeVscode = createFakeVscode(workspaceDir);
+    fakeVscode.enqueueInfoResponse("Yes");
+    const harness = createTrackedStubOrchestrator({ status: "paused" });
+    const startServerCalls: Array<{ port: number; staticDir: string; authToken: string }> = [];
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      createOrchestrator() {
+        return harness.orchestrator;
+      },
+      async startServer(port, staticDir, authToken) {
+        startServerCalls.push({ port, staticDir, authToken });
+        return { close() {} };
+      },
+    });
+
+    await controller.activate(createContext());
+
+    expect(harness.calls.resume).toBe(1);
+    expect(startServerCalls).toHaveLength(1);
+    expect((await readState(workspaceDir)).status).toBe("running");
+  });
+
   it("declares maxTurns and maxRetries defaults in package.json", async () => {
     const packageJson = JSON.parse(
       await readFile(path.join(process.cwd(), "package.json"), "utf8"),
@@ -364,12 +483,10 @@ describe("Conductor extension A1", () => {
     const workspaceDir = await createWorkspace();
     workspacesToCleanup.push(workspaceDir);
     const fakeVscode = createFakeVscode(workspaceDir);
-    let orchestrator: Orchestrator | undefined;
     const controller = createExtensionController({
       vscode: fakeVscode.api,
-      createOrchestrator(config, context) {
-        orchestrator = createMachineOrchestrator(config, context as never);
-        return orchestrator;
+      createOrchestrator() {
+        return createStubOrchestrator();
       },
     });
 
@@ -377,14 +494,17 @@ describe("Conductor extension A1", () => {
 
     const registration = fakeVscode.treeRegistrations[0] as {
       viewId: string;
-      provider: { onDidChangeTreeData: (listener: (value: unknown) => void) => DisposableLike };
+      provider: {
+        onDidChangeTreeData: (listener: (value: unknown) => void) => DisposableLike;
+        refresh: () => void;
+      };
     };
     const events: unknown[] = [];
     registration.provider.onDidChangeTreeData((value) => {
       events.push(value);
     });
 
-    orchestrator?.pause();
+    registration.provider.refresh();
     await waitFor(() => events.length === 1);
 
     expect(registration.viewId).toBe("conductor.sidebar");
@@ -465,7 +585,7 @@ describe("Conductor extension A1", () => {
     await fakeVscode.commands.get("conductor.status")?.();
 
     expect(fakeVscode.infoMessages.at(-1)).toEqual({
-      message: "Conductor status: phase 1, item 1, paused",
+      message: "Conductor status: phase 1, item 1, idle",
       options: [],
     });
   });

@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Conductor Team Dashboard</title>
+    <style>
+      :root {
+        --bg: #f3efe3;
+        --panel: rgba(255, 251, 241, 0.94);
+        --panel-border: rgba(108, 71, 45, 0.18);
+        --ink: #22170f;
+        --muted: #6f6257;
+        --accent: #b5542f;
+        --accent-strong: #8f3818;
+        --success: #2d6a4f;
+        --danger: #a12d24;
+        --pending: #8a6b14;
+        --shadow: 0 22px 48px rgba(34, 23, 15, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        color: var(--ink);
+        font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+        background:
+          radial-gradient(circle at top left, rgba(181, 84, 47, 0.14), transparent 34%),
+          radial-gradient(circle at right, rgba(45, 106, 79, 0.12), transparent 28%),
+          linear-gradient(180deg, #fffaf0 0%, #efe4cf 100%);
+        overflow-x: hidden;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background-image:
+          linear-gradient(rgba(34, 23, 15, 0.02) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(34, 23, 15, 0.02) 1px, transparent 1px);
+        background-size: 32px 32px;
+        opacity: 0.65;
+      }
+
+      main {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+        gap: 18px;
+        padding: 20px;
+      }
+
+      .column {
+        display: grid;
+        gap: 18px;
+        align-content: start;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 20px;
+        box-shadow: var(--shadow);
+        padding: 18px;
+        backdrop-filter: blur(8px);
+      }
+
+      .hero {
+        overflow: hidden;
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--accent);
+        font-size: 12px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(2rem, 5vw, 3.3rem);
+        line-height: 0.95;
+      }
+
+      h2 {
+        margin-bottom: 14px;
+        font-size: 1.15rem;
+      }
+
+      .hero-copy {
+        display: grid;
+        gap: 8px;
+      }
+
+      .hero-copy p {
+        max-width: 48rem;
+        color: var(--muted);
+      }
+
+      .hero-stats,
+      .controls-grid,
+      .note-form,
+      .status-strip {
+        display: grid;
+        gap: 12px;
+      }
+
+      .hero-stats {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        margin-top: 18px;
+      }
+
+      .stat-card {
+        padding: 14px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.55);
+        border: 1px solid rgba(108, 71, 45, 0.12);
+      }
+
+      .stat-label {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .stat-value {
+        display: block;
+        margin-top: 6px;
+        font-size: 1.35rem;
+      }
+
+      .status-strip {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+
+      .status-card {
+        padding: 14px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.62);
+        border: 1px solid rgba(108, 71, 45, 0.12);
+      }
+
+      .status-card strong,
+      .status-card span {
+        display: block;
+      }
+
+      .status-card span {
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .status-card strong {
+        margin-top: 6px;
+        font-size: 1.1rem;
+      }
+
+      .controls-grid {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+
+      .control-card {
+        display: grid;
+        gap: 10px;
+        padding: 14px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.62);
+        border: 1px solid rgba(108, 71, 45, 0.12);
+      }
+
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      button,
+      input,
+      textarea,
+      select {
+        font: inherit;
+      }
+
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 10px 14px;
+        background: var(--accent);
+        color: #fff9f2;
+        cursor: pointer;
+        transition: transform 120ms ease, background 120ms ease;
+      }
+
+      button:hover {
+        background: var(--accent-strong);
+        transform: translateY(-1px);
+      }
+
+      button.secondary {
+        background: rgba(34, 23, 15, 0.08);
+        color: var(--ink);
+      }
+
+      button.secondary:hover {
+        background: rgba(34, 23, 15, 0.14);
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      input,
+      textarea,
+      select {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid rgba(108, 71, 45, 0.2);
+        background: rgba(255, 255, 255, 0.88);
+        color: var(--ink);
+        padding: 10px 12px;
+      }
+
+      textarea {
+        min-height: 88px;
+        resize: vertical;
+      }
+
+      .phase-stack,
+      .approval-list,
+      .audit-list,
+      .transcript-list,
+      .notes-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .phase-card,
+      .queue-card,
+      .audit-entry,
+      .transcript-entry,
+      .note-entry {
+        padding: 14px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.62);
+        border: 1px solid rgba(108, 71, 45, 0.12);
+      }
+
+      .phase-heading {
+        margin-bottom: 12px;
+      }
+
+      .item-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .item-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(108, 71, 45, 0.12);
+      }
+
+      .item-row[data-current="true"] {
+        border-color: rgba(181, 84, 47, 0.46);
+        box-shadow: inset 0 0 0 1px rgba(181, 84, 47, 0.15);
+      }
+
+      .item-meta,
+      .entry-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 5px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        background: rgba(34, 23, 15, 0.08);
+      }
+
+      .status-pill[data-status="pass"] {
+        color: var(--success);
+        background: rgba(45, 106, 79, 0.14);
+      }
+
+      .status-pill[data-status="fail"] {
+        color: var(--danger);
+        background: rgba(161, 45, 36, 0.14);
+      }
+
+      .status-pill[data-status="pending-approval"],
+      .status-pill[data-status="in-progress"] {
+        color: var(--pending);
+        background: rgba(138, 107, 20, 0.16);
+      }
+
+      .connection-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .connection-pill::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: var(--danger);
+      }
+
+      .connection-pill[data-connected="true"]::before {
+        background: var(--success);
+      }
+
+      .empty {
+        color: var(--muted);
+        font-style: italic;
+      }
+
+      pre {
+        margin: 10px 0 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: var(--muted);
+      }
+
+      @media (max-width: 767px) {
+        main {
+          grid-template-columns: 1fr;
+          padding: 14px;
+        }
+
+        .button-row {
+          flex-direction: column;
+        }
+
+        button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main id="layout-root">
+      <div class="column">
+        <section class="panel hero">
+          <p class="eyebrow">Conductor Team Server</p>
+          <div class="hero-copy">
+            <h1>Shared orchestration bridge</h1>
+            <p>Track progress, review pending approvals, and coordinate notes from a browser without opening VS Code.</p>
+          </div>
+          <div class="hero-stats">
+            <div class="stat-card">
+              <span class="stat-label">Run status</span>
+              <strong class="stat-value" id="run-status">idle</strong>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Started by</span>
+              <strong class="stat-value" id="started-by">unknown</strong>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Connection</span>
+              <strong class="stat-value connection-pill" data-connected="false" id="connection-status">connecting</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Progress</h2>
+          <div class="status-strip">
+            <div class="status-card">
+              <span>Current step</span>
+              <strong id="current-step">Phase 1 / Item 1</strong>
+            </div>
+            <div class="status-card">
+              <span>Current item</span>
+              <strong id="current-item">None selected</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Phases</h2>
+          <div class="phase-stack" id="phase-stack"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Audit</h2>
+          <div class="audit-list" id="audit-list"></div>
+        </section>
+      </div>
+
+      <div class="column">
+        <section class="panel">
+          <h2>Controls</h2>
+          <div class="controls-grid">
+            <div class="control-card">
+              <div class="button-row">
+                <button id="pause-button" type="button">Pause</button>
+                <button class="secondary" id="resume-button" type="button">Resume</button>
+              </div>
+            </div>
+            <div class="control-card">
+              <label>
+                Approval item
+                <input id="approval-item-id" type="text" value="A1">
+              </label>
+              <label>
+                Reject feedback
+                <input id="reject-feedback" type="text" value="needs more detail">
+              </label>
+              <div class="button-row">
+                <button id="approve-button" type="button">Approve</button>
+                <button class="secondary" id="reject-button" type="button">Reject</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Approval queue</h2>
+          <div class="approval-list" id="approval-list"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Notes</h2>
+          <form class="note-form" id="note-form">
+            <label>
+              Item ID
+              <input id="note-item-id" name="itemId" type="text" value="A1">
+            </label>
+            <label>
+              Note text
+              <textarea id="note-text" name="text">needs fix</textarea>
+            </label>
+            <button id="note-submit" type="submit">Add note</button>
+          </form>
+          <div class="notes-list" id="notes-list"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Transcripts</h2>
+          <div class="transcript-list" id="transcript-list"></div>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      (function () {
+        const windowRef = window;
+        const documentRef = windowRef.document;
+        const reconnectBaseDelayMs = 1000;
+        const reconnectMaxDelayMs = 30000;
+
+        const store = {
+          connected: false,
+          reconnectAttempt: 0,
+          state: {
+            currentPhase: 1,
+            currentItemIndex: 0,
+            itemStatuses: {},
+            status: "idle",
+          },
+          phases: [],
+          audits: [],
+          transcripts: [],
+          addenda: [],
+        };
+
+        let socket = null;
+        let reconnectTimer = null;
+
+        const elements = {
+          layoutRoot: documentRef.getElementById("layout-root"),
+          runStatus: documentRef.getElementById("run-status"),
+          startedBy: documentRef.getElementById("started-by"),
+          connectionStatus: documentRef.getElementById("connection-status"),
+          currentStep: documentRef.getElementById("current-step"),
+          currentItem: documentRef.getElementById("current-item"),
+          phaseStack: documentRef.getElementById("phase-stack"),
+          auditList: documentRef.getElementById("audit-list"),
+          approvalList: documentRef.getElementById("approval-list"),
+          transcriptList: documentRef.getElementById("transcript-list"),
+          notesList: documentRef.getElementById("notes-list"),
+          pauseButton: documentRef.getElementById("pause-button"),
+          resumeButton: documentRef.getElementById("resume-button"),
+          approveButton: documentRef.getElementById("approve-button"),
+          rejectButton: documentRef.getElementById("reject-button"),
+          approvalItemId: documentRef.getElementById("approval-item-id"),
+          rejectFeedback: documentRef.getElementById("reject-feedback"),
+          noteForm: documentRef.getElementById("note-form"),
+          noteItemId: documentRef.getElementById("note-item-id"),
+          noteText: documentRef.getElementById("note-text"),
+        };
+
+        function escapeHtml(value) {
+          return String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+        }
+
+        function getSocketFactory() {
+          return windowRef.CONDUCTOR_WEBSOCKET_FACTORY || function createSocket(url) {
+            return new windowRef.WebSocket(url);
+          };
+        }
+
+        function getSocketUrl() {
+          const protocol = windowRef.location.protocol === "https:" ? "wss:" : "ws:";
+          return protocol + "//" + windowRef.location.host + "/ws";
+        }
+
+        function getReconnectDelayMs(attempt) {
+          return Math.min(reconnectBaseDelayMs * Math.pow(2, Math.max(0, attempt - 1)), reconnectMaxDelayMs);
+        }
+
+        function sendMessage(payload) {
+          if (!socket || socket.readyState !== 1) {
+            return false;
+          }
+
+          socket.send(JSON.stringify(payload));
+          return true;
+        }
+
+        function normalizePhases(messageState) {
+          if (Array.isArray(messageState && messageState.phases)) {
+            return messageState.phases.slice();
+          }
+
+          if (store.phases.length > 0) {
+            return store.phases;
+          }
+
+          return [];
+        }
+
+        function getCurrentPhase() {
+          return store.phases.find(function (phase) {
+            return phase.number === store.state.currentPhase;
+          }) || null;
+        }
+
+        function getCurrentItem() {
+          const phase = getCurrentPhase();
+          if (!phase || !Array.isArray(phase.items)) {
+            return null;
+          }
+
+          return phase.items[store.state.currentItemIndex] || null;
+        }
+
+        function getItemStatus(item) {
+          const explicit = store.state.itemStatuses && store.state.itemStatuses[item.id];
+          if (explicit) {
+            return explicit;
+          }
+
+          if (item.reviewed) {
+            return "pass";
+          }
+
+          if (item.implemented) {
+            return "in-progress";
+          }
+
+          return "pending";
+        }
+
+        function updateLayout() {
+          const isMobile = windowRef.innerWidth < 768;
+          documentRef.body.dataset.layout = isMobile ? "single-column" : "two-column";
+          elements.layoutRoot.style.gridTemplateColumns = isMobile ? "1fr" : "minmax(0, 2fr) minmax(300px, 1fr)";
+          documentRef.body.style.overflowX = "hidden";
+        }
+
+        function renderPhases() {
+          if (store.phases.length === 0) {
+            elements.phaseStack.innerHTML = '<div class="empty">Waiting for phase data.</div>';
+            return;
+          }
+
+          elements.phaseStack.innerHTML = store.phases.map(function (phase) {
+            const items = Array.isArray(phase.items) ? phase.items : [];
+            const rows = items.map(function (item, index) {
+              const status = getItemStatus(item);
+              const isCurrent = phase.number === store.state.currentPhase && index === store.state.currentItemIndex;
+              return ''
+                + '<div class="item-row" data-current="' + String(isCurrent) + '">'
+                + '  <div>'
+                + '    <strong>' + escapeHtml(item.id) + ' - ' + escapeHtml(item.title) + '</strong>'
+                + '    <div class="item-meta"><span>' + escapeHtml(item.specSection || item.id) + '</span></div>'
+                + '  </div>'
+                + '  <span class="status-pill" data-status="' + escapeHtml(status) + '">' + escapeHtml(status) + '</span>'
+                + '</div>';
+            }).join("");
+
+            return ''
+              + '<section class="phase-card">'
+              + '  <h3 class="phase-heading">Phase ' + escapeHtml(phase.number) + ': ' + escapeHtml(phase.title) + '</h3>'
+              + '  <div class="item-list">' + rows + '</div>'
+              + '</section>';
+          }).join("");
+        }
+
+        function renderApprovalQueue() {
+          const pendingItems = [];
+
+          store.phases.forEach(function (phase) {
+            (phase.items || []).forEach(function (item) {
+              if (getItemStatus(item) === "pending-approval") {
+                pendingItems.push({ phase: phase.number, item: item });
+              }
+            });
+          });
+
+          if (pendingItems.length === 0) {
+            elements.approvalList.innerHTML = '<div class="empty">No approvals are waiting.</div>';
+            return;
+          }
+
+          elements.approvalList.innerHTML = pendingItems.map(function (entry) {
+            return ''
+              + '<div class="queue-card">'
+              + '  <strong>' + escapeHtml(entry.item.id) + ' - ' + escapeHtml(entry.item.title) + '</strong>'
+              + '  <div class="entry-meta"><span>Phase ' + escapeHtml(entry.phase) + '</span><span>Pending approval</span></div>'
+              + '</div>';
+          }).join("");
+        }
+
+        function renderAudit() {
+          if (store.audits.length === 0) {
+            elements.auditList.innerHTML = '<div class="empty">No audit entries yet.</div>';
+            return;
+          }
+
+          elements.auditList.innerHTML = store.audits.map(function (entry) {
+            return ''
+              + '<div class="audit-entry">'
+              + '  <strong>' + escapeHtml(entry.promptSummary || entry.itemId || "Audit entry") + '</strong>'
+              + '  <div class="entry-meta">'
+              + '    <span>' + escapeHtml(entry.role || "unknown") + '</span>'
+              + '    <span>' + escapeHtml(entry.itemId || "") + '</span>'
+              + '    <span>' + escapeHtml(entry.result || "") + '</span>'
+              + '  </div>'
+              + '</div>';
+          }).join("");
+        }
+
+        function renderTranscripts() {
+          if (store.transcripts.length === 0) {
+            elements.transcriptList.innerHTML = '<div class="empty">No transcripts captured yet.</div>';
+            return;
+          }
+
+          elements.transcriptList.innerHTML = store.transcripts.map(function (entry) {
+            const body = (entry.messages || []).map(function (message) {
+              return String(message.role || "unknown") + ': ' + String(message.content || "");
+            }).join('\n\n');
+
+            return ''
+              + '<div class="transcript-entry">'
+              + '  <strong>' + escapeHtml(entry.itemId || "Transcript") + '</strong>'
+              + '  <div class="entry-meta"><span>' + escapeHtml(entry.role || "") + '</span><span>' + escapeHtml(entry.model || "") + '</span></div>'
+              + '  <pre>' + escapeHtml(body) + '</pre>'
+              + '</div>';
+          }).join("");
+        }
+
+        function renderNotes() {
+          if (store.addenda.length === 0) {
+            elements.notesList.innerHTML = '<div class="empty">No notes have been shared yet.</div>';
+            return;
+          }
+
+          elements.notesList.innerHTML = store.addenda.map(function (entry) {
+            return ''
+              + '<div class="note-entry">'
+              + '  <strong>' + escapeHtml(entry.itemId || "Note") + '</strong>'
+              + '  <div class="entry-meta"><span>' + escapeHtml(entry.author || "anonymous") + '</span></div>'
+              + '  <p>' + escapeHtml(entry.deviation || entry.rationale || "") + '</p>'
+              + '</div>';
+          }).join("");
+        }
+
+        function renderSummary() {
+          const currentItem = getCurrentItem();
+          elements.runStatus.textContent = String(store.state.status || "idle");
+          elements.startedBy.textContent = String(store.state.startedBy || "unknown");
+          elements.connectionStatus.dataset.connected = String(store.connected);
+          elements.connectionStatus.textContent = store.connected ? "connected" : "reconnecting";
+          elements.currentStep.textContent = 'Phase ' + String(store.state.currentPhase || 1) + ' / Item ' + String((store.state.currentItemIndex || 0) + 1);
+          elements.currentItem.textContent = currentItem ? currentItem.id + ' - ' + currentItem.title : 'None selected';
+        }
+
+        function render() {
+          updateLayout();
+          renderSummary();
+          renderPhases();
+          renderApprovalQueue();
+          renderAudit();
+          renderTranscripts();
+          renderNotes();
+        }
+
+        function applyMessage(message) {
+          if (!message || typeof message !== "object") {
+            return;
+          }
+
+          if (message.type === "state") {
+            store.state = Object.assign({}, store.state, message.data || {});
+            store.phases = normalizePhases(message.data);
+            render();
+            return;
+          }
+
+          if (message.type === "phase") {
+            const nextPhase = message.data;
+            if (!nextPhase || typeof nextPhase !== "object") {
+              return;
+            }
+
+            const existingIndex = store.phases.findIndex(function (phase) {
+              return phase.number === nextPhase.number;
+            });
+
+            if (existingIndex >= 0) {
+              store.phases.splice(existingIndex, 1, nextPhase);
+            } else {
+              store.phases.push(nextPhase);
+              store.phases.sort(function (left, right) {
+                return left.number - right.number;
+              });
+            }
+
+            render();
+            return;
+          }
+
+          if (message.type === "audit") {
+            store.audits = store.audits.concat([message.entry]);
+            renderAudit();
+            return;
+          }
+
+          if (message.type === "transcript") {
+            store.transcripts = store.transcripts.concat([message.entry]);
+            renderTranscripts();
+            return;
+          }
+
+          if (message.type === "addendum") {
+            store.addenda = store.addenda.concat([message.entry]);
+            renderNotes();
+          }
+        }
+
+        function scheduleReconnect() {
+          if (reconnectTimer) {
+            windowRef.clearTimeout(reconnectTimer);
+          }
+
+          store.reconnectAttempt += 1;
+          const delayMs = getReconnectDelayMs(store.reconnectAttempt);
+          reconnectTimer = windowRef.setTimeout(function () {
+            reconnectTimer = null;
+            connect();
+          }, delayMs);
+        }
+
+        function connect() {
+          const factory = getSocketFactory();
+          socket = factory(getSocketUrl());
+
+          socket.addEventListener("open", function () {
+            store.connected = true;
+            store.reconnectAttempt = 0;
+            renderSummary();
+          });
+
+          socket.addEventListener("message", function (event) {
+            try {
+              applyMessage(JSON.parse(event.data));
+            } catch {
+              return;
+            }
+          });
+
+          socket.addEventListener("close", function () {
+            store.connected = false;
+            renderSummary();
+            scheduleReconnect();
+          });
+
+          socket.addEventListener("error", function () {
+            if (socket && socket.readyState === 0) {
+              try {
+                socket.close();
+              } catch {
+                return;
+              }
+            }
+          });
+        }
+
+        elements.pauseButton.addEventListener("click", function () {
+          sendMessage({ type: "pause" });
+        });
+
+        elements.resumeButton.addEventListener("click", function () {
+          sendMessage({ type: "resume" });
+        });
+
+        elements.approveButton.addEventListener("click", function () {
+          sendMessage({ type: "approve", itemId: elements.approvalItemId.value.trim() });
+        });
+
+        elements.rejectButton.addEventListener("click", function () {
+          sendMessage({
+            type: "reject",
+            itemId: elements.approvalItemId.value.trim(),
+            feedback: elements.rejectFeedback.value.trim(),
+          });
+        });
+
+        elements.noteForm.addEventListener("submit", function (event) {
+          event.preventDefault();
+          const itemId = elements.noteItemId.value.trim();
+          const text = elements.noteText.value.trim();
+          if (!itemId || !text) {
+            return;
+          }
+
+          sendMessage({ type: "addNote", itemId: itemId, text: text });
+        });
+
+        windowRef.addEventListener("resize", updateLayout);
+
+        windowRef.__conductorDashboardTest = {
+          applyMessage: applyMessage,
+          connect: connect,
+          getReconnectDelayMs: getReconnectDelayMs,
+          getStore: function () {
+            return store;
+          },
+        };
+
+        updateLayout();
+        render();
+        connect();
+      })();
+    </script>
+  </body>
+</html>

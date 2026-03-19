@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import type * as vscode from "vscode";
 
@@ -36,6 +36,7 @@ type ProcessingOutcome = "completed" | "interrupted";
 
 type OrchestratorDependencies = {
   readFile: typeof readFile;
+  readDirectory: typeof readdir;
   writeFile: typeof writeFile;
   loadState: typeof loadState;
   saveState: typeof saveState;
@@ -64,10 +65,12 @@ export interface Orchestrator {
   addNote(itemId: string, text: string, author?: string): void;
   getState(): OrchestratorState;
   getPhase(): Promise<Phase>;
+  getPhases(): Promise<Phase[]>;
   getAuditEntries(): Promise<AuditEntry[]>;
   getTranscripts(): Promise<RunTranscript[]>;
   onStateChange: vscode.Event<OrchestratorState>;
   onAuditEntry: vscode.Event<AuditEntry>;
+  onAddendum: vscode.Event<AddendumEntry>;
   onTranscript: vscode.Event<RunTranscript>;
 }
 
@@ -112,6 +115,15 @@ function cloneState(state: OrchestratorState): OrchestratorState {
     consecutivePasses: { ...state.consecutivePasses },
     modelAssignments: state.modelAssignments.map((assignment) => ({ ...assignment })),
     itemStatuses: { ...state.itemStatuses },
+  };
+}
+
+function clonePhase(phase: Phase): Phase {
+  return {
+    number: phase.number,
+    title: phase.title,
+    items: phase.items.map((item) => ({ ...item })),
+    batches: phase.batches.map((batch) => batch.map((item) => ({ ...item }))),
   };
 }
 
@@ -279,9 +291,11 @@ export function createOrchestrator(
   const specPath = path.join(config.specDir, "spec.md");
   const stateEmitter = new SimpleEventEmitter<OrchestratorState>();
   const auditEmitter = new SimpleEventEmitter<AuditEntry>();
+  const addendumEmitter = new SimpleEventEmitter<AddendumEntry>();
   const transcriptEmitter = new SimpleEventEmitter<RunTranscript>();
   const deps: OrchestratorDependencies = {
     readFile,
+    readDirectory: readdir,
     writeFile,
     loadState,
     saveState,
@@ -335,11 +349,32 @@ export function createOrchestrator(
     auditEmitter.fire(entry);
   };
 
+  const emitAddendum = (entry: AddendumEntry) => {
+    addendumEmitter.fire(entry);
+  };
+
   const emitTranscript = (transcript: RunTranscript) => {
     transcriptEmitter.fire(transcript);
   };
 
   const getPhasePath = (phaseNumber: number): string => path.join(config.specDir, `phase${phaseNumber}.md`);
+
+  const loadAllPhases = async (): Promise<Phase[]> => {
+    const entries = await deps.readDirectory(config.specDir);
+    const phaseFiles = entries
+      .filter((entry) => /^phase\d+\.md$/i.test(entry))
+      .sort((left, right) => {
+        const leftNumber = Number.parseInt(left.replace(/\D+/g, ""), 10);
+        const rightNumber = Number.parseInt(right.replace(/\D+/g, ""), 10);
+        return leftNumber - rightNumber;
+      });
+
+    const phases = await Promise.all(phaseFiles.map(async (entry) => {
+      return parsePhaseFile(await deps.readFile(path.join(config.specDir, entry), "utf8"));
+    }));
+
+    return phases.filter((phase) => phase.number > 0);
+  };
 
   const ensurePhaseLoaded = async () => {
     const phaseNumber = state.currentPhase > 0 ? state.currentPhase : 1;
@@ -439,13 +474,16 @@ export function createOrchestrator(
     emitAudit(auditEntry);
 
     if (role === "reviewer" && result.addendum) {
-      await deps.appendAddendum(conductorDir, {
+      const addendumEntry = {
         timestamp,
         itemId,
         deviation: result.addendum,
         rationale: result.addendum,
         author: "reviewer",
-      });
+      } satisfies AddendumEntry;
+
+      await deps.appendAddendum(conductorDir, addendumEntry);
+      emitAddendum(addendumEntry);
     }
 
     return result;
@@ -997,7 +1035,11 @@ export function createOrchestrator(
     },
 
     addNote(itemId: string, text: string, author?: string): void {
-      void deps.appendAddendum(conductorDir, buildManualAddendumEntry(deps.now(), itemId, text, author));
+      void (async () => {
+        const entry = buildManualAddendumEntry(deps.now(), itemId, text, author);
+        await deps.appendAddendum(conductorDir, entry);
+        emitAddendum(entry);
+      })();
     },
 
     getState(): OrchestratorState {
@@ -1008,12 +1050,17 @@ export function createOrchestrator(
       await ensureInitialized();
       await ensurePhaseLoaded();
 
-      return {
+      return clonePhase({
         number: cachedPhase?.number ?? state.currentPhase,
         title: cachedPhase?.title ?? "",
-        items: (cachedPhase?.items ?? []).map((item) => ({ ...item })),
-        batches: (cachedPhase?.batches ?? []).map((batch) => batch.map((item) => ({ ...item }))),
-      };
+        items: cachedPhase?.items ?? [],
+        batches: cachedPhase?.batches ?? [],
+      });
+    },
+
+    async getPhases(): Promise<Phase[]> {
+      await ensureInitialized();
+      return (await loadAllPhases()).map(clonePhase);
     },
 
     async getAuditEntries(): Promise<AuditEntry[]> {
@@ -1026,6 +1073,7 @@ export function createOrchestrator(
 
     onStateChange: stateEmitter.event as vscode.Event<OrchestratorState>,
     onAuditEntry: auditEmitter.event as vscode.Event<AuditEntry>,
+    onAddendum: addendumEmitter.event as vscode.Event<AddendumEntry>,
     onTranscript: transcriptEmitter.event as vscode.Event<RunTranscript>,
   };
 }

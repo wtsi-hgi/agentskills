@@ -172,11 +172,15 @@ function createOrchestratorSpy(initialState: OrchestratorState = createState()) 
     async getPhase() {
       return createPhase();
     },
+    async getPhases() {
+      return [createPhase()];
+    },
     async getTranscripts() {
       return [];
     },
     onStateChange: stateEmitter.event as never,
     onAuditEntry: auditEmitter.event as never,
+    onAddendum: (() => ({ dispose() {} })) as never,
     onTranscript: transcriptEmitter.event as never,
   };
 
