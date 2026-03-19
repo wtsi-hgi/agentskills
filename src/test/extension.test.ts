@@ -131,6 +131,9 @@ function createStubOrchestrator(initialState?: Partial<OrchestratorState>): Orch
     async getAuditEntries() {
       return [];
     },
+    async getAddendumEntries() {
+      return [];
+    },
     async getTranscripts() {
       return [];
     },

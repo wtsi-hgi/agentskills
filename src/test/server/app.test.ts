@@ -188,6 +188,27 @@ describe("team dashboard SPA", () => {
     expect(approvalText).toContain("A2 - Item A2");
   });
 
+  it("renders historical notes when addendum entries arrive on connect", async () => {
+    const dashboard = await loadDashboard();
+    const socket = dashboard.sockets[0];
+    socket?.open();
+
+    socket?.emitMessage({
+      type: "addendum",
+      entry: {
+        timestamp: "2025-03-19T09:00:00.000Z",
+        itemId: "A1",
+        deviation: "Carry this note forward.",
+        rationale: "Historical context for the next reviewer.",
+        author: "reviewer",
+      },
+    });
+
+    const noteText = dashboard.window.document.getElementById("notes-list")?.textContent ?? "";
+    expect(noteText).toContain("A1");
+    expect(noteText).toContain("Carry this note forward.");
+  });
+
   it("sends a pause client message when the Pause button is clicked", async () => {
     const dashboard = await loadDashboard();
     const socket = dashboard.sockets[0];

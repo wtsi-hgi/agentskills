@@ -33,3 +33,28 @@ export async function appendAddendum(conductorDir: string, entry: AddendumEntry)
   const nextContent = existing.length > 0 ? `${existing.replace(/\s+$/, "")}\n${block}` : `${block}\n`;
   await writeFile(addendumPath, nextContent, "utf8");
 }
+
+export async function readAddenda(conductorDir: string): Promise<AddendumEntry[]> {
+  try {
+    const content = await readFile(path.join(conductorDir, ADDENDUM_FILE), "utf8");
+
+    return content
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("- "))
+      .map((line) => JSON.parse(line.slice(2)) as AddendumEntry & { author?: string | null })
+      .map((entry) => ({
+        timestamp: entry.timestamp,
+        itemId: entry.itemId,
+        deviation: entry.deviation,
+        rationale: entry.rationale,
+        author: entry.author ?? undefined,
+      } satisfies AddendumEntry));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+
+    throw error;
+  }
+}

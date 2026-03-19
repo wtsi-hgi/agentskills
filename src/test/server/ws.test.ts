@@ -97,6 +97,15 @@ function createHarness(initialState = createState()): OrchestratorHarness {
     async getAuditEntries() {
       return [];
     },
+    async getAddendumEntries() {
+      return [{
+        timestamp: "2025-03-19T09:00:00.000Z",
+        itemId: "A1",
+        deviation: "Carry this note forward.",
+        rationale: "Historical context for the next reviewer.",
+        author: "reviewer",
+      }];
+    },
     async getTranscripts() {
       return [];
     },
@@ -228,6 +237,32 @@ describe("handleWebSocket", () => {
     }));
   });
 
+  it("sends historical addendum entries to newly connected clients", async () => {
+    const harness = createHarness();
+    const { port } = await createWsServer(harness.orchestrator);
+    const client = await openClient(port);
+
+    const addendumMessage = await waitFor(() => client.messages.find((message) => {
+      return typeof message === "object"
+        && message !== null
+        && (message as { type?: string }).type === "addendum"
+        && (message as { entry?: { timestamp?: string } }).entry?.timestamp === "2025-03-19T09:00:00.000Z"
+        ? message
+        : undefined;
+    }));
+
+    expect(addendumMessage).toEqual({
+      type: "addendum",
+      entry: {
+        timestamp: "2025-03-19T09:00:00.000Z",
+        itemId: "A1",
+        deviation: "Carry this note forward.",
+        rationale: "Historical context for the next reviewer.",
+        author: "reviewer",
+      },
+    });
+  });
+
   it("broadcasts audit entries to connected clients", async () => {
     const harness = createHarness();
     const { port } = await createWsServer(harness.orchestrator);
@@ -281,7 +316,7 @@ describe("handleWebSocket", () => {
       return typeof message === "object"
         && message !== null
         && (message as { type?: string }).type === "addendum"
-        && (message as { entry?: { itemId?: string } }).entry?.itemId === "A1"
+        && (message as { entry?: { timestamp?: string } }).entry?.timestamp === "2025-03-19T12:00:00.000Z"
         ? message
         : undefined;
     }));

@@ -145,6 +145,10 @@ export function handleWebSocket(ws: WebSocket, orchestrator: Orchestrator): void
         sendMessage(ws, { type: "audit", entry });
       }
 
+      for (const entry of await orchestrator.getAddendumEntries()) {
+        sendMessage(ws, createAddendumMessage(entry));
+      }
+
       for (const entry of await orchestrator.getTranscripts()) {
         sendMessage(ws, { type: "transcript", entry });
       }

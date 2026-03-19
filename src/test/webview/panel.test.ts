@@ -125,6 +125,7 @@ function createPhase(): Phase {
 function createOrchestratorSpy(initialState: OrchestratorState = createState()) {
   const stateEmitter = new TestEmitter<OrchestratorState>();
   const auditEmitter = new TestEmitter<AuditEntry>();
+  const addendumEmitter = new TestEmitter<{ timestamp: string; itemId: string; deviation: string; rationale: string; author?: string }>();
   const transcriptEmitter = new TestEmitter<{ timestamp: string; role: string; model: string; itemId: string; messages: Array<{ role: string; content: string }> }>();
   const calls = {
     pause: 0,
@@ -175,16 +176,25 @@ function createOrchestratorSpy(initialState: OrchestratorState = createState()) 
     async getPhases() {
       return [createPhase()];
     },
+    async getAddendumEntries() {
+      return [{
+        timestamp: "2026-03-19T11:00:00.000Z",
+        itemId: "A1",
+        deviation: "Keep the reviewer note visible.",
+        rationale: "Historical context for the dashboard.",
+        author: "reviewer",
+      }];
+    },
     async getTranscripts() {
       return [];
     },
     onStateChange: stateEmitter.event as never,
     onAuditEntry: auditEmitter.event as never,
-    onAddendum: (() => ({ dispose() {} })) as never,
+    onAddendum: addendumEmitter.event as never,
     onTranscript: transcriptEmitter.event as never,
   };
 
-  return { orchestrator, calls, stateEmitter, auditEmitter, transcriptEmitter };
+  return { orchestrator, calls, stateEmitter, auditEmitter, addendumEmitter, transcriptEmitter };
 }
 
 function createPanelHarness(initialState: OrchestratorState = createState()) {
@@ -259,6 +269,7 @@ function createPanelHarness(initialState: OrchestratorState = createState()) {
     calls: spy.calls,
     stateEmitter: spy.stateEmitter,
     auditEmitter: spy.auditEmitter,
+    addendumEmitter: spy.addendumEmitter,
     transcriptEmitter: spy.transcriptEmitter,
     createWebviewPanelCalls,
     receivedMessages,
@@ -269,6 +280,21 @@ function createPanelHarness(initialState: OrchestratorState = createState()) {
       disposeListener?.();
     },
   };
+}
+
+async function waitFor<T>(predicate: () => T | undefined): Promise<T> {
+  const deadline = Date.now() + 3_000;
+
+  while (Date.now() < deadline) {
+    const value = predicate();
+    if (value !== undefined) {
+      return value;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  throw new Error("Timed out waiting for condition");
 }
 
 function extractInlineScript(html: string): string {
@@ -355,6 +381,32 @@ describe("dashboard panel G1", () => {
 
     expect(harness.receivedMessages).toContainEqual({ type: "audit", entry: auditEntry });
     expect(harness.receivedMessages).toContainEqual({ type: "transcript", entry: transcript });
+  });
+
+  it("posts historical and live addendum updates to the webview", async () => {
+    const harness = createPanelHarness();
+    const liveAddendum = {
+      timestamp: "2026-03-19T12:00:00.000Z",
+      itemId: "A1",
+      deviation: "Share the latest note.",
+      rationale: "Keep the panel in sync.",
+      author: "reviewer",
+    };
+
+    await waitFor(() => harness.receivedMessages.some((message) => JSON.stringify(message) === JSON.stringify({
+      type: "addendum",
+      entry: {
+        timestamp: "2026-03-19T11:00:00.000Z",
+        itemId: "A1",
+        deviation: "Keep the reviewer note visible.",
+        rationale: "Historical context for the dashboard.",
+        author: "reviewer",
+      },
+    })) ? true : undefined);
+
+    harness.addendumEmitter.fire(liveAddendum as never);
+
+    expect(harness.receivedMessages.some((message) => JSON.stringify(message) === JSON.stringify({ type: "addendum", entry: liveAddendum }))).toBe(true);
   });
 
   it("routes pause messages to orchestrator.pause", () => {

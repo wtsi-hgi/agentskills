@@ -6,7 +6,7 @@ import { assembleSystemPrompt } from "../llm/prompts";
 import { invokeWithToolLoop } from "../llm/invoke";
 import { selectModelForRole } from "../llm/select";
 import { parsePhaseFile } from "./parser";
-import { appendAddendum } from "../state/addendum";
+import { appendAddendum, readAddenda } from "../state/addendum";
 import { appendAudit, readAudit } from "../state/audit";
 import { loadState, saveState } from "../state/persistence";
 import { loadTranscripts, saveTranscript } from "../state/transcript";
@@ -43,6 +43,7 @@ type OrchestratorDependencies = {
   appendAudit: typeof appendAudit;
   readAudit: typeof readAudit;
   appendAddendum: typeof appendAddendum;
+  readAddenda: typeof readAddenda;
   saveTranscript: typeof saveTranscript;
   loadTranscripts: typeof loadTranscripts;
   selectModelForRole: typeof selectModelForRole;
@@ -67,6 +68,7 @@ export interface Orchestrator {
   getPhase(): Promise<Phase>;
   getPhases(): Promise<Phase[]>;
   getAuditEntries(): Promise<AuditEntry[]>;
+  getAddendumEntries(): Promise<AddendumEntry[]>;
   getTranscripts(): Promise<RunTranscript[]>;
   onStateChange: vscode.Event<OrchestratorState>;
   onAuditEntry: vscode.Event<AuditEntry>;
@@ -302,6 +304,7 @@ export function createOrchestrator(
     appendAudit,
     readAudit,
     appendAddendum,
+    readAddenda,
     saveTranscript,
     loadTranscripts,
     selectModelForRole,
@@ -936,8 +939,15 @@ export function createOrchestrator(
     return activeRun;
   };
 
+  const runDetached = (operation: () => Promise<void>) => {
+    void operation().catch(() => {
+      state.status = "error";
+      emitState();
+    });
+  };
+
   const resumeInternal = () => {
-    void (async () => {
+    runDetached(async () => {
       await ensureInitialized();
       pauseRequested = false;
       if (state.status === "done") {
@@ -948,11 +958,11 @@ export function createOrchestrator(
       state.status = "running";
       await persistState();
       await startRun(lastToken ?? fallbackToken);
-    })();
+    });
   };
 
   const retryInternal = (itemId: string) => {
-    void (async () => {
+    runDetached(async () => {
       await ensureInitialized();
       pauseRequested = false;
       state.itemStatuses[itemId] = "pending";
@@ -966,7 +976,7 @@ export function createOrchestrator(
       itemFeedback.delete(itemId);
       await persistState();
       await startRun(lastToken ?? fallbackToken);
-    })();
+    });
   };
 
   return {
@@ -1065,6 +1075,10 @@ export function createOrchestrator(
 
     async getAuditEntries(): Promise<AuditEntry[]> {
       return await deps.readAudit(conductorDir);
+    },
+
+    async getAddendumEntries(): Promise<AddendumEntry[]> {
+      return await deps.readAddenda(conductorDir);
     },
 
     async getTranscripts(): Promise<RunTranscript[]> {

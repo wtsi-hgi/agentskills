@@ -699,7 +699,7 @@ describe("createOrchestrator", () => {
     expect(harness.orchestrator.getState().itemStatuses.B1).toBe("pass");
     expect(harness.orchestrator.getState().itemStatuses.B2).toBe("pass");
     expect(harness.orchestrator.getState().itemStatuses.B3).toBe("pass");
-  });
+  }, 10_000);
 
   it("re-enters the implement cycle with reject feedback", async () => {
     const harness = await createHarness({

@@ -51,13 +51,18 @@ function postServerMessage(webview: vscode.Webview, message: ServerMessage): voi
 }
 
 async function postHistoricalEntries(panel: vscode.WebviewPanel, orchestrator: Orchestrator): Promise<void> {
-  const [auditEntries, transcripts] = await Promise.all([
+  const [auditEntries, addendumEntries, transcripts] = await Promise.all([
     orchestrator.getAuditEntries(),
+    orchestrator.getAddendumEntries(),
     orchestrator.getTranscripts(),
   ]);
 
   for (const entry of auditEntries) {
     postServerMessage(panel.webview, { type: "audit", entry });
+  }
+
+  for (const entry of addendumEntries) {
+    postServerMessage(panel.webview, { type: "addendum", entry });
   }
 
   for (const entry of transcripts) {
@@ -126,6 +131,9 @@ export function createDashboardPanel(
   const auditSubscription = orchestrator.onAuditEntry((entry) => {
     postServerMessage(panel.webview, { type: "audit", entry });
   });
+  const addendumSubscription = orchestrator.onAddendum((entry) => {
+    postServerMessage(panel.webview, { type: "addendum", entry });
+  });
   const transcriptSubscription = orchestrator.onTranscript((entry) => {
     postServerMessage(panel.webview, { type: "transcript", entry });
   });
@@ -135,6 +143,7 @@ export function createDashboardPanel(
   const disposeSubscription = panel.onDidDispose(() => {
     stateSubscription.dispose();
     auditSubscription.dispose();
+    addendumSubscription.dispose();
     transcriptSubscription.dispose();
     messageSubscription.dispose();
     disposeSubscription.dispose();

@@ -74,6 +74,9 @@ function createOrchestrator(): Orchestrator {
     async getAuditEntries() {
       return [];
     },
+    async getAddendumEntries() {
+      return [];
+    },
     async getTranscripts() {
       return [];
     },
