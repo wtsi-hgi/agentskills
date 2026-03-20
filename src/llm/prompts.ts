@@ -1,6 +1,8 @@
 import type { Role, ToolDefinition } from "../types";
 import { loadSkill } from "../skills/loader";
 
+export type PromptRole = Role | "pr-reviewer";
+
 const TOOL_CALL_INSTRUCTIONS = [
   "Emit tool calls using this wire format:",
   "<tool_call>",
@@ -34,20 +36,21 @@ const CLARIFICATION_TEMPLATE = [
   "If prompt.md already addresses everything, return NONE.",
 ].join("\n");
 
-function deriveRoleSkillName(role: Role, conventionsSkill: string): string {
+export function deriveRoleSkillName(role: PromptRole, conventionsSkill: string): string {
   if (
     role === "spec-author"
     || role === "spec-reviewer"
     || role === "spec-proofreader"
     || role === "phase-creator"
     || role === "phase-reviewer"
+    || role === "pr-reviewer"
   ) {
     return role;
   }
 
   if (!conventionsSkill) {
     throw new Error(
-      `cannot infer ${role} skill: configure conductor.conventionsSkill with a '<stack>-conventions' skill`,
+      `cannot infer ${role} skill: choose a '<stack>-conventions' skill for this feature`,
     );
   }
 
@@ -82,12 +85,12 @@ function stripAgentConductReferences(text: string): string {
     .join("\n\n");
 }
 
-function roleUsesConventionsSkill(role: Role): boolean {
+function roleUsesConventionsSkill(role: PromptRole): boolean {
   return role === "implementor" || role === "reviewer";
 }
 
 export async function assembleSystemPrompt(
-  role: Role,
+  role: PromptRole,
   skillsDir: string,
   conventionsSkill: string,
   itemContext: string,

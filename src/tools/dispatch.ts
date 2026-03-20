@@ -9,6 +9,8 @@ import type { ToolCall, ToolResult } from "../types";
 import { executeBash } from "./bash";
 
 const execFileAsync = promisify(execFile);
+const WRITE_MANIFEST_PATH = [".conductor", "tool-writes.json"];
+const TRASH_DIR_NAME = ".trash";
 
 function failure(error: string, output = ""): ToolResult {
   return {
@@ -157,6 +159,68 @@ function relativizeOutput(projectDir: string, absolutePath: string): string {
   return path.relative(path.resolve(projectDir), absolutePath) || ".";
 }
 
+function getWriteManifestPath(projectDir: string): string {
+  return path.join(projectDir, ...WRITE_MANIFEST_PATH);
+}
+
+function getTrashRoot(projectDir: string): string {
+  return path.join(projectDir, TRASH_DIR_NAME);
+}
+
+async function loadTrackedWrites(projectDir: string): Promise<Set<string>> {
+  try {
+    const raw = await fs.readFile(getWriteManifestPath(projectDir), "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return new Set<string>();
+    }
+
+    return new Set(parsed.filter((entry): entry is string => typeof entry === "string"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return new Set<string>();
+    }
+
+    throw error;
+  }
+}
+
+async function saveTrackedWrites(projectDir: string, trackedWrites: Set<string>): Promise<void> {
+  const manifestPath = getWriteManifestPath(projectDir);
+  await fs.mkdir(path.dirname(manifestPath), { recursive: true });
+  await fs.writeFile(manifestPath, JSON.stringify([...trackedWrites].sort(), null, 2), "utf8");
+}
+
+async function trackWrittenFile(projectDir: string, filePath: string): Promise<void> {
+  const trackedWrites = await loadTrackedWrites(projectDir);
+  trackedWrites.add(relativizeOutput(projectDir, filePath));
+  await saveTrackedWrites(projectDir, trackedWrites);
+}
+
+async function untrackWrittenFile(projectDir: string, filePath: string): Promise<void> {
+  const trackedWrites = await loadTrackedWrites(projectDir);
+  trackedWrites.delete(relativizeOutput(projectDir, filePath));
+  await saveTrackedWrites(projectDir, trackedWrites);
+}
+
+async function cleanupTrashIfDone(projectDir: string): Promise<void> {
+  try {
+    const raw = await fs.readFile(path.join(projectDir, ".conductor", "state.json"), "utf8");
+    const state = JSON.parse(raw) as { status?: unknown };
+    if (state.status !== "done") {
+      return;
+    }
+
+    await fs.rm(getTrashRoot(projectDir), { recursive: true, force: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return;
+    }
+
+    throw error;
+  }
+}
+
 function normalizeSearchOutput(projectDir: string, output: string): string {
   if (!output.trim()) {
     return "";
@@ -236,10 +300,46 @@ async function dispatchWrite(argumentsObject: Record<string, unknown>, projectDi
   const content = requireString(argumentsObject, "content");
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, content, "utf8");
+  await trackWrittenFile(projectDir, filePath);
 
   return {
     success: true,
     output: relativizeOutput(projectDir, filePath),
+  };
+}
+
+async function dispatchDelete(argumentsObject: Record<string, unknown>, projectDir: string): Promise<ToolResult> {
+  const filePath = await resolveProjectPath(projectDir, requireString(argumentsObject, "path"));
+  const relativePath = relativizeOutput(projectDir, filePath);
+  const trackedWrites = await loadTrackedWrites(projectDir);
+
+  try {
+    await fs.stat(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return failure(`path not found: ${relativePath}`);
+    }
+
+    throw error;
+  }
+
+  if (trackedWrites.has(relativePath)) {
+    const trashPath = path.join(getTrashRoot(projectDir), relativePath);
+    await fs.mkdir(path.dirname(trashPath), { recursive: true });
+    await fs.rm(trashPath, { recursive: true, force: true });
+    await fs.rename(filePath, trashPath);
+    await untrackWrittenFile(projectDir, filePath);
+
+    return {
+      success: true,
+      output: relativizeOutput(projectDir, trashPath),
+    };
+  }
+
+  await fs.rm(filePath, { recursive: true, force: true });
+  return {
+    success: true,
+    output: relativePath,
   };
 }
 
@@ -328,6 +428,7 @@ async function dispatchGlob(argumentsObject: Record<string, unknown>, projectDir
 
 export async function dispatchTool(call: ToolCall, projectDir: string): Promise<ToolResult> {
   try {
+    await cleanupTrashIfDone(projectDir);
     const argumentsObject = ensureObject(call.arguments);
 
     switch (call.name) {
@@ -337,6 +438,8 @@ export async function dispatchTool(call: ToolCall, projectDir: string): Promise<
         return await dispatchEdit(argumentsObject, projectDir);
       case "Write":
         return await dispatchWrite(argumentsObject, projectDir);
+      case "Delete":
+        return await dispatchDelete(argumentsObject, projectDir);
       case "Grep":
         return await dispatchGrep(argumentsObject, projectDir);
       case "Glob":

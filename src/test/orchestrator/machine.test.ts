@@ -4,7 +4,12 @@ import * as path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createOrchestrator } from "../../orchestrator/machine";
+import {
+  checkBranchSafety,
+  createOrchestrator,
+  parseBugDescription,
+  parseCommandExtraction,
+} from "../../orchestrator/machine";
 import { readAudit } from "../../state/audit";
 import { loadState, saveState } from "../../state/persistence";
 import type {
@@ -39,6 +44,12 @@ type InvocationRecord = {
   userPrompt: string;
 };
 
+type DirectRequestRecord = {
+  role: Role;
+  modelFamily: string;
+  messages: Array<{ role: string; content: string }>;
+};
+
 type AddendumRecord = {
   itemId: string;
   deviation: string;
@@ -48,10 +59,13 @@ type AddendumRecord = {
 
 type MachineHarness = {
   workspaceDir: string;
+  specDirName: string;
   config: OrchestratorConfig;
   invocationRecords: InvocationRecord[];
+  directRequestRecords: DirectRequestRecord[];
   addendumRecords: AddendumRecord[];
   testCommandCalls: string[];
+  trustedCommandCalls: string[];
   selectCalls: Array<{ role: Role; family: string }>;
   orchestrator: ReturnType<typeof createOrchestrator>;
   run: () => Promise<void>;
@@ -63,8 +77,10 @@ type MachineHarness = {
 
 type HarnessRuntime = {
   invocationRecords: InvocationRecord[];
+  directRequestRecords: DirectRequestRecord[];
   addendumRecords: AddendumRecord[];
   testCommandCalls: string[];
+  trustedCommandCalls: string[];
   selectCalls: Array<{ role: Role; family: string }>;
 };
 
@@ -73,6 +89,7 @@ const dirsToCleanup: string[] = [];
 const DEFAULT_ASSIGNMENTS: ModelAssignment[] = [
   { role: "implementor", vendor: "copilot", family: "gpt-5.4" },
   { role: "reviewer", vendor: "copilot", family: "gpt-4.1" },
+  { role: "pr-reviewer", vendor: "copilot", family: "o3" },
   { role: "spec-author", vendor: "copilot", family: "gpt-4.1" },
   { role: "spec-reviewer", vendor: "copilot", family: "gpt-4.1-mini" },
   { role: "spec-proofreader", vendor: "copilot", family: "o3" },
@@ -141,14 +158,16 @@ async function createWorkspace(): Promise<string> {
 async function writeFixtureFiles(
   workspaceDir: string,
   options?: {
+    specDirName?: string;
     phaseContent?: string;
     phaseFiles?: Record<number, string>;
     createSpec?: boolean;
     createPrompt?: boolean;
     promptContent?: string;
+    conventionsSkillContent?: string;
   },
 ): Promise<void> {
-  const specDir = path.join(workspaceDir, ".docs", "conductor");
+  const specDir = path.join(workspaceDir, ".docs", options?.specDirName ?? "conductor");
   const skillsDir = path.join(workspaceDir, "skills");
 
   await mkdir(specDir, { recursive: true });
@@ -206,7 +225,11 @@ async function writeFixtureFiles(
     await writeFile(path.join(specDir, `phase${phaseNumber}.md`), content, "utf8");
   }));
 
-  await writeFile(path.join(skillsDir, "test-conventions", "SKILL.md"), "# test conventions\n", "utf8");
+  await writeFile(
+    path.join(skillsDir, "test-conventions", "SKILL.md"),
+    options?.conventionsSkillContent ?? "# test conventions\n",
+    "utf8",
+  );
   await writeFile(path.join(skillsDir, "test-implementor", "SKILL.md"), "# implementor skill\n", "utf8");
   await writeFile(path.join(skillsDir, "test-reviewer", "SKILL.md"), "# reviewer skill\n", "utf8");
 }
@@ -214,8 +237,10 @@ async function writeFixtureFiles(
 function createHarnessRuntime(): HarnessRuntime {
   return {
     invocationRecords: [],
+    directRequestRecords: [],
     addendumRecords: [],
     testCommandCalls: [],
+    trustedCommandCalls: [],
     selectCalls: [],
   };
 }
@@ -224,27 +249,71 @@ function createOrchestratorOverrides(
   runtime: HarnessRuntime,
   options?: {
     invocationScripts?: Partial<Record<Role, ScriptedInvocation[]>>;
+    directRequestResponses?: Partial<Record<Role, string[]>>;
     executeResults?: TestCommandResult[];
+    trustedExecuteResults?: TestCommandResult[];
+    trustedCommandResponses?: Record<string, TestCommandResult[]>;
+    diffResults?: TestCommandResult[];
     persistTranscripts?: boolean;
   },
 ): Parameters<typeof createOrchestrator>[2] {
   const invocationQueues = {
     implementor: [...(options?.invocationScripts?.implementor ?? [])],
     reviewer: [...(options?.invocationScripts?.reviewer ?? [])],
+    "pr-reviewer": [...(options?.invocationScripts?.["pr-reviewer"] ?? [])],
     "spec-author": [...(options?.invocationScripts?.["spec-author"] ?? [])],
     "spec-reviewer": [...(options?.invocationScripts?.["spec-reviewer"] ?? [])],
     "spec-proofreader": [...(options?.invocationScripts?.["spec-proofreader"] ?? [])],
     "phase-creator": [...(options?.invocationScripts?.["phase-creator"] ?? [])],
     "phase-reviewer": [...(options?.invocationScripts?.["phase-reviewer"] ?? [])],
   } satisfies Record<Role, ScriptedInvocation[]>;
+  const directRequestQueues = {
+    implementor: [...(options?.directRequestResponses?.implementor ?? [])],
+    reviewer: [...(options?.directRequestResponses?.reviewer ?? [])],
+    "pr-reviewer": [...(options?.directRequestResponses?.["pr-reviewer"] ?? [])],
+    "spec-author": [...(options?.directRequestResponses?.["spec-author"] ?? [])],
+    "spec-reviewer": [...(options?.directRequestResponses?.["spec-reviewer"] ?? [])],
+    "spec-proofreader": [...(options?.directRequestResponses?.["spec-proofreader"] ?? [])],
+    "phase-creator": [...(options?.directRequestResponses?.["phase-creator"] ?? [])],
+    "phase-reviewer": [...(options?.directRequestResponses?.["phase-reviewer"] ?? [])],
+  } satisfies Record<Role, string[]>;
 
   const executeResults = [...(options?.executeResults ?? [])];
+  const trustedExecuteResults = [...(options?.trustedExecuteResults ?? [])];
+  const trustedCommandResponses = new Map(
+    Object.entries(options?.trustedCommandResponses ?? {}).map(([command, responses]) => [command, [...responses]]),
+  );
+  const diffResults = [...(options?.diffResults ?? [])];
 
   const overrides: Parameters<typeof createOrchestrator>[2] = {
     async selectModelForRole(role, assignments) {
       const family = assignments.find((assignment) => assignment.role === role)?.family ?? "unknown";
       runtime.selectCalls.push({ role, family });
-      return { family, role } as never;
+      return {
+        family,
+        role,
+        async sendRequest(messages: unknown[]) {
+          runtime.directRequestRecords.push({
+            role,
+            modelFamily: family,
+            messages: (messages as Array<{ role: string; content: string }>).map((message) => ({
+              role: message.role,
+              content: message.content,
+            })),
+          });
+
+          const next = directRequestQueues[role].shift();
+          if (next === undefined) {
+            throw new Error(`No scripted direct request left for ${role}`);
+          }
+
+          return {
+            text: (async function* () {
+              yield next;
+            })(),
+          };
+        },
+      } as never;
     },
     async assembleSystemPrompt(role, _skillsDir, _conventionsSkill, itemContext) {
       return `${role}::${itemContext}`;
@@ -274,8 +343,79 @@ function createOrchestratorOverrides(
       return createInvocationResult(next);
     },
     async executeBash(command) {
+      if (command === "git diff -- .") {
+        return diffResults.shift() ?? { success: true, output: "stdout:\n\nexit code: 0" };
+      }
+
       runtime.testCommandCalls.push(command);
       return executeResults.shift() ?? { success: true, output: "stdout:\npass\nexit code: 0" };
+    },
+    async executeTrusted(command) {
+      runtime.trustedCommandCalls.push(command);
+
+      const scriptedResponses = trustedCommandResponses.get(command);
+      if (scriptedResponses && scriptedResponses.length > 0) {
+        return scriptedResponses.shift() as TestCommandResult;
+      }
+
+      const scripted = trustedExecuteResults.shift();
+      if (scripted) {
+        return scripted;
+      }
+
+      if (command === "command -v gh") {
+        return { success: true, output: "stdout:\n/usr/bin/gh\nexit code: 0" };
+      }
+
+      if (command === "git rev-parse --abbrev-ref HEAD") {
+        return { success: true, output: "stdout:\nfeature/test\nexit code: 0" };
+      }
+
+      if (command === "git rev-parse HEAD") {
+        return { success: true, output: "stdout:\nabc123\nexit code: 0" };
+      }
+
+      if (command === "git ls-remote origin 'refs/heads/feature/test'") {
+        return { success: true, output: "stdout:\nabc123\trefs/heads/feature/test\nexit code: 0" };
+      }
+
+      if (command === "git remote show origin | grep 'HEAD branch'") {
+        return { success: true, output: "stdout:\n  HEAD branch: main\nexit code: 0" };
+      }
+
+      if (command === "gh repo view --json owner,name") {
+        return { success: true, output: "stdout:\n{\"owner\":{\"login\":\"wtsi-hgi\"},\"name\":\"copilot-conductor\"}\nexit code: 0" };
+      }
+
+      if (command === "gh pr view --json number") {
+        return { success: true, output: "stdout:\n{\"number\":42}\nexit code: 0" };
+      }
+
+      if (command === "gh api repos/wtsi-hgi/copilot-conductor/pulls/42/requested_reviewers -f reviewers[]=copilot") {
+        return { success: true, output: "stdout:\n{}\nexit code: 0" };
+      }
+
+      if (command === "gh api repos/wtsi-hgi/copilot-conductor/pulls/42/reviews") {
+        return {
+          success: true,
+          output: "stdout:\n[{\"id\":700,\"submitted_at\":\"2026-03-19T10:11:13.000Z\",\"user\":{\"login\":\"copilot\"}}]\nexit code: 0",
+        };
+      }
+
+      if (command === "gh api repos/wtsi-hgi/copilot-conductor/pulls/42/comments") {
+        return { success: true, output: "stdout:\n[]\nexit code: 0" };
+      }
+
+      if (command === "git status --porcelain") {
+        return {
+          success: true,
+          output: "stdout:\n M src/foo.ts\n?? test/foo.test.ts\nexit code: 0",
+        };
+      }
+
+      return { success: true, output: "stdout:\ntrusted ok\nexit code: 0" };
+    },
+    async sleep() {
     },
     async getDiff(itemIds) {
       return `Combined diff for items: ${itemIds.join(", ")}`;
@@ -302,42 +442,52 @@ function createOrchestratorOverrides(
 }
 
 async function createHarness(options?: {
+  specDirName?: string;
   phaseContent?: string;
   phaseFiles?: Record<number, string>;
   createSpec?: boolean;
   createPrompt?: boolean;
   promptContent?: string;
+  conventionsSkillContent?: string;
   invocationScripts?: Partial<Record<Role, ScriptedInvocation[]>>;
+  directRequestResponses?: Partial<Record<Role, string[]>>;
   executeResults?: TestCommandResult[];
+  trustedExecuteResults?: TestCommandResult[];
+  trustedCommandResponses?: Record<string, TestCommandResult[]>;
+  diffResults?: TestCommandResult[];
   initialState?: Partial<OrchestratorState>;
   modelAssignments?: ModelAssignment[];
   persistTranscripts?: boolean;
 }): Promise<MachineHarness> {
   const workspaceDir = await createWorkspace();
+  const specDirName = options?.specDirName ?? "conductor";
   await writeFixtureFiles(workspaceDir, {
+    specDirName,
     phaseContent: options?.phaseContent,
     phaseFiles: options?.phaseFiles,
     createSpec: options?.createSpec,
     createPrompt: options?.createPrompt,
     promptContent: options?.promptContent,
+    conventionsSkillContent: options?.conventionsSkillContent,
   });
 
   const config: OrchestratorConfig = {
-    specDir: path.join(workspaceDir, ".docs", "conductor"),
     projectDir: workspaceDir,
+    docsDir: path.join(workspaceDir, ".docs"),
     skillsDir: path.join(workspaceDir, "skills"),
-    conventionsSkill: "test-conventions",
     modelAssignments: (options?.modelAssignments ?? DEFAULT_ASSIGNMENTS)
       .map((assignment) => ({ ...assignment })),
     maxTurns: 5,
     maxRetries: 2,
-    testCommand: "npm test",
     requireApproval: false,
   };
 
   if (options?.initialState) {
     await saveState(path.join(workspaceDir, ".conductor"), {
-      specDir: config.specDir,
+      specDir: path.join(config.docsDir, specDirName),
+      conventionsSkill: "test-conventions",
+      testCommand: "npm test",
+      lintCommand: "",
       currentPhase: 1,
       currentItemIndex: 0,
       consecutivePasses: {},
@@ -362,17 +512,20 @@ async function createHarness(options?: {
 
   return {
     workspaceDir,
+    specDirName,
     config,
     invocationRecords: runtime.invocationRecords,
+    directRequestRecords: runtime.directRequestRecords,
     addendumRecords: runtime.addendumRecords,
     testCommandCalls: runtime.testCommandCalls,
+    trustedCommandCalls: runtime.trustedCommandCalls,
     selectCalls: runtime.selectCalls,
     orchestrator,
     run: () => orchestrator.run(createToken() as never),
     submitClarification: (answers) => orchestrator.submitClarification(answers),
     loadPersistedState: () => loadState(path.join(workspaceDir, ".conductor")),
-    readPhaseFile: (phaseNumber = 1) => readFile(path.join(workspaceDir, ".docs", "conductor", `phase${phaseNumber}.md`), "utf8"),
-    readPromptFile: () => readFile(path.join(workspaceDir, ".docs", "conductor", "prompt.md"), "utf8"),
+    readPhaseFile: (phaseNumber = 1) => readFile(path.join(workspaceDir, ".docs", specDirName, `phase${phaseNumber}.md`), "utf8"),
+    readPromptFile: () => readFile(path.join(workspaceDir, ".docs", specDirName, "prompt.md"), "utf8"),
   };
 }
 
@@ -380,8 +533,617 @@ afterEach(async () => {
   await Promise.all(dirsToCleanup.splice(0).map(async (dirPath) => rm(dirPath, { recursive: true, force: true })));
 });
 
+function captureStateSnapshots(harness: MachineHarness): OrchestratorState[] {
+  const snapshots: OrchestratorState[] = [];
+  harness.orchestrator.onStateChange((state) => {
+    snapshots.push(JSON.parse(JSON.stringify(state)) as OrchestratorState);
+  });
+  return snapshots;
+}
+
 describe("createOrchestrator", () => {
-  it("starts in clarifying mode from prompt.md and invokes the clarification prompt with conventions context", async () => {
+  it("returns safe true for a feature branch", async () => {
+    const result = await checkBranchSafety("/repo", async (command) => {
+      if (command === "git rev-parse --abbrev-ref HEAD") {
+        return { success: true, output: "stdout:\nfeature/foo\nexit code: 0" };
+      }
+
+      return { success: true, output: "stdout:\n  HEAD branch: main\nexit code: 0" };
+    });
+
+    expect(result).toEqual({ safe: true, branch: "feature/foo" });
+  });
+
+  it("returns a protected-branch failure for main", async () => {
+    const result = await checkBranchSafety("/repo", async (command) => {
+      if (command === "git rev-parse --abbrev-ref HEAD") {
+        return { success: true, output: "stdout:\nmain\nexit code: 0" };
+      }
+
+      return { success: true, output: "stdout:\n  HEAD branch: develop\nexit code: 0" };
+    });
+
+    expect(result.safe).toBe(false);
+    expect(result.branch).toBe("main");
+    expect(result.reason).toContain("Cannot run Conductor on protected branch 'main'.");
+  });
+
+  it("returns a protected-branch failure for master", async () => {
+    const result = await checkBranchSafety("/repo", async (command) => {
+      if (command === "git rev-parse --abbrev-ref HEAD") {
+        return { success: true, output: "stdout:\nmaster\nexit code: 0" };
+      }
+
+      return { success: true, output: "stdout:\n  HEAD branch: main\nexit code: 0" };
+    });
+
+    expect(result.safe).toBe(false);
+    expect(result.branch).toBe("master");
+    expect(result.reason).toContain("protected branch 'master'");
+  });
+
+  it("returns a protected-branch failure when current branch matches origin default", async () => {
+    const result = await checkBranchSafety("/repo", async (command) => {
+      if (command === "git rev-parse --abbrev-ref HEAD") {
+        return { success: true, output: "stdout:\ndevelop\nexit code: 0" };
+      }
+
+      return { success: true, output: "stdout:\n  HEAD branch: develop\nexit code: 0" };
+    });
+
+    expect(result.safe).toBe(false);
+    expect(result.branch).toBe("develop");
+    expect(result.reason).toContain("protected branch 'develop'");
+  });
+
+  it("allows a non-default branch even when the default branch is protected", async () => {
+    const result = await checkBranchSafety("/repo", async (command) => {
+      if (command === "git rev-parse --abbrev-ref HEAD") {
+        return { success: true, output: "stdout:\ndevelop\nexit code: 0" };
+      }
+
+      return { success: true, output: "stdout:\n  HEAD branch: main\nexit code: 0" };
+    });
+
+    expect(result).toEqual({ safe: true, branch: "develop" });
+  });
+
+  it("skips default-branch detection when git remote show origin fails", async () => {
+    const result = await checkBranchSafety("/repo", async (command) => {
+      if (command === "git rev-parse --abbrev-ref HEAD") {
+        return { success: true, output: "stdout:\ndevelop\nexit code: 0" };
+      }
+
+      return {
+        success: false,
+        output: "stderr:\nfatal: 'origin' does not appear to be a git repository\nexit code: 1",
+        error: "command exited with code 1",
+      };
+    });
+
+    expect(result).toEqual({ safe: true, branch: "develop" });
+  });
+
+  it("hard-stops the orchestrator before work starts on a protected branch", async () => {
+    const harness = await createHarness({
+      trustedExecuteResults: [
+        { success: true, output: "stdout:\nmain\nexit code: 0" },
+        { success: true, output: "stdout:\n  HEAD branch: main\nexit code: 0" },
+      ],
+      invocationScripts: {
+        implementor: [{ response: "should not run" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    const persistedState = await harness.loadPersistedState();
+    const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+
+    expect(harness.invocationRecords).toHaveLength(0);
+    expect(harness.testCommandCalls).toHaveLength(0);
+    expect(harness.trustedCommandCalls).toEqual([
+      "git rev-parse --abbrev-ref HEAD",
+      "git remote show origin | grep 'HEAD branch'",
+    ]);
+    expect(persistedState.status).toBe("error");
+    expect(auditEntries.some((entry) => entry.promptSummary.includes("Cannot run Conductor on protected branch 'main'."))).toBe(true);
+  });
+
+  it("commits and pushes .conductor after a bugfix commit checkpoint", async () => {
+    const harness = await createHarness({
+      initialState: {
+        conventionsSkill: "",
+        currentItemIndex: 1,
+        consecutivePasses: { A1: 2 },
+        itemStatuses: { A1: "pass" },
+        prReviewStep: "spec-aware",
+        prReviewConsecutivePasses: 0,
+        status: "idle",
+      },
+      invocationScripts: {
+        implementor: [{ response: "fixed finding" }],
+        "pr-reviewer": [
+          { response: `FAIL${JSON.stringify([{ file: "src/foo.ts", line: 10, description: "Fix the edge case" }])}` },
+          { response: "PASS" },
+          { response: "PASS" },
+          { response: "PASS" },
+          { response: "PASS" },
+        ],
+      },
+    });
+
+    await harness.run();
+
+    const bugfixCommitIndex = harness.trustedCommandCalls.indexOf("git commit -m 'Fix PR review findings'");
+    const bugfixPushIndex = harness.trustedCommandCalls.findIndex(
+      (command, index) => command === "git push" && index > bugfixCommitIndex,
+    );
+    const checkpointAddIndex = harness.trustedCommandCalls.findIndex(
+      (command, index) => command === "git add .conductor/" && index > bugfixPushIndex,
+    );
+    const checkpointCommitIndex = harness.trustedCommandCalls.findIndex(
+      (command, index) => command === "git commit -m 'conductor: update state'" && index > checkpointAddIndex,
+    );
+    const checkpointPushIndex = harness.trustedCommandCalls.findIndex(
+      (command, index) => command === "git push" && index > checkpointCommitIndex,
+    );
+
+    expect(bugfixCommitIndex).toBeGreaterThanOrEqual(0);
+    expect(bugfixPushIndex).toBeGreaterThan(bugfixCommitIndex);
+    expect(checkpointAddIndex).toBeGreaterThan(bugfixPushIndex);
+    expect(checkpointCommitIndex).toBeGreaterThan(checkpointAddIndex);
+    expect(checkpointPushIndex).toBeGreaterThan(checkpointCommitIndex);
+  });
+
+  it("progresses a bugfix through fixing reviewing and approving before requesting approval", async () => {
+    const harness = await createHarness({
+      specDirName: "bugs1",
+      createSpec: false,
+      createPrompt: true,
+      promptContent: "The parser crashes on empty input.",
+      directRequestResponses: {
+        "spec-author": [JSON.stringify([
+          { title: "Parser crash", description: "Empty input triggers a null dereference." },
+        ])],
+      },
+      invocationScripts: {
+        implementor: [{ response: "implemented bug fix" }],
+        reviewer: [{ response: "PASS" }],
+      },
+      initialState: {
+        status: "idle",
+        specStep: "clarifying",
+        conventionsSkill: "",
+      },
+    });
+
+    const snapshots = captureStateSnapshots(harness);
+    const runPromise = harness.run();
+
+    await waitFor(() => {
+      const state = harness.orchestrator.getState();
+      return state.status === "pending-approval" && state.bugStep === "approving";
+    });
+
+    const persistedState = await harness.loadPersistedState();
+
+    expect(harness.directRequestRecords).toHaveLength(1);
+    expect(harness.directRequestRecords[0]).toMatchObject({
+      role: "spec-author",
+      modelFamily: "gpt-4.1",
+    });
+    expect(harness.directRequestRecords[0]?.messages[0]?.content).toContain("Do not call tools.");
+    expect(harness.directRequestRecords[0]?.messages[1]?.content).toContain("parser crashes on empty input");
+    expect(harness.invocationRecords.map((record) => record.role)).toEqual(["implementor", "reviewer"]);
+    expect(harness.invocationRecords[0]?.userPrompt).toContain("failing regression test");
+    expect(harness.invocationRecords[0]?.userPrompt).toContain("Issue title: Parser crash");
+    expect(persistedState.bugIssues).toEqual([
+      { title: "Parser crash", description: "Empty input triggers a null dereference." },
+    ]);
+    expect(persistedState.bugIndex).toBe(0);
+    expect(persistedState.bugFixCycle).toBe(1);
+    expect(persistedState.bugStep).toBe("approving");
+    expect(persistedState.status).toBe("pending-approval");
+    expect(snapshots.some((snapshot) => snapshot.bugStep === "fixing")).toBe(true);
+    expect(snapshots.some((snapshot) => snapshot.bugStep === "reviewing")).toBe(true);
+    expect(snapshots.some((snapshot) => snapshot.bugStep === "approving" && snapshot.status === "pending-approval")).toBe(true);
+
+    harness.orchestrator.approve("bugfix");
+    await runPromise;
+  });
+
+  it("re-invokes implementor with reviewer feedback and increments bugFixCycle", async () => {
+    const harness = await createHarness({
+      specDirName: "bugs1",
+      createSpec: false,
+      createPrompt: true,
+      promptContent: "The parser crashes on empty input.",
+      directRequestResponses: {
+        "spec-author": [JSON.stringify([
+          { title: "Parser crash", description: "Empty input triggers a null dereference." },
+        ])],
+      },
+      invocationScripts: {
+        implementor: [{ response: "first fix" }, { response: "second fix" }],
+        reviewer: [{ response: "FAIL add a focused regression test" }, { response: "PASS" }],
+      },
+      initialState: {
+        status: "idle",
+        specStep: "clarifying",
+        conventionsSkill: "",
+      },
+    });
+
+    const runPromise = harness.run();
+
+    await waitFor(() => {
+      const state = harness.orchestrator.getState();
+      return state.status === "pending-approval" && state.bugFixCycle === 2;
+    });
+
+    const persistedState = await harness.loadPersistedState();
+
+    expect(harness.invocationRecords.map((record) => record.role)).toEqual([
+      "implementor",
+      "reviewer",
+      "implementor",
+      "reviewer",
+    ]);
+    expect(harness.invocationRecords[2]?.userPrompt).toContain("FAIL add a focused regression test");
+    expect(persistedState.bugFixCycle).toBe(2);
+    expect(persistedState.bugStep).toBe("approving");
+
+    harness.orchestrator.approve("bugfix");
+    await runPromise;
+  });
+
+  it("marks a bug failed after 5 failed review cycles and advances to the next bug", async () => {
+    const harness = await createHarness({
+      specDirName: "bugs1",
+      createSpec: false,
+      createPrompt: true,
+      promptContent: "Multiple regressions are present.",
+      directRequestResponses: {
+        "spec-author": [JSON.stringify([
+          { title: "Parser crash", description: "Empty input triggers a null dereference." },
+          { title: "Line counter", description: "EOF reports one extra line." },
+        ])],
+      },
+      invocationScripts: {
+        implementor: [
+          { response: "fix cycle 1" },
+          { response: "fix cycle 2" },
+          { response: "fix cycle 3" },
+          { response: "fix cycle 4" },
+          { response: "fix cycle 5" },
+          { response: "second bug fix" },
+        ],
+        reviewer: [
+          { response: "FAIL still broken 1" },
+          { response: "FAIL still broken 2" },
+          { response: "FAIL still broken 3" },
+          { response: "FAIL still broken 4" },
+          { response: "FAIL still broken 5" },
+          { response: "PASS" },
+        ],
+      },
+      initialState: {
+        status: "idle",
+        specStep: "clarifying",
+        conventionsSkill: "",
+      },
+    });
+
+    const runPromise = harness.run();
+
+    await waitFor(() => {
+      const state = harness.orchestrator.getState();
+      return state.status === "pending-approval" && state.bugIndex === 1;
+    });
+
+    const persistedState = await harness.loadPersistedState();
+    const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+
+    expect(harness.invocationRecords.filter((record) => record.role === "implementor")).toHaveLength(6);
+    expect(harness.invocationRecords.filter((record) => record.role === "reviewer")).toHaveLength(6);
+    expect(persistedState.bugIndex).toBe(1);
+    expect(persistedState.bugFixCycle).toBe(1);
+    expect(auditEntries.some((entry) => entry.itemId === "bugfix:1" && entry.result === "FAIL")).toBe(true);
+
+    harness.orchestrator.approve("bugfix:2");
+    await runPromise;
+  });
+
+  it("creates a short imperative bugfix commit and pushes after approval", async () => {
+    const harness = await createHarness({
+      specDirName: "bugs1",
+      createSpec: false,
+      createPrompt: true,
+      promptContent: "The parser crashes on empty input.",
+      directRequestResponses: {
+        "spec-author": [JSON.stringify([
+          { title: "Parser crash", description: "Empty input triggers a null dereference." },
+        ])],
+      },
+      invocationScripts: {
+        implementor: [{ response: "implemented bug fix" }],
+        reviewer: [{ response: "PASS" }],
+      },
+      initialState: {
+        status: "idle",
+        specStep: "clarifying",
+        conventionsSkill: "",
+      },
+    });
+
+    const runPromise = harness.run();
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval");
+
+    harness.orchestrator.approve("bugfix");
+    await runPromise;
+
+    const addCommand = harness.trustedCommandCalls.find((command) => command.startsWith("git add -- "));
+    const commitCommand = harness.trustedCommandCalls.find((command) => command.startsWith("git commit -m "));
+    const commitIndex = harness.trustedCommandCalls.indexOf(String(commitCommand));
+    const pushIndex = harness.trustedCommandCalls.findIndex((command, index) => command === "git push" && index > commitIndex);
+
+    expect(addCommand).toBe("git add -- 'src/foo.ts' 'test/foo.test.ts'");
+    expect(commitCommand).toBe("git commit -m 'Fix Parser crash'");
+    expect("Fix Parser crash".length).toBeLessThanOrEqual(72);
+    expect(pushIndex).toBeGreaterThan(commitIndex);
+  });
+
+  it("returns to fixing with appended human feedback when approval requests changes", async () => {
+    const harness = await createHarness({
+      specDirName: "bugs1",
+      createSpec: false,
+      createPrompt: true,
+      promptContent: "The websocket reconnect path is unreliable.",
+      directRequestResponses: {
+        "spec-author": [JSON.stringify([
+          { title: "Reconnect websocket", description: "Reconnect leaves stale listeners behind." },
+        ])],
+      },
+      invocationScripts: {
+        implementor: [{ response: "first fix" }, { response: "second fix" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+      },
+      initialState: {
+        status: "idle",
+        specStep: "clarifying",
+        conventionsSkill: "",
+      },
+    });
+
+    const runPromise = harness.run();
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval");
+
+    harness.orchestrator.reject("bugfix", "Add coverage for the reconnect path.");
+
+    await waitFor(() => harness.invocationRecords.filter((record) => record.role === "implementor").length === 2);
+    expect(harness.invocationRecords[2]?.userPrompt).toContain("Add coverage for the reconnect path.");
+
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval");
+    harness.orchestrator.approve("bugfix");
+    await runPromise;
+  });
+
+  it("creates separate commits for three approved bugs and finishes with bugStep done", async () => {
+    const harness = await createHarness({
+      specDirName: "bugs1",
+      createSpec: false,
+      createPrompt: true,
+      promptContent: "Three unrelated regressions are present.",
+      directRequestResponses: {
+        "spec-author": [JSON.stringify([
+          { title: "Parser crash", description: "Empty input triggers a null dereference." },
+          { title: "Line counter", description: "EOF reports one extra line." },
+          { title: "Socket leak", description: "Reconnect leaks websocket listeners." },
+        ])],
+      },
+      invocationScripts: {
+        implementor: [
+          { response: "fix parser crash" },
+          { response: "fix line counter" },
+          { response: "fix socket leak" },
+        ],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
+      },
+      initialState: {
+        status: "idle",
+        specStep: "clarifying",
+        conventionsSkill: "",
+      },
+    });
+
+    const runPromise = harness.run();
+
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval" && harness.orchestrator.getState().bugIndex === 0);
+    harness.orchestrator.approve("bugfix:1");
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval" && harness.orchestrator.getState().bugIndex === 1);
+    harness.orchestrator.approve("bugfix:2");
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval" && harness.orchestrator.getState().bugIndex === 2);
+    harness.orchestrator.approve("bugfix:3");
+    await runPromise;
+
+    expect(harness.trustedCommandCalls.filter((command) => command.startsWith("git commit -m "))).toEqual([
+      "git commit -m 'Fix Parser crash'",
+      "git commit -m 'Fix Line counter'",
+      "git commit -m 'Fix Socket leak'",
+    ]);
+    expect(harness.orchestrator.getState().bugStep).toBe("done");
+    expect(harness.orchestrator.getState().status).toBe("done");
+  });
+
+  it("records audit entries and transcripts for bugfix implementor and reviewer invocations", async () => {
+    const harness = await createHarness({
+      specDirName: "bugs1",
+      createSpec: false,
+      createPrompt: true,
+      promptContent: "The parser crashes on empty input.",
+      directRequestResponses: {
+        "spec-author": [JSON.stringify([
+          { title: "Parser crash", description: "Empty input triggers a null dereference." },
+        ])],
+      },
+      invocationScripts: {
+        implementor: [{ response: "implemented bug fix" }],
+        reviewer: [{ response: "PASS" }],
+      },
+      initialState: {
+        status: "idle",
+        specStep: "clarifying",
+        conventionsSkill: "",
+      },
+      persistTranscripts: true,
+    });
+
+    const runPromise = harness.run();
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval");
+
+    const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+    const transcripts = await harness.orchestrator.getTranscripts();
+
+    expect(auditEntries.some((entry) => entry.role === "implementor" && entry.itemId === "bugfix:1:fix:1")).toBe(true);
+    expect(auditEntries.some((entry) => entry.role === "reviewer" && entry.itemId === "bugfix:1:review:1")).toBe(true);
+    expect(transcripts.some((entry) => entry.role === "implementor" && entry.itemId === "bugfix:1:fix:1")).toBe(true);
+    expect(transcripts.some((entry) => entry.role === "reviewer" && entry.itemId === "bugfix:1:review:1")).toBe(true);
+
+    harness.orchestrator.approve("bugfix");
+    await runPromise;
+  });
+
+  it("persists reviewing bug state on pause and resumes from that state", async () => {
+    let releaseReviewer!: () => void;
+    const waitForReviewer = new Promise<void>((resolve) => {
+      releaseReviewer = resolve;
+    });
+    const harness = await createHarness({
+      specDirName: "bugs1",
+      createSpec: false,
+      createPrompt: true,
+      promptContent: "The parser crashes on empty input.",
+      directRequestResponses: {
+        "spec-author": [JSON.stringify([
+          { title: "Parser crash", description: "Empty input triggers a null dereference." },
+        ])],
+      },
+      invocationScripts: {
+        implementor: [{ response: "implemented bug fix" }],
+        reviewer: [{ response: "PASS", waitFor: waitForReviewer }, { response: "PASS" }],
+      },
+      initialState: {
+        status: "idle",
+        specStep: "clarifying",
+        conventionsSkill: "",
+      },
+    });
+
+    const runPromise = harness.run();
+
+    await waitFor(() => harness.invocationRecords.filter((record) => record.role === "reviewer").length === 1);
+    await waitFor(() => harness.orchestrator.getState().bugStep === "reviewing");
+
+    harness.orchestrator.pause();
+    const persistedState = await waitForValue(async () => {
+      const state = await harness.loadPersistedState();
+      return state.status === "paused" ? state : undefined;
+    });
+
+    expect(persistedState.bugStep).toBe("reviewing");
+    expect(persistedState.bugIndex).toBe(0);
+    expect(persistedState.bugFixCycle).toBe(1);
+
+    releaseReviewer();
+    await runPromise;
+
+    harness.orchestrator.resume();
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval");
+    expect(harness.invocationRecords.filter((record) => record.role === "reviewer")).toHaveLength(2);
+
+    harness.orchestrator.approve("bugfix");
+    await waitFor(() => harness.orchestrator.getState().status === "done");
+  });
+
+  it("emits bugfix status through state updates while approval is pending", async () => {
+    const harness = await createHarness({
+      specDirName: "bugs1",
+      createSpec: false,
+      createPrompt: true,
+      promptContent: "The parser crashes on empty input.",
+      directRequestResponses: {
+        "spec-author": [JSON.stringify([
+          { title: "Parser crash", description: "Empty input triggers a null dereference." },
+        ])],
+      },
+      invocationScripts: {
+        implementor: [{ response: "implemented bug fix" }],
+        reviewer: [{ response: "PASS" }],
+      },
+      initialState: {
+        status: "idle",
+        specStep: "clarifying",
+        conventionsSkill: "",
+      },
+    });
+
+    const snapshots = captureStateSnapshots(harness);
+    const runPromise = harness.run();
+
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval");
+
+    expect(snapshots.some((snapshot) => {
+      return snapshot.status === "pending-approval"
+        && snapshot.bugStep === "approving"
+        && snapshot.bugIndex === 0
+        && snapshot.bugFixCycle === 1
+        && snapshot.bugIssues?.length === 1;
+    })).toBe(true);
+
+    harness.orchestrator.approve("bugfix");
+    await runPromise;
+  });
+
+  it("emits a done bugfix status through state updates after all bugs complete", async () => {
+    const harness = await createHarness({
+      specDirName: "bugs1",
+      createSpec: false,
+      createPrompt: true,
+      promptContent: "The parser crashes on empty input.",
+      directRequestResponses: {
+        "spec-author": [JSON.stringify([
+          { title: "Parser crash", description: "Empty input triggers a null dereference." },
+        ])],
+      },
+      invocationScripts: {
+        implementor: [{ response: "implemented bug fix" }],
+        reviewer: [{ response: "PASS" }],
+      },
+      initialState: {
+        status: "idle",
+        specStep: "clarifying",
+        conventionsSkill: "",
+      },
+    });
+
+    const snapshots = captureStateSnapshots(harness);
+    const runPromise = harness.run();
+
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval");
+    harness.orchestrator.approve("bugfix");
+    await runPromise;
+
+    expect(snapshots.some((snapshot) => {
+      return snapshot.status === "done"
+        && snapshot.bugStep === "done"
+        && snapshot.bugIndex === 1
+        && snapshot.bugIssues?.length === 1;
+    })).toBe(true);
+  });
+
+  it("starts in clarifying mode from prompt.md and invokes the clarification prompt", async () => {
     const promptContent = [
       "# Prompt",
       "",
@@ -406,9 +1168,97 @@ describe("createOrchestrator", () => {
     await harness.run();
 
     expect(harness.invocationRecords[0]?.role).toBe("spec-author");
-    expect(harness.invocationRecords[0]?.systemPrompt).toContain("# test conventions");
+    expect(harness.invocationRecords[0]?.systemPrompt).toContain("# Tool Definitions");
+    expect(harness.invocationRecords[0]?.systemPrompt).toContain("Read prompt.md. Research the codebase to understand what exists.");
     expect(harness.invocationRecords[0]?.userPrompt).toContain("Add the requested orchestration feature.");
     expect(harness.orchestrator.getState().specStep).toBe("done");
+  });
+
+  it("commits and pushes .conductor when spec authoring completes", async () => {
+    let releaseReviewer!: () => void;
+    const waitForReviewer = new Promise<void>((resolve) => {
+      releaseReviewer = resolve;
+    });
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      initialState: {
+        conventionsSkill: "",
+        specStep: "authoring",
+      },
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [{ response: "PASS" }],
+        "spec-reviewer": [{ response: "PASS", waitFor: waitForReviewer }],
+      },
+    });
+
+    const runPromise = harness.run();
+    await waitFor(() => harness.invocationRecords.filter((record) => record.role === "spec-reviewer").length === 1);
+
+    const stateAddIndex = harness.trustedCommandCalls.indexOf("git add .conductor/");
+    const stateCommitIndex = harness.trustedCommandCalls.indexOf("git commit -m 'conductor: update state'");
+    const statePushIndex = harness.trustedCommandCalls.findIndex((command, index) => command === "git push" && index > stateCommitIndex);
+
+    expect(stateAddIndex).toBeGreaterThanOrEqual(0);
+    expect(stateCommitIndex).toBeGreaterThan(stateAddIndex);
+    expect(statePushIndex).toBeGreaterThan(stateCommitIndex);
+    expect(harness.trustedCommandCalls.filter((command) => command === "git commit -m 'conductor: update state'")).toHaveLength(1);
+
+    harness.orchestrator.pause();
+    releaseReviewer();
+    await runPromise;
+  });
+
+  it("stages spec.md and phase*.md and commits them with the spec-writing message when spec-writing completes", async () => {
+    const harness = await createHarness({
+      initialState: {
+        conventionsSkill: "",
+        specStep: "reviewing-phases",
+        specPhaseFileIndex: 0,
+      },
+      invocationScripts: {
+        "phase-reviewer": [{ response: "PASS" }],
+        implementor: [{ response: "implemented" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
+      },
+    });
+
+    const expectedSpecDir = path.relative(harness.workspaceDir, path.join(harness.config.docsDir, "conductor")).split(path.sep).join("/");
+    const expectedAddCommand = `git add -- '${expectedSpecDir}/spec.md' ':(glob)${expectedSpecDir}/phase*.md'`;
+
+    await harness.run();
+
+    const addIndex = harness.trustedCommandCalls.indexOf(expectedAddCommand);
+    const commitIndex = harness.trustedCommandCalls.indexOf("git commit -m 'conductor: write spec'");
+
+    expect(addIndex).toBeGreaterThanOrEqual(0);
+    expect(commitIndex).toBeGreaterThan(addIndex);
+  });
+
+  it("pushes after the spec-writing commit succeeds", async () => {
+    const harness = await createHarness({
+      initialState: {
+        conventionsSkill: "",
+        specStep: "reviewing-phases",
+        specPhaseFileIndex: 0,
+      },
+      invocationScripts: {
+        "phase-reviewer": [{ response: "PASS" }],
+        implementor: [{ response: "implemented" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    const commitIndex = harness.trustedCommandCalls.indexOf("git commit -m 'conductor: write spec'");
+    const pushIndex = harness.trustedCommandCalls.findIndex((command, index) => command === "git push" && index > commitIndex);
+
+    expect(commitIndex).toBeGreaterThanOrEqual(0);
+    expect(pushIndex).toBeGreaterThan(commitIndex);
   });
 
   it("uses the spec-author model for clarification while auditing the invocation as clarifier", async () => {
@@ -714,7 +1564,7 @@ describe("createOrchestrator", () => {
 
     expect(harness.invocationRecords.filter((record) => record.role === "spec-reviewer")).toHaveLength(2);
     const proofreaderCall = harness.invocationRecords.find((record) => record.role === "spec-proofreader");
-    expect(proofreaderCall?.userPrompt).toContain(`${harness.config.specDir}/spec.md`);
+    expect(proofreaderCall?.userPrompt).toContain(`${path.join(harness.config.docsDir, "conductor")}/spec.md`);
     expect(proofreaderCall?.userPrompt).not.toContain("This text should not appear in proofreading.");
   });
 
@@ -1451,19 +2301,20 @@ describe("createOrchestrator", () => {
     await writeFixtureFiles(workspaceDir, { phaseContent });
 
     const config: OrchestratorConfig = {
-      specDir: path.join(workspaceDir, ".docs", "conductor"),
+      docsDir: path.join(workspaceDir, ".docs"),
       projectDir: workspaceDir,
       skillsDir: path.join(workspaceDir, "skills"),
-      conventionsSkill: "test-conventions",
       modelAssignments: DEFAULT_ASSIGNMENTS.map((assignment) => ({ ...assignment })),
       maxTurns: 5,
       maxRetries: 2,
-      testCommand: "npm test",
       requireApproval: false,
     };
 
     await saveState(path.join(workspaceDir, ".conductor"), {
-      specDir: config.specDir,
+      specDir: path.join(config.docsDir, "conductor"),
+      conventionsSkill: "test-conventions",
+      testCommand: "npm test",
+      lintCommand: "",
       currentPhase: 1,
       currentItemIndex: 1,
       consecutivePasses: { A1: 2 },
@@ -1484,12 +2335,13 @@ describe("createOrchestrator", () => {
         invocationScripts: {
           implementor: [{ response: "impl a2" }],
           reviewer: [{ response: "PASS" }, { response: "PASS" }],
+          "pr-reviewer": [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
         },
       }),
     );
 
     orchestrator.resume();
-    await waitFor(() => orchestrator.getState().itemStatuses.A2 === "pass");
+    await waitFor(() => orchestrator.getState().status === "done");
 
     expect(runtime.invocationRecords[0]?.userPrompt).toContain("A2");
     expect(orchestrator.getState().status).toBe("done");
@@ -1522,6 +2374,123 @@ describe("createOrchestrator", () => {
     harness.orchestrator.changeModel("phase-reviewer", "copilot", "o3");
 
     expect(harness.orchestrator.getState().modelAssignments).toEqual(before);
+  });
+
+  it("parses direct JSON command extraction responses", () => {
+    expect(parseCommandExtraction('{"testCommand":"go test ./...","lintCommand":"golangci-lint run --fix"}')).toEqual({
+      testCommand: "go test ./...",
+      lintCommand: "golangci-lint run --fix",
+    });
+  });
+
+  it("parses direct JSON bug descriptions", () => {
+    expect(parseBugDescription('[{"title":"NPE in parser","description":"Null pointer when parsing empty input"},{"title":"Off-by-one","description":"Index error at end of file"}]')).toEqual([
+      {
+        title: "NPE in parser",
+        description: "Null pointer when parsing empty input",
+      },
+      {
+        title: "Off-by-one",
+        description: "Index error at end of file",
+      },
+    ]);
+  });
+
+  it("falls back to a single bug issue when bug description JSON is invalid", () => {
+    const response = "not valid json";
+
+    expect(parseBugDescription(response)).toEqual([
+      {
+        title: "Bug fix",
+        description: response,
+      },
+    ]);
+  });
+
+  it("falls back to a single bug issue when bug description JSON is empty", () => {
+    expect(parseBugDescription("[]")).toEqual([
+      {
+        title: "Bug fix",
+        description: "[]",
+      },
+    ]);
+  });
+
+  it("parses fenced JSON bug descriptions", () => {
+    expect(parseBugDescription([
+      "```json",
+      '[{"title":"Race condition","description":"Concurrent writes corrupt state"}]',
+      "```",
+    ].join("\n"))).toEqual([
+      {
+        title: "Race condition",
+        description: "Concurrent writes corrupt state",
+      },
+    ]);
+  });
+
+  it("parses fenced JSON command extraction responses", () => {
+    expect(parseCommandExtraction([
+      "```json",
+      '{"testCommand":"pnpm test","lintCommand":"pnpm lint --fix && pnpm format"}',
+      "```",
+    ].join("\n"))).toEqual({
+      testCommand: "pnpm test",
+      lintCommand: "pnpm lint --fix && pnpm format",
+    });
+  });
+
+  it("falls back to default commands on invalid command extraction JSON", () => {
+    expect(parseCommandExtraction("not valid json")).toEqual({
+      testCommand: "npm test",
+      lintCommand: "",
+    });
+  });
+
+  it("stores extracted commands from the conventions skill before running tests", async () => {
+    const harness = await createHarness({
+      initialState: {
+        conventionsSkill: "test-conventions",
+      },
+      conventionsSkillContent: [
+        "# test conventions",
+        "",
+        "Run tests with `pnpm test`.",
+        "Run lint with `pnpm lint --fix && pnpm format`.",
+      ].join("\n"),
+      invocationScripts: {
+        "spec-author": [
+          { response: '{"testCommand":"pnpm test","lintCommand":"pnpm lint --fix && pnpm format"}' },
+        ],
+        implementor: [{ response: "implemented" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    expect(harness.testCommandCalls).toContain("pnpm test");
+    expect(harness.orchestrator.getState()).toMatchObject({
+      testCommand: "pnpm test",
+      lintCommand: "pnpm lint --fix && pnpm format",
+    });
+    expect(harness.selectCalls.find((call) => call.role === "spec-author")?.family).toBe("gpt-4.1");
+  });
+
+  it("updates state commands when overrideCommands is called", async () => {
+    const harness = await createHarness();
+
+    harness.orchestrator.overrideCommands("pnpm test", "pnpm lint --fix");
+    await waitFor(() => harness.orchestrator.getState().testCommand === "pnpm test");
+
+    expect(harness.orchestrator.getState()).toMatchObject({
+      testCommand: "pnpm test",
+      lintCommand: "pnpm lint --fix",
+    });
+    expect(await harness.loadPersistedState()).toMatchObject({
+      testCommand: "pnpm test",
+      lintCommand: "pnpm lint --fix",
+    });
   });
 
   it("retries implementation when the test command exits non-zero and appends failure output to feedback", async () => {
@@ -1557,6 +2526,219 @@ describe("createOrchestrator", () => {
     const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
     expect(harness.orchestrator.getState().itemStatuses.A1).toBe("fail");
     expect(auditEntries.some((entry) => entry.result === "error" && entry.promptSummary.includes("test timeout"))).toBe(true);
+  });
+
+  it("runs lint with trusted execution after tests pass and proceeds to review when lint makes no changes", async () => {
+    const harness = await createHarness({
+      initialState: {
+        lintCommand: "ruff check --fix && ruff format",
+      },
+      invocationScripts: {
+        implementor: [{ response: "impl" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+      },
+      trustedExecuteResults: [
+        { success: true, output: "stdout:\nfeature/test\nexit code: 0" },
+        { success: true, output: "stdout:\n  HEAD branch: main\nexit code: 0" },
+        { success: true, output: "stdout:\nlint ok\nexit code: 0" },
+      ],
+      diffResults: [
+        { success: true, output: "stdout:\nsrc/orchestrator/machine.ts\nexit code: 0" },
+        { success: true, output: "stdout:\nsrc/orchestrator/machine.ts\nexit code: 0" },
+      ],
+    });
+
+    await harness.run();
+
+    expect(harness.testCommandCalls).toEqual(["npm test"]);
+    expect(harness.trustedCommandCalls).toContain("ruff check --fix && ruff format");
+    expect(harness.invocationRecords.filter((record) => record.role === "reviewer")).toHaveLength(2);
+    expect(harness.orchestrator.getState().itemStatuses.A1).toBe("pass");
+  });
+
+  it("retries implementation when lint exits non-zero and appends lint output to feedback", async () => {
+    const harness = await createHarness({
+      initialState: {
+        lintCommand: "ruff check --fix && ruff format",
+      },
+      invocationScripts: {
+        implementor: [{ response: "impl 1" }, { response: "impl 2" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+      },
+      trustedExecuteResults: [
+        { success: true, output: "stdout:\nfeature/test\nexit code: 0" },
+        { success: true, output: "stdout:\n  HEAD branch: main\nexit code: 0" },
+        { success: false, output: "stderr:\nE501 line too long\nexit code: 1", error: "command exited with code 1" },
+        { success: true, output: "stdout:\nlint ok\nexit code: 0" },
+      ],
+      diffResults: [
+        { success: true, output: "stdout:\n\nexit code: 0" },
+        { success: true, output: "stdout:\n\nexit code: 0" },
+        { success: true, output: "stdout:\n\nexit code: 0" },
+        { success: true, output: "stdout:\n\nexit code: 0" },
+      ],
+    });
+
+    await harness.run();
+
+    expect(harness.invocationRecords.filter((record) => record.role === "implementor")).toHaveLength(2);
+    expect(harness.invocationRecords.filter((record) => record.role === "implementor").at(-1)?.userPrompt).toContain("E501 line too long");
+  });
+
+  it("re-runs tests when lint modifies files", async () => {
+    const harness = await createHarness({
+      initialState: {
+        lintCommand: "ruff check --fix && ruff format",
+      },
+      invocationScripts: {
+        implementor: [{ response: "impl" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+      },
+      trustedExecuteResults: [
+        { success: true, output: "stdout:\nfeature/test\nexit code: 0" },
+        { success: true, output: "stdout:\n  HEAD branch: main\nexit code: 0" },
+        { success: true, output: "stdout:\nformatted\nexit code: 0" },
+      ],
+      executeResults: [
+        { success: true, output: "stdout:\nfirst pass\nexit code: 0" },
+        { success: true, output: "stdout:\nsecond pass\nexit code: 0" },
+      ],
+      diffResults: [
+        { success: true, output: "stdout:\nsrc/orchestrator/machine.ts\nexit code: 0" },
+        { success: true, output: "stdout:\nsrc/orchestrator/machine.ts\nsrc/test/orchestrator/machine.test.ts\nexit code: 0" },
+      ],
+    });
+
+    await harness.run();
+
+    expect(harness.testCommandCalls).toEqual(["npm test", "npm test"]);
+  });
+
+  it("re-runs tests when lint changes an already-dirty file without changing the dirty path set", async () => {
+    const harness = await createHarness({
+      initialState: {
+        lintCommand: "ruff check --fix && ruff format",
+      },
+      invocationScripts: {
+        implementor: [{ response: "impl" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+      },
+      trustedExecuteResults: [
+        { success: true, output: "stdout:\nfeature/test\nexit code: 0" },
+        { success: true, output: "stdout:\n  HEAD branch: main\nexit code: 0" },
+        { success: true, output: "stdout:\nformatted\nexit code: 0" },
+      ],
+      executeResults: [
+        { success: true, output: "stdout:\nfirst pass\nexit code: 0" },
+        { success: true, output: "stdout:\nsecond pass\nexit code: 0" },
+      ],
+      diffResults: [
+        {
+          success: true,
+          output: [
+            "stdout:",
+            "diff --git a/src/orchestrator/machine.ts b/src/orchestrator/machine.ts",
+            "@@",
+            "-const value = 'before';",
+            "+const value = 'before';",
+            "exit code: 0",
+          ].join("\n"),
+        },
+        {
+          success: true,
+          output: [
+            "stdout:",
+            "diff --git a/src/orchestrator/machine.ts b/src/orchestrator/machine.ts",
+            "@@",
+            "-const value = 'before';",
+            "+const value = 'after';",
+            "exit code: 0",
+          ].join("\n"),
+        },
+      ],
+    });
+
+    await harness.run();
+
+    expect(harness.testCommandCalls).toEqual(["npm test", "npm test"]);
+  });
+
+  it("retries implementation with test feedback when re-test after lint modifications fails", async () => {
+    const harness = await createHarness({
+      initialState: {
+        lintCommand: "ruff check --fix && ruff format",
+      },
+      invocationScripts: {
+        implementor: [{ response: "impl 1" }, { response: "impl 2" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+      },
+      trustedExecuteResults: [
+        { success: true, output: "stdout:\nfeature/test\nexit code: 0" },
+        { success: true, output: "stdout:\n  HEAD branch: main\nexit code: 0" },
+        { success: true, output: "stdout:\nformatted\nexit code: 0" },
+        { success: true, output: "stdout:\nlint ok\nexit code: 0" },
+      ],
+      executeResults: [
+        { success: true, output: "stdout:\nfirst pass\nexit code: 0" },
+        { success: false, output: "stderr:\npost-lint regression\nexit code: 1", error: "command exited with code 1" },
+        { success: true, output: "stdout:\nretry pass\nexit code: 0" },
+      ],
+      diffResults: [
+        { success: true, output: "stdout:\nsrc/orchestrator/machine.ts\nexit code: 0" },
+        { success: true, output: "stdout:\nsrc/orchestrator/machine.ts\nsrc/test/orchestrator/machine.test.ts\nexit code: 0" },
+        { success: true, output: "stdout:\nsrc/orchestrator/machine.ts\nsrc/test/orchestrator/machine.test.ts\nexit code: 0" },
+        { success: true, output: "stdout:\nsrc/orchestrator/machine.ts\nsrc/test/orchestrator/machine.test.ts\nexit code: 0" },
+      ],
+    });
+
+    await harness.run();
+
+    expect(harness.invocationRecords.filter((record) => record.role === "implementor")).toHaveLength(2);
+    expect(harness.invocationRecords.filter((record) => record.role === "implementor").at(-1)?.userPrompt).toContain("post-lint regression");
+  });
+
+  it("skips lint entirely when lintCommand is empty", async () => {
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [{ response: "impl" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "spec-author": [{ response: '{"testCommand":"npm test","lintCommand":""}' }],
+      },
+    });
+
+    await harness.run();
+
+    expect(harness.trustedCommandCalls).not.toContain("");
+    expect(harness.trustedCommandCalls.slice(0, 2)).toEqual([
+      "git rev-parse --abbrev-ref HEAD",
+      "git remote show origin | grep 'HEAD branch'",
+    ]);
+    expect(harness.testCommandCalls).toEqual(["npm test"]);
+  });
+
+  it("marks the item fail and writes an error audit entry when lint times out", async () => {
+    const harness = await createHarness({
+      initialState: {
+        lintCommand: "ruff check --fix && ruff format",
+      },
+      invocationScripts: {
+        implementor: [{ response: "impl" }],
+      },
+      trustedExecuteResults: [
+        { success: true, output: "stdout:\nfeature/test\nexit code: 0" },
+        { success: true, output: "stdout:\n  HEAD branch: main\nexit code: 0" },
+        { success: false, output: "signal: SIGKILL", error: "command timeout after 100ms" },
+      ],
+      diffResults: [
+        { success: true, output: "stdout:\n\nexit code: 0" },
+      ],
+    });
+
+    await harness.run();
+
+    const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+    expect(harness.orchestrator.getState().itemStatuses.A1).toBe("fail");
+    expect(auditEntries.some((entry) => entry.result === "error" && entry.promptSummary.includes("lint timeout"))).toBe(true);
   });
 
   it("appends reviewer addendum text to addendum storage", async () => {
@@ -1679,5 +2861,820 @@ describe("createOrchestrator", () => {
       itemId: "A1",
       deviation: "needs fix",
     });
+  });
+
+  it("stages and commits the completed phase with an Implement phase message", async () => {
+    const harness = await createHarness({
+      phaseFiles: {
+        2: [
+          "# Phase 2: Core Extension",
+          "",
+          "### Item 2.1: A1 - Item A1",
+          "",
+          "spec.md section: A1",
+          "",
+          "- [ ] implemented",
+          "- [ ] reviewed",
+          "",
+        ].join("\n"),
+      },
+      initialState: {
+        currentPhase: 2,
+      },
+      invocationScripts: {
+        "spec-author": [{ response: '{"testCommand":"npm test","lintCommand":""}' }],
+        implementor: [{ response: "implemented" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    const addIndex = harness.trustedCommandCalls.indexOf("git add .");
+    const commitIndex = harness.trustedCommandCalls.indexOf("git commit -m 'Implement phase 2'");
+    expect(addIndex).toBeGreaterThanOrEqual(0);
+    expect(commitIndex).toBeGreaterThan(addIndex);
+  });
+
+  it("pushes after committing a completed phase", async () => {
+    const harness = await createHarness({
+      phaseFiles: {
+        2: [
+          "# Phase 2: Core Extension",
+          "",
+          "### Item 2.1: A1 - Item A1",
+          "",
+          "spec.md section: A1",
+          "",
+          "- [ ] implemented",
+          "- [ ] reviewed",
+          "",
+        ].join("\n"),
+      },
+      initialState: {
+        currentPhase: 2,
+      },
+      invocationScripts: {
+        "spec-author": [{ response: '{"testCommand":"npm test","lintCommand":""}' }],
+        implementor: [{ response: "implemented" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    const commitIndex = harness.trustedCommandCalls.indexOf("git commit -m 'Implement phase 2'");
+    const pushIndex = harness.trustedCommandCalls.indexOf("git push");
+    expect(commitIndex).toBeGreaterThanOrEqual(0);
+    expect(pushIndex).toBeGreaterThan(commitIndex);
+  });
+
+  it("commits and pushes .conductor after phase completion", async () => {
+    let releaseReview!: () => void;
+    const waitForReview = new Promise<void>((resolve) => {
+      releaseReview = resolve;
+    });
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [{ response: "implemented" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [
+          { response: "PASS", waitFor: waitForReview },
+          { response: "PASS" },
+          { response: "PASS" },
+          { response: "PASS" },
+        ],
+      },
+    });
+
+    const runPromise = harness.run();
+    await waitFor(() => harness.invocationRecords.filter((record) => record.role === "pr-reviewer").length === 1);
+
+    const phaseCommitIndex = harness.trustedCommandCalls.indexOf("git commit -m 'Implement phase 1'");
+    const phasePushIndex = harness.trustedCommandCalls.findIndex((command, index) => command === "git push" && index > phaseCommitIndex);
+    const stateAddIndex = harness.trustedCommandCalls.findIndex((command, index) => command === "git add .conductor/" && index > phasePushIndex);
+    const stateCommitIndex = harness.trustedCommandCalls.findIndex((command, index) => command === "git commit -m 'conductor: update state'" && index > stateAddIndex);
+    const statePushIndex = harness.trustedCommandCalls.findIndex((command, index) => command === "git push" && index > stateCommitIndex);
+
+    expect(phaseCommitIndex).toBeGreaterThanOrEqual(0);
+    expect(phasePushIndex).toBeGreaterThan(phaseCommitIndex);
+    expect(stateAddIndex).toBeGreaterThan(phasePushIndex);
+    expect(stateCommitIndex).toBeGreaterThan(stateAddIndex);
+    expect(statePushIndex).toBeGreaterThan(stateCommitIndex);
+    expect(harness.trustedCommandCalls.filter((command) => command === "git commit -m 'conductor: update state'")).toHaveLength(1);
+
+    harness.orchestrator.pause();
+    releaseReview();
+    await runPromise;
+  });
+
+  it("logs a non-fatal audit error when phase push fails and continues into PR review", async () => {
+    const harness = await createHarness({
+      phaseFiles: {
+        2: [
+          "# Phase 2: Core Extension",
+          "",
+          "### Item 2.1: A1 - Item A1",
+          "",
+          "spec.md section: A1",
+          "",
+          "- [ ] implemented",
+          "- [ ] reviewed",
+          "",
+        ].join("\n"),
+      },
+      initialState: {
+        currentPhase: 2,
+      },
+      invocationScripts: {
+        "spec-author": [{ response: '{"testCommand":"npm test","lintCommand":""}' }],
+        implementor: [{ response: "implemented" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
+      },
+      trustedExecuteResults: [
+        { success: true, output: "stdout:\nfeature/test\nexit code: 0" },
+        { success: true, output: "stdout:\n  HEAD branch: main\nexit code: 0" },
+        { success: true, output: "stdout:\nstaged\nexit code: 0" },
+        { success: true, output: "stdout:\n[feature/test abc123] Implement phase 2\nexit code: 0" },
+        { success: false, output: "stderr:\nremote rejected\nexit code: 1", error: "command exited with code 1" },
+      ],
+    });
+
+    await harness.run();
+
+    const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+    expect(harness.orchestrator.getState().status).toBe("done");
+    expect(harness.invocationRecords.filter((record) => record.role === "pr-reviewer")).toHaveLength(4);
+    expect(auditEntries.some((entry) => entry.itemId === "phase2:commit" && entry.result === "error" && entry.promptSummary.includes("Failed to push phase 2"))).toBe(true);
+  });
+
+  it("still commits a completed phase when the phase includes skipped items", async () => {
+    const harness = await createHarness({
+      phaseFiles: {
+        2: [
+          "# Phase 2: Core Extension",
+          "",
+          "### Item 2.1: A1 - Item A1",
+          "",
+          "spec.md section: A1",
+          "",
+          "- [ ] implemented",
+          "- [ ] reviewed",
+          "",
+          "### Item 2.2: A2 - Item A2",
+          "",
+          "spec.md section: A2",
+          "",
+          "- [ ] implemented",
+          "- [ ] reviewed",
+          "",
+        ].join("\n"),
+      },
+      initialState: {
+        currentPhase: 2,
+        itemStatuses: {
+          A1: "skipped",
+        },
+      },
+      invocationScripts: {
+        "spec-author": [{ response: '{"testCommand":"npm test","lintCommand":""}' }],
+        implementor: [{ response: "implemented" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    expect(harness.orchestrator.getState().itemStatuses.A1).toBe("skipped");
+    expect(harness.orchestrator.getState().itemStatuses.A2).toBe("pass");
+    expect(harness.trustedCommandCalls).toContain("git commit -m 'Implement phase 2'");
+  });
+
+  it("enters spec-aware PR review after all phase items pass", async () => {
+    let releaseReview!: () => void;
+    const waitForReview = new Promise<void>((resolve) => {
+      releaseReview = resolve;
+    });
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [{ response: "implemented" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [
+          { response: "PASS", waitFor: waitForReview },
+          { response: "PASS" },
+          { response: "PASS" },
+          { response: "PASS" },
+        ],
+      },
+      trustedExecuteResults: [
+        { success: true, output: "stdout:\nfeature/test\nexit code: 0" },
+        { success: true, output: "stdout:\n  HEAD branch: main\nexit code: 0" },
+        { success: true, output: "stdout:\nstaged\nexit code: 0" },
+        { success: true, output: "stdout:\n[feature/test abc123] Implement phase 1\nexit code: 0" },
+        { success: true, output: "stdout:\npushed\nexit code: 0" },
+        { success: true, output: "stdout:\nfeature/test\nexit code: 0" },
+        { success: true, output: "stdout:\n  HEAD branch: main\nexit code: 0" },
+        { success: true, output: "stdout:\nabc123\nexit code: 0" },
+        { success: true, output: "stdout:\ndiff --git a/src/foo.ts b/src/foo.ts\nexit code: 0" },
+      ],
+    });
+
+    const runPromise = harness.run();
+    await waitFor(() => harness.invocationRecords.filter((record) => record.role === "pr-reviewer").length === 1);
+
+    const firstPrReview = harness.invocationRecords.find((record) => record.role === "pr-reviewer");
+    expect(harness.orchestrator.getState().prReviewStep).toBe("spec-aware");
+    expect(firstPrReview?.userPrompt).toContain(path.join(harness.config.docsDir, "conductor", "spec.md"));
+    expect(firstPrReview?.userPrompt).toContain("diff --git a/src/foo.ts b/src/foo.ts");
+
+    harness.orchestrator.pause();
+    releaseReview();
+    await runPromise;
+  });
+
+  it("advances from spec-aware to spec-free after two consecutive PR review PASS results", async () => {
+    let releaseReview!: () => void;
+    const waitForReview = new Promise<void>((resolve) => {
+      releaseReview = resolve;
+    });
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [{ response: "implemented" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [
+          { response: "PASS" },
+          { response: "PASS" },
+          { response: "PASS", waitFor: waitForReview },
+          { response: "PASS" },
+        ],
+      },
+    });
+
+    const runPromise = harness.run();
+    await waitFor(() => harness.invocationRecords.filter((record) => record.role === "pr-reviewer").length === 3);
+
+    expect(harness.orchestrator.getState().prReviewStep).toBe("spec-free");
+
+    harness.orchestrator.pause();
+    releaseReview();
+    await runPromise;
+  });
+
+  it("fixes each structured PR review finding once, reruns tests, and invokes pr-reviewer again", async () => {
+    const findings = JSON.stringify([
+      { file: "src/foo.ts", line: 10, description: "Guard the undefined branch" },
+      { file: "src/bar.ts", line: 22, description: "Handle the timeout path" },
+    ]);
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [
+          { response: "implemented" },
+          { response: "fixed finding 1" },
+          { response: "fixed finding 2" },
+        ],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [
+          { response: `FAIL${findings}` },
+          { response: "PASS" },
+          { response: "PASS" },
+          { response: "PASS" },
+          { response: "PASS" },
+        ],
+      },
+    });
+
+    await harness.run();
+
+    expect(harness.invocationRecords.filter((record) => record.role === "implementor")).toHaveLength(3);
+    expect(harness.invocationRecords.some((record) => record.userPrompt.includes("Guard the undefined branch"))).toBe(true);
+    expect(harness.invocationRecords.some((record) => record.userPrompt.includes("Handle the timeout path"))).toBe(true);
+    expect(harness.testCommandCalls).toEqual(["npm test", "npm test"]);
+    expect(harness.invocationRecords.filter((record) => record.role === "pr-reviewer").length).toBeGreaterThan(1);
+  });
+
+  it("finishes with done after two clean spec-free PR reviews", async () => {
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [{ response: "implemented" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    expect(harness.orchestrator.getState().status).toBe("done");
+    expect(harness.orchestrator.getState().prReviewStep).toBe("done");
+  });
+
+  it("waits for approval after both PR review steps pass and completes on approve", async () => {
+    const harness = await createHarness({
+      initialState: {
+        currentItemIndex: 1,
+        consecutivePasses: { A1: 2 },
+        itemStatuses: { A1: "pass" },
+        prReviewStep: "spec-aware",
+        prReviewConsecutivePasses: 0,
+        status: "paused",
+      },
+      invocationScripts: {
+        "pr-reviewer": [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
+      },
+    });
+    harness.config.requireApproval = true;
+
+    await harness.run();
+    harness.orchestrator.resume();
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval");
+
+    expect(harness.orchestrator.getState().prReviewStep).toBe("spec-free");
+
+    harness.orchestrator.approve("pr-review");
+    await waitFor(() => harness.orchestrator.getState().status === "done");
+
+    expect(harness.orchestrator.getState().status).toBe("done");
+    expect(harness.orchestrator.getState().prReviewStep).toBe("done");
+  });
+
+  it("includes the spec path and branch diff output in the spec-aware PR review prompt", async () => {
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [{ response: "implemented" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
+      },
+      trustedExecuteResults: [
+        { success: true, output: "stdout:\nfeature/test\nexit code: 0" },
+        { success: true, output: "stdout:\n  HEAD branch: main\nexit code: 0" },
+        { success: true, output: "stdout:\nstaged\nexit code: 0" },
+        { success: true, output: "stdout:\n[feature/test abc123] Implement phase 1\nexit code: 0" },
+        { success: true, output: "stdout:\npushed\nexit code: 0" },
+        { success: true, output: "stdout:\nfeature/test\nexit code: 0" },
+        { success: true, output: "stdout:\n  HEAD branch: main\nexit code: 0" },
+        { success: true, output: "stdout:\nabc123\nexit code: 0" },
+        { success: true, output: "stdout:\nPR DIFF OUTPUT\nexit code: 0" },
+      ],
+    });
+
+    await harness.run();
+
+    const firstPrReview = harness.invocationRecords.find((record) => record.role === "pr-reviewer");
+    expect(firstPrReview?.userPrompt).toContain(path.join(harness.config.docsDir, "conductor", "spec.md"));
+    expect(firstPrReview?.userPrompt).toContain("PR DIFF OUTPUT");
+  });
+
+  it("omits the spec path from the spec-free PR review prompt", async () => {
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [{ response: "implemented" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    const prReviewCalls = harness.invocationRecords.filter((record) => record.role === "pr-reviewer");
+    expect(prReviewCalls[2]?.userPrompt).not.toContain(path.join(harness.config.docsDir, "conductor", "spec.md"));
+  });
+
+  it("uses an imperative PR review commit message no longer than 72 characters", async () => {
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [{ response: "implemented" }, { response: "fixed finding" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [
+          { response: `FAIL${JSON.stringify([{ file: "src/foo.ts", line: 10, description: "Fix the edge case" }])}` },
+          { response: "PASS" },
+          { response: "PASS" },
+          { response: "PASS" },
+          { response: "PASS" },
+        ],
+      },
+    });
+
+    await harness.run();
+
+    const commitCommand = harness.trustedCommandCalls.find((command) => command === "git commit -m 'Fix PR review findings'");
+    expect(commitCommand).toBe("git commit -m 'Fix PR review findings'");
+    expect("Fix PR review findings".length).toBeLessThanOrEqual(72);
+  });
+
+  it("pushes PR review fixes after committing them", async () => {
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [{ response: "implemented" }, { response: "fixed finding" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [
+          { response: `FAIL${JSON.stringify([{ file: "src/foo.ts", line: 10, description: "Fix the edge case" }])}` },
+          { response: "PASS" },
+          { response: "PASS" },
+          { response: "PASS" },
+          { response: "PASS" },
+        ],
+      },
+    });
+
+    await harness.run();
+
+    const commitIndex = harness.trustedCommandCalls.indexOf("git commit -m 'Fix PR review findings'");
+    const pushIndex = harness.trustedCommandCalls.findIndex((command, index) => command === "git push" && index > commitIndex);
+    expect(commitIndex).toBeGreaterThanOrEqual(0);
+    expect(pushIndex).toBeGreaterThan(commitIndex);
+  });
+
+  it("batches rapid PR review state transitions into one .conductor checkpoint commit", async () => {
+    const harness = await createHarness({
+      initialState: {
+        conventionsSkill: "",
+        currentItemIndex: 1,
+        consecutivePasses: { A1: 2 },
+        itemStatuses: { A1: "pass" },
+        prReviewStep: "spec-free",
+        prReviewConsecutivePasses: 1,
+        status: "idle",
+      },
+      invocationScripts: {
+        "pr-reviewer": [{ response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    expect(harness.trustedCommandCalls.filter((command) => command === "git add .conductor/")).toHaveLength(1);
+    expect(harness.trustedCommandCalls.filter((command) => command === "git commit -m 'conductor: update state'")).toHaveLength(1);
+    expect(harness.trustedCommandCalls.filter((command) => command === "git push").length).toBeGreaterThanOrEqual(1);
+    expect(harness.orchestrator.getState().prReviewStep).toBe("done");
+    expect(harness.orchestrator.getState().status).toBe("done");
+  });
+
+  it("persists spec-aware PR review progress across pause and resume", async () => {
+    let releaseReview!: () => void;
+    const waitForReview = new Promise<void>((resolve) => {
+      releaseReview = resolve;
+    });
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [{ response: "implemented" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [
+          { response: "PASS", waitFor: waitForReview },
+          { response: "PASS" },
+          { response: "PASS" },
+          { response: "PASS" },
+        ],
+      },
+    });
+
+    const runPromise = harness.run();
+    await waitFor(() => harness.invocationRecords.filter((record) => record.role === "pr-reviewer").length === 1);
+    harness.orchestrator.pause();
+    releaseReview();
+    await runPromise;
+
+    const pausedState = await harness.loadPersistedState();
+    expect(pausedState.prReviewStep).toBe("spec-aware");
+    expect(pausedState.prReviewConsecutivePasses).toBe(1);
+
+    harness.orchestrator.resume();
+    await waitFor(() => harness.orchestrator.getState().status === "done");
+  });
+
+  it("writes pr-reviewer audit entries and transcripts", async () => {
+    const harness = await createHarness({
+      persistTranscripts: true,
+      invocationScripts: {
+        implementor: [{ response: "implemented" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+    const transcripts = await harness.orchestrator.getTranscripts();
+
+    expect(auditEntries.some((entry) => entry.role === "pr-reviewer")).toBe(true);
+    expect(transcripts.some((entry) => entry.role === "pr-reviewer")).toBe(true);
+  });
+
+  it("errors after max PR review retry cycles and records an error audit for pr-reviewer", async () => {
+    const alwaysFail = `FAIL${JSON.stringify([{ file: "src/foo.ts", line: 10, description: "Still broken" }])}`;
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [
+          { response: "implemented" },
+          { response: "fix cycle 1" },
+          { response: "fix cycle 2" },
+          { response: "fix cycle 3" },
+        ],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [{ response: alwaysFail }, { response: alwaysFail }, { response: alwaysFail }],
+      },
+    });
+    harness.config.maxRetries = 3;
+
+    await harness.run();
+
+    const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+    expect(harness.orchestrator.getState().status).toBe("error");
+    expect(auditEntries.some((entry) => entry.role === "pr-reviewer" && entry.result === "error")).toBe(true);
+  });
+
+  it("pushes, requests Copilot re-review, and succeeds when the new review has no comments", async () => {
+    const harness = await createHarness();
+
+    harness.orchestrator.startCopilotReReview();
+
+    await waitFor(async () => {
+      const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+      return auditEntries.some((entry) => {
+        return entry.itemId === "copilot-rereview"
+          && entry.result === "PASS"
+          && entry.promptSummary.includes("no unresolved Copilot comments");
+      });
+    });
+
+    expect(harness.trustedCommandCalls).toContain("git push");
+    expect(harness.trustedCommandCalls).toContain("gh api repos/wtsi-hgi/copilot-conductor/pulls/42/requested_reviewers -f reviewers[]=copilot");
+    expect(harness.trustedCommandCalls).toContain("gh api repos/wtsi-hgi/copilot-conductor/pulls/42/reviews");
+    expect(harness.trustedCommandCalls).toContain("gh api repos/wtsi-hgi/copilot-conductor/pulls/42/comments");
+    expect(harness.invocationRecords).toHaveLength(0);
+  });
+
+  it("ignores resolved Copilot comments when deciding whether re-review work remains", async () => {
+    const harness = await createHarness({
+      trustedCommandResponses: {
+        "gh api repos/wtsi-hgi/copilot-conductor/pulls/42/comments": [{
+          success: true,
+          output: "stdout:\n["
+            + "{\"path\":\"src/foo.ts\",\"line\":10,\"body\":\"Already addressed\",\"pull_request_review_id\":700,\"resolved\":true,\"user\":{\"login\":\"copilot\"}}"
+            + "]\nexit code: 0",
+        }],
+      },
+    });
+
+    harness.orchestrator.startCopilotReReview();
+
+    await waitFor(async () => {
+      const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+      return auditEntries.some((entry) => {
+        return entry.itemId === "copilot-rereview"
+          && entry.result === "PASS"
+          && entry.promptSummary.includes("no unresolved Copilot comments");
+      });
+    });
+
+    expect(harness.invocationRecords).toHaveLength(0);
+  });
+
+  it("dispatches implementor once per Copilot finding, commits fixes, and returns to the push step", async () => {
+    const findings = JSON.stringify([
+      { file: "src/foo.ts", line: 10, description: "Guard the undefined branch" },
+      { file: "src/bar.ts", line: 22, description: "Handle the timeout path" },
+    ]);
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [{ response: "fix finding 1" }, { response: "fix finding 2" }],
+        "pr-reviewer": [{ response: `FAIL${findings}` }],
+      },
+      trustedCommandResponses: {
+        "gh api repos/wtsi-hgi/copilot-conductor/pulls/42/comments": [
+          {
+            success: true,
+            output: "stdout:\n["
+              + "{\"path\":\"src/foo.ts\",\"line\":10,\"body\":\"Guard the undefined branch\",\"pull_request_review_id\":700,\"user\":{\"login\":\"copilot\"}}"
+              + ","
+              + "{\"path\":\"src/bar.ts\",\"line\":22,\"body\":\"Handle the timeout path\",\"pull_request_review_id\":700,\"user\":{\"login\":\"copilot\"}}"
+              + "]\nexit code: 0",
+          },
+          { success: true, output: "stdout:\n[]\nexit code: 0" },
+        ],
+      },
+    });
+
+    harness.orchestrator.startCopilotReReview();
+
+    await waitFor(async () => {
+      const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+      return auditEntries.some((entry) => entry.itemId === "copilot-rereview" && entry.result === "PASS");
+    });
+
+    expect(harness.invocationRecords.filter((record) => record.role === "implementor")).toHaveLength(2);
+    expect(harness.invocationRecords.some((record) => record.userPrompt.includes("Guard the undefined branch"))).toBe(true);
+    expect(harness.invocationRecords.some((record) => record.userPrompt.includes("Handle the timeout path"))).toBe(true);
+    expect(harness.trustedCommandCalls).toContain("git commit -m 'Fix PR review findings'");
+    expect(harness.trustedCommandCalls.filter((command) => command === "git push").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("stages only Copilot re-review files and excludes unrelated dirty work", async () => {
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [{ response: "fix finding" }],
+        "pr-reviewer": [{ response: `FAIL${JSON.stringify([{ file: "src/foo.ts", line: 10, description: "Guard the undefined branch" }])}` }],
+      },
+      trustedCommandResponses: {
+        "gh api repos/wtsi-hgi/copilot-conductor/pulls/42/comments": [
+          { success: true, output: "stdout:\n[{\"path\":\"src/foo.ts\",\"line\":10,\"body\":\"Guard the undefined branch\",\"pull_request_review_id\":700,\"user\":{\"login\":\"copilot\"}}]\nexit code: 0" },
+          { success: true, output: "stdout:\n[]\nexit code: 0" },
+        ],
+        "git status --porcelain": [
+          { success: true, output: "stdout:\n M src/main-pipeline.ts\nexit code: 0" },
+          { success: true, output: "stdout:\n M src/main-pipeline.ts\n M src/foo.ts\n?? src/bar.ts\nexit code: 0" },
+        ],
+      },
+    });
+
+    harness.orchestrator.startCopilotReReview();
+
+    await waitFor(async () => {
+      const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+      return auditEntries.some((entry) => entry.itemId === "copilot-rereview" && entry.result === "PASS");
+    });
+
+    const stageCommand = harness.trustedCommandCalls.find((command) => command.startsWith("git add -- "));
+    expect(stageCommand).toBeDefined();
+    expect(stageCommand).toContain("'src/foo.ts'");
+    expect(stageCommand).toContain("'src/bar.ts'");
+    expect(stageCommand).not.toContain("src/main-pipeline.ts");
+  });
+
+  it("adds the holistic refactor instruction starting at cycle 3", async () => {
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [
+          { response: "cycle 1 fix" },
+          { response: "cycle 2 fix" },
+          { response: "cycle 3 fix" },
+        ],
+        "pr-reviewer": [
+          { response: `FAIL${JSON.stringify([{ file: "src/foo.ts", line: 10, description: "Issue 1" }])}` },
+          { response: `FAIL${JSON.stringify([{ file: "src/foo.ts", line: 11, description: "Issue 2" }])}` },
+          { response: `FAIL${JSON.stringify([{ file: "src/foo.ts", line: 12, description: "Issue 3" }])}` },
+        ],
+      },
+      trustedCommandResponses: {
+        "gh api repos/wtsi-hgi/copilot-conductor/pulls/42/comments": [
+          { success: true, output: "stdout:\n[{\"path\":\"src/foo.ts\",\"line\":10,\"body\":\"Issue 1\",\"pull_request_review_id\":700,\"user\":{\"login\":\"copilot\"}}]\nexit code: 0" },
+          { success: true, output: "stdout:\n[{\"path\":\"src/foo.ts\",\"line\":11,\"body\":\"Issue 2\",\"pull_request_review_id\":700,\"user\":{\"login\":\"copilot\"}}]\nexit code: 0" },
+          { success: true, output: "stdout:\n[{\"path\":\"src/foo.ts\",\"line\":12,\"body\":\"Issue 3\",\"pull_request_review_id\":700,\"user\":{\"login\":\"copilot\"}}]\nexit code: 0" },
+          { success: true, output: "stdout:\n[]\nexit code: 0" },
+        ],
+      },
+    });
+
+    harness.orchestrator.startCopilotReReview();
+
+    await waitFor(() => harness.invocationRecords.filter((record) => record.role === "implementor").length === 3);
+
+    const implementorCalls = harness.invocationRecords.filter((record) => record.role === "implementor");
+    expect(implementorCalls[2]?.userPrompt).toContain("Consider the problem holistically.");
+  });
+
+  it("stops after 20 cycles and reports manual review needed", async () => {
+    const commentResponses = Array.from({ length: 20 }, (_, index) => ({
+      success: true,
+      output: `stdout:\n[{\"path\":\"src/foo.ts\",\"line\":${index + 1},\"body\":\"Repeat issue ${index + 1}\",\"pull_request_review_id\":700,\"user\":{\"login\":\"copilot\"}}]\nexit code: 0`,
+    }));
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: Array.from({ length: 20 }, (_, index) => ({ response: `fix cycle ${index + 1}` })),
+        "pr-reviewer": Array.from({ length: 20 }, (_, index) => ({
+          response: `FAIL${JSON.stringify([{ file: "src/foo.ts", line: index + 1, description: `Repeat issue ${index + 1}` }])}`,
+        })),
+      },
+      trustedCommandResponses: {
+        "gh api repos/wtsi-hgi/copilot-conductor/pulls/42/comments": commentResponses,
+      },
+    });
+
+    harness.orchestrator.startCopilotReReview();
+
+    await waitFor(async () => {
+      const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+      return auditEntries.some((entry) => {
+        return entry.itemId === "copilot-rereview"
+          && entry.result === "FAIL"
+          && entry.promptSummary.includes("manual review needed");
+      });
+    });
+
+    expect(harness.invocationRecords.filter((record) => record.role === "implementor")).toHaveLength(20);
+  });
+
+  it("reports a push verification timeout when the remote branch never reaches local HEAD", async () => {
+    const harness = await createHarness({
+      trustedCommandResponses: {
+        "git ls-remote origin 'refs/heads/feature/test'": Array.from({ length: 11 }, () => ({
+          success: true,
+          output: "stdout:\ndef456\trefs/heads/feature/test\nexit code: 0",
+        })),
+      },
+    });
+
+    harness.orchestrator.startCopilotReReview();
+
+    await waitFor(async () => {
+      const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+      return auditEntries.some((entry) => entry.promptSummary.includes("push verification timeout"));
+    });
+
+    expect(harness.trustedCommandCalls).not.toContain("gh api repos/wtsi-hgi/copilot-conductor/pulls/42/requested_reviewers -f reviewers[]=copilot");
+  });
+
+  it("reports a review wait timeout when Copilot never submits a new review", async () => {
+    const harness = await createHarness({
+      trustedCommandResponses: {
+        "gh api repos/wtsi-hgi/copilot-conductor/pulls/42/reviews": Array.from({ length: 41 }, () => ({
+          success: true,
+          output: "stdout:\n[]\nexit code: 0",
+        })),
+      },
+    });
+
+    harness.orchestrator.startCopilotReReview();
+
+    await waitFor(async () => {
+      const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+      return auditEntries.some((entry) => entry.promptSummary.includes("review wait timeout"));
+    });
+  });
+
+  it("reports gh CLI not found when gh is unavailable", async () => {
+    const harness = await createHarness({
+      trustedCommandResponses: {
+        "command -v gh": [{
+          success: false,
+          output: "stderr:\ngh: command not found\nexit code: 127",
+          error: "command exited with code 127",
+        }],
+      },
+    });
+
+    harness.orchestrator.startCopilotReReview();
+
+    await waitFor(async () => {
+      const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+      return auditEntries.some((entry) => entry.promptSummary === "gh CLI not found");
+    });
+  });
+
+  it("runs independently of the main pipeline when triggered during an active run", async () => {
+    let releaseImplementor!: () => void;
+    const waitForImplementor = new Promise<void>((resolve) => {
+      releaseImplementor = resolve;
+    });
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [{ response: "implemented", waitFor: waitForImplementor }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
+      },
+    });
+
+    const runPromise = harness.run();
+    await waitFor(() => harness.invocationRecords.filter((record) => record.role === "implementor").length === 1);
+
+    harness.orchestrator.startCopilotReReview();
+
+    await waitFor(async () => {
+      const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+      return auditEntries.some((entry) => entry.itemId === "copilot-rereview" && entry.result === "PASS");
+    });
+
+    expect(harness.orchestrator.getState().status).toBe("running");
+
+    releaseImplementor();
+    await runPromise;
+  });
+
+  it("writes pr-reviewer audit entries for the Copilot re-review loop", async () => {
+    const harness = await createHarness({
+      invocationScripts: {
+        implementor: [{ response: "fix finding" }],
+        "pr-reviewer": [{ response: `FAIL${JSON.stringify([{ file: "src/foo.ts", line: 10, description: "Fix the branch guard" }])}` }],
+      },
+      trustedCommandResponses: {
+        "gh api repos/wtsi-hgi/copilot-conductor/pulls/42/comments": [
+          { success: true, output: "stdout:\n[{\"path\":\"src/foo.ts\",\"line\":10,\"body\":\"Fix the branch guard\",\"pull_request_review_id\":700,\"user\":{\"login\":\"copilot\"}}]\nexit code: 0" },
+          { success: true, output: "stdout:\n[]\nexit code: 0" },
+        ],
+      },
+    });
+
+    harness.orchestrator.startCopilotReReview();
+
+    await waitFor(async () => {
+      const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+      return auditEntries.some((entry) => entry.itemId === "copilot-rereview" && entry.result === "PASS");
+    });
+
+    const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+    expect(auditEntries.some((entry) => entry.role === "pr-reviewer" && entry.itemId.startsWith("copilot-rereview"))).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -72,6 +72,78 @@ describe("tool schema and dispatch B1", () => {
 
     expect(result.success).toBe(true);
     expect(await readFile(filePath, "utf8")).toBe("hi");
+  });
+
+  it("moves an LLM-written deleted file into .trash preserving its relative path", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    const filePath = path.join(workspaceDir, "src", "generated.ts");
+
+    await dispatchTool(
+      { name: "Write", arguments: { path: "src/generated.ts", content: "export const value = 1;\n" } },
+      workspaceDir,
+    );
+
+    const result = await dispatchTool(
+      { name: "Delete", arguments: { path: "src/generated.ts" } },
+      workspaceDir,
+    );
+
+    expect(result).toEqual({ success: true, output: ".trash/src/generated.ts" });
+    await expect(readFile(filePath, "utf8")).rejects.toThrow();
+    expect(await readFile(path.join(workspaceDir, ".trash", "src", "generated.ts"), "utf8")).toContain("value = 1");
+  });
+
+  it("deletes non-LLM-written files without moving them to .trash", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    const filePath = path.join(workspaceDir, "src", "manual.ts");
+    await mkdir(path.join(workspaceDir, "src"), { recursive: true });
+    await writeFile(filePath, "manual\n", "utf8");
+
+    const result = await dispatchTool(
+      { name: "Delete", arguments: { path: "src/manual.ts" } },
+      workspaceDir,
+    );
+
+    expect(result).toEqual({ success: true, output: "src/manual.ts" });
+    await expect(readFile(filePath, "utf8")).rejects.toThrow();
+    await expect(readFile(path.join(workspaceDir, ".trash", "src", "manual.ts"), "utf8")).rejects.toThrow();
+  });
+
+  it("does not move files to .trash when they are emptied but not deleted", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    const filePath = path.join(workspaceDir, "src", "empty.ts");
+    const initialContent = "export const value = 1;\n";
+
+    await dispatchTool(
+      { name: "Write", arguments: { path: "src/empty.ts", content: initialContent } },
+      workspaceDir,
+    );
+    await dispatchTool(
+      { name: "Edit", arguments: { path: "src/empty.ts", oldString: initialContent, newString: "" } },
+      workspaceDir,
+    );
+
+    expect(await readFile(filePath, "utf8")).toBe("");
+    await expect(readFile(path.join(workspaceDir, ".trash", "src", "empty.ts"), "utf8")).rejects.toThrow();
+  });
+
+  it("does not error when .trash does not exist at run start", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    await writeFile(path.join(workspaceDir, "f.ts"), "hello\n", "utf8");
+    await mkdir(path.join(workspaceDir, ".conductor"), { recursive: true });
+    await writeFile(
+      path.join(workspaceDir, ".conductor", "state.json"),
+      JSON.stringify({ status: "done" }),
+      "utf8",
+    );
+
+    const result = await dispatchTool({ name: "Read", arguments: { path: "f.ts" } }, workspaceDir);
+
+    expect(result).toEqual({ success: true, output: "hello\n" });
   });
 
   it("greps matching content with file and line output", async () => {
@@ -190,10 +262,10 @@ describe("tool schema and dispatch B1", () => {
     }
   });
 
-  it("returns six non-empty tool definitions", () => {
+  it("returns seven non-empty tool definitions", () => {
     const definitions = getToolDefinitions();
 
-    expect(definitions).toHaveLength(6);
+    expect(definitions).toHaveLength(7);
     for (const definition of definitions) {
       expect(definition.name).toBeTruthy();
       expect(definition.description).toBeTruthy();

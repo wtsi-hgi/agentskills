@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -27,6 +27,9 @@ describe("state persistence", () => {
     const conductorDir = await createConductorDir();
     const state: OrchestratorState = {
       specDir: ".docs/conductor",
+      conventionsSkill: "python-conventions",
+      testCommand: "pytest",
+      lintCommand: "ruff check .",
       currentPhase: 1,
       currentItemIndex: 5,
       consecutivePasses: { "1.6": 2 },
@@ -53,6 +56,9 @@ describe("state persistence", () => {
 
     await expect(loadState(conductorDir)).resolves.toMatchObject({
       specDir: "",
+      conventionsSkill: "",
+      testCommand: "npm test",
+      lintCommand: "",
       currentPhase: 0,
       currentItemIndex: 0,
       consecutivePasses: {},
@@ -64,5 +70,35 @@ describe("state persistence", () => {
       modelAssignments: [],
       itemStatuses: {},
     });
+  });
+
+  it("removes .trash when saving a done state", async () => {
+    const conductorDir = await createConductorDir();
+    const workspaceDir = path.dirname(conductorDir);
+    const trashFile = path.join(workspaceDir, ".trash", "src", "generated.ts");
+    const state: OrchestratorState = {
+      specDir: ".docs/conductor",
+      conventionsSkill: "python-conventions",
+      testCommand: "pytest",
+      lintCommand: "ruff check .",
+      currentPhase: 1,
+      currentItemIndex: 0,
+      consecutivePasses: {},
+      specStep: "done",
+      specConsecutivePasses: 0,
+      specPhaseFileIndex: 0,
+      clarificationQuestions: [],
+      status: "done",
+      modelAssignments: [],
+      itemStatuses: {},
+    };
+
+    await mkdir(path.dirname(trashFile), { recursive: true });
+    await writeFile(trashFile, "generated\n", "utf8");
+
+    await saveState(conductorDir, state);
+
+    await expect(readFile(trashFile, "utf8")).rejects.toThrow();
+    await expect(loadState(conductorDir)).resolves.toEqual(state);
   });
 });

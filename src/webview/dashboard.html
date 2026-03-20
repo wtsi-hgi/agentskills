@@ -356,6 +356,26 @@
           <div class="button-row">
             <button id="pause-button" type="button">Pause</button>
             <button id="resume-button" type="button">Resume</button>
+            <button id="copilot-rereview-button" type="button">Copilot Re-Review</button>
+            <button id="abandon-button" type="button">Abandon</button>
+          </div>
+        </div>
+        <div class="control-card">
+          <label for="inline-prompt-input">Inline prompt</label>
+          <textarea id="inline-prompt-input"
+            placeholder="Describe the feature or bugfix to run from the dashboard."></textarea>
+          <label for="conventions-skill-select">Conventions skill</label>
+          <select id="conventions-skill-select">
+            <option value="">None</option>
+          </select>
+          <label for="test-command-input">Test command</label>
+          <input id="test-command-input" type="text" value="npm test" />
+          <label for="lint-command-input">Lint command</label>
+          <input id="lint-command-input" type="text" value="" />
+          <div class="button-row">
+            <button id="override-commands-button" type="button">Apply commands</button>
+            <button id="start-run-button" type="button">Start</button>
+            <button id="fix-bugs-button" type="button">Fix Bugs</button>
           </div>
         </div>
         <div class="control-card">
@@ -400,6 +420,38 @@
         <div class="spec-card">
           <span class="metric-label">Consecutive passes</span>
           <strong id="spec-pass-count">0</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="spec-section" id="bugfix-status-section" hidden>
+      <h2>Bugfix status</h2>
+      <div class="spec-strip">
+        <div class="spec-card">
+          <span class="metric-label">Current bug</span>
+          <strong id="bugfix-current-value">1 / 1</strong>
+        </div>
+        <div class="spec-card">
+          <span class="metric-label">Fix-review cycle</span>
+          <strong id="bugfix-cycle-value">0</strong>
+        </div>
+        <div class="spec-card">
+          <span class="metric-label">Approval status</span>
+          <strong id="bugfix-step-value">Fix in progress</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="spec-section" id="pr-review-status-section" hidden>
+      <h2>PR review status</h2>
+      <div class="spec-strip">
+        <div class="spec-card">
+          <span class="metric-label">Current step</span>
+          <strong id="pr-review-step-value">Spec Aware</strong>
+        </div>
+        <div class="spec-card">
+          <span class="metric-label">Consecutive passes</span>
+          <strong id="pr-review-pass-count">0</strong>
         </div>
       </div>
     </section>
@@ -497,6 +549,9 @@
       function createStore() {
         return {
           orchestratorState: undefined,
+          bugfixStatus: undefined,
+          prReviewStatus: { step: "done", consecutivePasses: 0 },
+          controlOptions: { conventionsSkills: [] },
           phase: undefined,
           auditEntries: [],
           transcripts: [],
@@ -535,6 +590,53 @@
             return segment.charAt(0).toUpperCase() + segment.slice(1);
           })
           .join(" ");
+      }
+
+      function formatBugApprovalStatus(step) {
+        switch (String(step || "")) {
+          case "reviewing":
+            return "Under review";
+          case "approving":
+            return "Awaiting approval";
+          case "committing":
+          case "done":
+            return "Approved";
+          case "fixing":
+          default:
+            return "Fix in progress";
+        }
+      }
+
+      function populateConventionsSelect(elements, store) {
+        const state = store.orchestratorState || {};
+        const selected = typeof state.conventionsSkill === "string" ? state.conventionsSkill : "";
+        const available = Array.isArray(store.controlOptions && store.controlOptions.conventionsSkills)
+          ? store.controlOptions.conventionsSkills.slice()
+          : [];
+
+        if (selected && available.indexOf(selected) === -1) {
+          available.unshift(selected);
+        }
+
+        const options = ['<option value="">None</option>'].concat(available.map(function (skill) {
+          const isSelected = skill === selected ? ' selected' : '';
+          return '<option value="' + escapeHtml(skill) + '"' + isSelected + '>' + escapeHtml(skill) + '</option>';
+        }));
+        elements.conventionsSkillSelect.innerHTML = options.join("");
+        if (selected || elements.conventionsSkillSelect.value === "") {
+          elements.conventionsSkillSelect.value = selected;
+        }
+      }
+
+      function syncControlInputs(store, elements) {
+        const state = store.orchestratorState;
+        if (!state) {
+          return;
+        }
+
+        elements.testCommandInput.value = state.testCommand || "npm test";
+        elements.lintCommandInput.value = typeof state.lintCommand === "string" ? state.lintCommand : "";
+        populateConventionsSelect(elements, store);
       }
 
       function totalTokensForItem(entries, itemId) {
@@ -641,6 +743,33 @@
         }).join("");
       }
 
+      function renderBugfixStatus(store, elements) {
+        const status = store.bugfixStatus;
+        const active = Boolean(status);
+
+        elements.bugfixStatusSection.hidden = !active;
+        if (!active) {
+          return;
+        }
+
+        elements.bugfixCurrentValue.textContent = String(Number(status.bugIndex || 0) + 1) + " / " + String(Number(status.bugCount || 0));
+        elements.bugfixCycleValue.textContent = String(Number(status.fixCycle || 0));
+        elements.bugfixStepValue.textContent = formatBugApprovalStatus(status.bugStep || "");
+      }
+
+      function renderPrReviewStatus(store, elements) {
+        const status = store.prReviewStatus || { step: "done", consecutivePasses: 0 };
+        const active = status.step !== "done";
+
+        elements.prReviewStatusSection.hidden = !active;
+        if (!active) {
+          return;
+        }
+
+        elements.prReviewStepValue.textContent = formatSpecStep(status.step);
+        elements.prReviewPassCount.textContent = String(Number(status.consecutivePasses || 0));
+      }
+
       function renderAudit(store, elements) {
         const filtered = filterEntries(store.auditEntries, store.filterRole, store.filterStatus);
         const currentItemId = getCurrentItemId(store.orchestratorState, store.phase) || (store.auditEntries[store.auditEntries.length - 1] || {}).itemId || "";
@@ -718,6 +847,9 @@
         renderPhaseItems(state, store.phase, elements);
         renderSpecStatus(state, elements);
         renderClarificationForm(state, elements);
+        renderBugfixStatus(store, elements);
+        renderPrReviewStatus(store, elements);
+        syncControlInputs(store, elements);
       }
 
       function render(store, elements) {
@@ -733,6 +865,24 @@
 
         if (message.type === "state") {
           store.orchestratorState = message.data;
+          render(store, elements);
+          return;
+        }
+
+        if (message.type === "bugfix-status") {
+          store.bugfixStatus = message.data;
+          render(store, elements);
+          return;
+        }
+
+        if (message.type === "pr-review-status") {
+          store.prReviewStatus = message.data || { step: "done", consecutivePasses: 0 };
+          render(store, elements);
+          return;
+        }
+
+        if (message.type === "control-options") {
+          store.controlOptions = message.data || { conventionsSkills: [] };
           render(store, elements);
           return;
         }
@@ -770,6 +920,15 @@
           familyInput: documentObject.getElementById("family-input"),
           pauseButton: documentObject.getElementById("pause-button"),
           resumeButton: documentObject.getElementById("resume-button"),
+          copilotRereviewButton: documentObject.getElementById("copilot-rereview-button"),
+          abandonButton: documentObject.getElementById("abandon-button"),
+          inlinePromptInput: documentObject.getElementById("inline-prompt-input"),
+          conventionsSkillSelect: documentObject.getElementById("conventions-skill-select"),
+          testCommandInput: documentObject.getElementById("test-command-input"),
+          lintCommandInput: documentObject.getElementById("lint-command-input"),
+          overrideCommandsButton: documentObject.getElementById("override-commands-button"),
+          startRunButton: documentObject.getElementById("start-run-button"),
+          fixBugsButton: documentObject.getElementById("fix-bugs-button"),
           approveButton: documentObject.getElementById("approve-button"),
           rejectButton: documentObject.getElementById("reject-button"),
           skipButton: documentObject.getElementById("skip-button"),
@@ -780,6 +939,13 @@
           specStatusSection: documentObject.getElementById("spec-status-section"),
           specStepValue: documentObject.getElementById("spec-step-value"),
           specPassCount: documentObject.getElementById("spec-pass-count"),
+          bugfixStatusSection: documentObject.getElementById("bugfix-status-section"),
+          bugfixCurrentValue: documentObject.getElementById("bugfix-current-value"),
+          bugfixCycleValue: documentObject.getElementById("bugfix-cycle-value"),
+          bugfixStepValue: documentObject.getElementById("bugfix-step-value"),
+          prReviewStatusSection: documentObject.getElementById("pr-review-status-section"),
+          prReviewStepValue: documentObject.getElementById("pr-review-step-value"),
+          prReviewPassCount: documentObject.getElementById("pr-review-pass-count"),
           clarificationSection: documentObject.getElementById("clarification-section"),
           clarificationForm: documentObject.getElementById("clarification-form"),
           clarificationQuestions: documentObject.getElementById("clarification-questions"),
@@ -810,6 +976,47 @@
         });
         elements.resumeButton.addEventListener("click", function () {
           sendMessage({ type: "resume" });
+        });
+        elements.abandonButton.addEventListener("click", function () {
+          sendMessage({ type: "abandon" });
+        });
+        elements.copilotRereviewButton.addEventListener("click", function () {
+          sendMessage({ type: "copilot-rereview" });
+        });
+        elements.overrideCommandsButton.addEventListener("click", function () {
+          sendMessage({
+            type: "override-commands",
+            testCommand: elements.testCommandInput.value || "",
+            lintCommand: elements.lintCommandInput.value || "",
+          });
+        });
+        elements.startRunButton.addEventListener("click", function () {
+          const prompt = (elements.inlinePromptInput.value || "").trim();
+          if (!prompt) {
+            return;
+          }
+
+          sendMessage({
+            type: "start-feature",
+            prompt: prompt,
+            conventionsSkill: elements.conventionsSkillSelect.value || "",
+            testCommand: elements.testCommandInput.value || "",
+            lintCommand: elements.lintCommandInput.value || "",
+          });
+        });
+        elements.fixBugsButton.addEventListener("click", function () {
+          const prompt = (elements.inlinePromptInput.value || "").trim();
+          if (!prompt) {
+            return;
+          }
+
+          sendMessage({
+            type: "start-bugfix",
+            prompt: prompt,
+            conventionsSkill: elements.conventionsSkillSelect.value || "",
+            testCommand: elements.testCommandInput.value || "",
+            lintCommand: elements.lintCommandInput.value || "",
+          });
         });
         elements.approveButton.addEventListener("click", function () {
           sendMessage({ type: "approve", itemId: elements.itemIdInput.value || "A1" });

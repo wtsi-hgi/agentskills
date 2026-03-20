@@ -240,6 +240,135 @@ describe("team dashboard SPA", () => {
     expect(socket?.sent).toEqual([{ type: "pause" }]);
   });
 
+  it("sends a copilot-rereview client message when the Copilot Re-Review button is clicked", async () => {
+    const dashboard = await loadDashboard();
+    const socket = dashboard.sockets[0];
+    socket?.open();
+
+    (dashboard.window.document.getElementById("copilot-rereview-button") as { click(): void }).click();
+
+    expect(socket?.sent).toEqual([{ type: "copilot-rereview" }]);
+  });
+
+  it("renders bugfix approval status and PR review status cards", async () => {
+    const dashboard = await loadDashboard();
+    const socket = dashboard.sockets[0];
+    socket?.open();
+
+    socket?.emitMessage({
+      type: "bugfix-status",
+      data: {
+        bugIndex: 1,
+        bugCount: 3,
+        fixCycle: 4,
+        bugStep: "approving",
+      },
+    });
+    socket?.emitMessage({
+      type: "pr-review-status",
+      data: {
+        step: "spec-free",
+        consecutivePasses: 2,
+      },
+    });
+
+    expect((dashboard.window.document.getElementById("bugfix-current-card") as HTMLDivElement).hidden).toBe(false);
+    expect(dashboard.window.document.getElementById("bugfix-current")?.textContent).toBe("2 / 3");
+    expect(dashboard.window.document.getElementById("bugfix-approval")?.textContent).toBe("Awaiting approval");
+    expect((dashboard.window.document.getElementById("pr-review-step-card") as HTMLDivElement).hidden).toBe(false);
+    expect(dashboard.window.document.getElementById("pr-review-step")?.textContent).toBe("Spec Free");
+    expect(dashboard.window.document.getElementById("pr-review-pass-count")?.textContent).toBe("2");
+  });
+
+  it("hides bugfix cards when bugfix-status is cleared", async () => {
+    const dashboard = await loadDashboard();
+    const socket = dashboard.sockets[0];
+    socket?.open();
+
+    socket?.emitMessage({
+      type: "bugfix-status",
+      data: {
+        bugIndex: 1,
+        bugCount: 3,
+        fixCycle: 4,
+        bugStep: "approving",
+      },
+    });
+
+    expect((dashboard.window.document.getElementById("bugfix-current-card") as HTMLDivElement).hidden).toBe(false);
+
+    socket?.emitMessage({
+      type: "bugfix-status",
+      data: null,
+    });
+
+    expect((dashboard.window.document.getElementById("bugfix-current-card") as HTMLDivElement).hidden).toBe(true);
+    expect((dashboard.window.document.getElementById("bugfix-cycle-card") as HTMLDivElement).hidden).toBe(true);
+    expect((dashboard.window.document.getElementById("bugfix-approval-card") as HTMLDivElement).hidden).toBe(true);
+  });
+
+  it("sends start-feature, start-bugfix, and override-commands messages from the control card", async () => {
+    const dashboard = await loadDashboard();
+    const socket = dashboard.sockets[0];
+    socket?.open();
+
+    socket?.emitMessage({
+      type: "control-options",
+      data: { conventionsSkills: ["python-conventions"] },
+    });
+    socket?.emitMessage({
+      type: "state",
+      data: {
+        status: "running",
+        currentPhase: 1,
+        currentItemIndex: 0,
+        itemStatuses: {},
+        conventionsSkill: "python-conventions",
+        testCommand: "pytest",
+        lintCommand: "ruff check .",
+      },
+    });
+
+    ((dashboard.window.document.getElementById("inline-prompt-input") as unknown) as { value: string }).value = "Add browser controls";
+    ((dashboard.window.document.getElementById("conventions-skill-select") as unknown) as { value: string }).value = "python-conventions";
+    ((dashboard.window.document.getElementById("test-command-input") as unknown) as { value: string }).value = "pytest";
+    ((dashboard.window.document.getElementById("lint-command-input") as unknown) as { value: string }).value = "ruff check .";
+
+    (dashboard.window.document.getElementById("override-commands-button") as { click(): void }).click();
+    (dashboard.window.document.getElementById("start-run-button") as { click(): void }).click();
+    (dashboard.window.document.getElementById("fix-bugs-button") as { click(): void }).click();
+
+    expect(socket?.sent).toContainEqual({
+      type: "override-commands",
+      testCommand: "pytest",
+      lintCommand: "ruff check .",
+    });
+    expect(socket?.sent).toContainEqual({
+      type: "start-feature",
+      prompt: "Add browser controls",
+      conventionsSkill: "python-conventions",
+      testCommand: "pytest",
+      lintCommand: "ruff check .",
+    });
+    expect(socket?.sent).toContainEqual({
+      type: "start-bugfix",
+      prompt: "Add browser controls",
+      conventionsSkill: "python-conventions",
+      testCommand: "pytest",
+      lintCommand: "ruff check .",
+    });
+  });
+
+  it("sends an abandon client message when the Abandon button is clicked", async () => {
+    const dashboard = await loadDashboard();
+    const socket = dashboard.sockets[0];
+    socket?.open();
+
+    (dashboard.window.document.getElementById("abandon-button") as { click(): void }).click();
+
+    expect(socket?.sent).toEqual([{ type: "abandon" }]);
+  });
+
   it("retries websocket connections with exponential backoff", async () => {
     const dashboard = await loadDashboard();
 

@@ -31,10 +31,11 @@ full inventory and usage guide.
 
 ### Copilot Conductor extension
 
-Install the `.vsix` in VS Code, configure `conductor.conventionsSkill` for your
-tech stack, place a `prompt.md` (to generate the spec and phases) or an
-existing `spec.md` + phase files in `.docs/conductor/`, then run
-**Conductor: Start**. See the
+Install the `.vsix` in VS Code, place a `prompt.md` (to generate the spec and
+phases) or an existing `spec.md` + phase files in `.docs/conductor/` under your
+configured `conductor.docsDir`, then run **Conductor: Start**. Conductor stores
+the selected conventions skill and quality commands per feature in
+`.conductor/state.json` instead of global settings. See the
 [extension guide](docs/extension-guide.md) for setup and usage.
 
 ## Documentation

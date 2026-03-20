@@ -5,7 +5,15 @@ import { describe, expect, it } from "vitest";
 
 import { createDashboardPanel, dashboardPanelConstants } from "../../webview/panel";
 import type { Orchestrator } from "../../orchestrator/machine";
-import type { AuditEntry, ClarificationAnswer, ClientMessage, DisposableLike, OrchestratorState, Phase } from "../../types";
+import type {
+  AuditEntry,
+  ClarificationAnswer,
+  ClientMessage,
+  DashboardControlBridge,
+  DisposableLike,
+  OrchestratorState,
+  Phase,
+} from "../../types";
 
 class TestEmitter<T> {
   private readonly listeners = new Set<(value: T) => void>();
@@ -83,6 +91,9 @@ class FakeWindow {
 function createState(overrides: Partial<OrchestratorState> = {}): OrchestratorState {
   return {
     specDir: ".docs/conductor",
+    conventionsSkill: "",
+    testCommand: "npm test",
+    lintCommand: "",
     currentPhase: 1,
     currentItemIndex: 0,
     consecutivePasses: {},
@@ -135,17 +146,26 @@ function createOrchestratorSpy(initialState: OrchestratorState = createState()) 
   const calls = {
     pause: 0,
     resume: 0,
+    startCopilotReReview: 0,
+    startRun: [] as Array<{ prompt: string; conventionsSkill: string; testCommand: string; lintCommand: string }>,
+    fixBugs: [] as Array<{ prompt: string; conventionsSkill: string; testCommand: string; lintCommand: string }>,
+    abandonRun: 0,
     approve: [] as string[],
     skip: [] as string[],
     retry: [] as string[],
     reject: [] as Array<{ itemId: string; feedback: string }>,
     changeModel: [] as Array<{ role: string; vendor: string; family: string }>,
+    overrideCommands: [] as Array<{ testCommand: string; lintCommand: string }>,
     addNote: [] as Array<{ itemId: string; text: string; author?: string }>,
     submitClarification: [] as ClarificationAnswer[][],
   };
 
   const orchestrator: Orchestrator = {
     run: async () => {},
+    startCopilotReReview() {
+      calls.startCopilotReReview += 1;
+    },
+    abandon() {},
     pause() {
       calls.pause += 1;
     },
@@ -160,6 +180,9 @@ function createOrchestratorSpy(initialState: OrchestratorState = createState()) 
     },
     changeModel(role, vendor, family) {
       calls.changeModel.push({ role, vendor, family });
+    },
+    overrideCommands(testCommand: string, lintCommand: string) {
+      calls.overrideCommands.push({ testCommand, lintCommand });
     },
     approve(itemId: string) {
       calls.approve.push(itemId);
@@ -203,7 +226,22 @@ function createOrchestratorSpy(initialState: OrchestratorState = createState()) 
     onTranscript: transcriptEmitter.event as never,
   };
 
-  return { orchestrator, calls, stateEmitter, auditEmitter, addendumEmitter, transcriptEmitter };
+  const controlBridge: DashboardControlBridge = {
+    getControlOptions() {
+      return { conventionsSkills: ["python-conventions", "nextjs-fastapi-conventions"] };
+    },
+    startRun(request) {
+      calls.startRun.push(request);
+    },
+    fixBugs(request) {
+      calls.fixBugs.push(request);
+    },
+    abandonRun() {
+      calls.abandonRun += 1;
+    },
+  };
+
+  return { orchestrator, controlBridge, calls, stateEmitter, auditEmitter, addendumEmitter, transcriptEmitter };
 }
 
 function createPanelHarness(initialState: OrchestratorState = createState()) {
@@ -268,6 +306,7 @@ function createPanelHarness(initialState: OrchestratorState = createState()) {
   const createdPanel = createDashboardPanel(
     context as never,
     spy.orchestrator,
+    spy.controlBridge,
     vscodeApi as never,
   );
 
@@ -368,9 +407,113 @@ describe("dashboard panel G1", () => {
 
     harness.stateEmitter.fire(nextState);
 
-    expect(harness.receivedMessages.at(-1)).toEqual({
+    expect(harness.receivedMessages).toContainEqual({
       type: "state",
       data: nextState,
+    });
+  });
+
+  it("posts bugfix-status updates to the webview when bugfix state is present", () => {
+    const harness = createPanelHarness(createState({
+      bugStep: "approving",
+      bugIndex: 0,
+      bugFixCycle: 2,
+      bugIssues: [{ title: "bug", description: "desc" }],
+    }));
+
+    expect(harness.receivedMessages).toContainEqual({
+      type: "bugfix-status",
+      data: {
+        bugIndex: 0,
+        bugCount: 1,
+        fixCycle: 2,
+        bugStep: "approving",
+      },
+    });
+
+    harness.stateEmitter.fire(createState({
+      bugStep: "done",
+      bugIndex: 1,
+      bugFixCycle: 4,
+      bugIssues: [{ title: "bug", description: "desc" }],
+    }));
+
+    expect(harness.receivedMessages).toContainEqual({
+      type: "bugfix-status",
+      data: {
+        bugIndex: 1,
+        bugCount: 1,
+        fixCycle: 4,
+        bugStep: "done",
+      },
+    });
+  });
+
+  it("posts a cleared bugfix-status message when state leaves bugfix mode", () => {
+    const harness = createPanelHarness(createState({
+      bugStep: "reviewing",
+      bugIndex: 0,
+      bugFixCycle: 2,
+      bugIssues: [{ title: "bug", description: "desc" }],
+    }));
+
+    harness.stateEmitter.fire(createState({
+      currentPhase: 2,
+      currentItemIndex: 1,
+      bugStep: undefined,
+      bugIndex: undefined,
+      bugFixCycle: undefined,
+      bugIssues: undefined,
+    }));
+
+    expect(harness.receivedMessages).toContainEqual({
+      type: "bugfix-status",
+      data: null,
+    });
+  });
+
+  it("posts pr-review-status updates to the webview on initial load and state changes", () => {
+    const harness = createPanelHarness(createState({
+      prReviewStep: "spec-aware",
+      prReviewConsecutivePasses: 1,
+    }));
+
+    expect(harness.receivedMessages).toContainEqual({
+      type: "pr-review-status",
+      data: {
+        step: "spec-aware",
+        consecutivePasses: 1,
+      },
+    });
+
+    harness.stateEmitter.fire(createState({
+      prReviewStep: "spec-free",
+      prReviewConsecutivePasses: 2,
+    }));
+
+    expect(harness.receivedMessages).toContainEqual({
+      type: "pr-review-status",
+      data: {
+        step: "spec-free",
+        consecutivePasses: 2,
+      },
+    });
+  });
+
+  it("posts control options to the webview", async () => {
+    const harness = createPanelHarness();
+
+    await waitFor(() => harness.receivedMessages.find((message) => {
+      return typeof message === "object"
+        && message !== null
+        && (message as { type?: string }).type === "control-options"
+        ? true
+        : undefined;
+    }));
+
+    expect(harness.receivedMessages).toContainEqual({
+      type: "control-options",
+      data: { conventionsSkills: ["python-conventions", "nextjs-fastapi-conventions"] },
     });
   });
 
@@ -432,6 +575,58 @@ describe("dashboard panel G1", () => {
     harness.receiveMessage({ type: "resume" });
 
     expect(harness.calls.resume).toBe(1);
+  });
+
+  it("routes abandon messages to the control bridge", () => {
+    const harness = createPanelHarness();
+
+    harness.receiveMessage({ type: "abandon" });
+
+    expect(harness.calls.abandonRun).toBe(1);
+  });
+
+  it("routes start-feature messages to the control bridge", () => {
+    const harness = createPanelHarness();
+
+    harness.receiveMessage({
+      type: "start-feature",
+      prompt: "Build the new controls",
+      conventionsSkill: "python-conventions",
+      testCommand: "pytest",
+      lintCommand: "ruff check .",
+    });
+
+    expect(harness.calls.startRun).toEqual([
+      {
+        type: "start-feature",
+        prompt: "Build the new controls",
+        conventionsSkill: "python-conventions",
+        testCommand: "pytest",
+        lintCommand: "ruff check .",
+      },
+    ]);
+  });
+
+  it("routes start-bugfix messages to the control bridge", () => {
+    const harness = createPanelHarness();
+
+    harness.receiveMessage({
+      type: "start-bugfix",
+      prompt: "Fix the websocket bug",
+      conventionsSkill: "nextjs-fastapi-conventions",
+      testCommand: "pnpm test",
+      lintCommand: "pnpm lint",
+    });
+
+    expect(harness.calls.fixBugs).toEqual([
+      {
+        type: "start-bugfix",
+        prompt: "Fix the websocket bug",
+        conventionsSkill: "nextjs-fastapi-conventions",
+        testCommand: "pnpm test",
+        lintCommand: "pnpm lint",
+      },
+    ]);
   });
 
   it("routes approve messages to orchestrator.approve", () => {
@@ -547,18 +742,53 @@ describe("dashboard panel G1", () => {
     ]);
   });
 
+  it("routes override-commands messages to orchestrator.overrideCommands", () => {
+    const harness = createPanelHarness();
+
+    harness.receiveMessage({
+      type: "override-commands",
+      testCommand: "pnpm test",
+      lintCommand: "pnpm lint --fix",
+    });
+
+    expect(harness.calls.overrideCommands).toEqual([
+      { testCommand: "pnpm test", lintCommand: "pnpm lint --fix" },
+    ]);
+  });
+
+  it("routes copilot-rereview messages to orchestrator.startCopilotReReview", () => {
+    const harness = createPanelHarness();
+
+    harness.receiveMessage({ type: "copilot-rereview" });
+
+    expect(harness.calls.startCopilotReReview).toBe(1);
+  });
+
   it("emits dashboard control messages from the real webview UI", () => {
     const harness = createPanelHarness();
     const dom = createDashboardDomHarness(harness.panelState.webview.html);
 
+    dom.window.dispatchMessage({
+      type: "control-options",
+      data: { conventionsSkills: ["python-conventions"] },
+    });
     dom.document.getElementById("item-id-input").value = "A1";
     dom.document.getElementById("reject-feedback-input").value = "fix X";
     dom.document.getElementById("role-select").value = "reviewer";
     dom.document.getElementById("vendor-input").value = "copilot";
     dom.document.getElementById("family-input").value = "o3";
+    dom.document.getElementById("inline-prompt-input").value = "Add inline dashboard controls";
+    dom.document.getElementById("conventions-skill-select").value = "python-conventions";
+    dom.document.getElementById("test-command-input").value = "pytest";
+    dom.document.getElementById("lint-command-input").value = "ruff check .";
 
     dom.document.getElementById("pause-button").click();
     dom.document.getElementById("resume-button").click();
+    dom.document.getElementById("copilot-rereview-button").click();
+    dom.document.getElementById("abandon-button").click();
+    dom.document.getElementById("override-commands-button").click();
+    dom.document.getElementById("start-run-button").click();
+    dom.document.getElementById("fix-bugs-button").click();
     dom.document.getElementById("approve-button").click();
     dom.document.getElementById("reject-button").click();
     dom.document.getElementById("skip-button").click();
@@ -568,6 +798,23 @@ describe("dashboard panel G1", () => {
     expect(dom.vscodeMessages).toEqual([
       { type: "pause" },
       { type: "resume" },
+      { type: "copilot-rereview" },
+      { type: "abandon" },
+      { type: "override-commands", testCommand: "pytest", lintCommand: "ruff check ." },
+      {
+        type: "start-feature",
+        prompt: "Add inline dashboard controls",
+        conventionsSkill: "python-conventions",
+        testCommand: "pytest",
+        lintCommand: "ruff check .",
+      },
+      {
+        type: "start-bugfix",
+        prompt: "Add inline dashboard controls",
+        conventionsSkill: "python-conventions",
+        testCommand: "pytest",
+        lintCommand: "ruff check .",
+      },
       { type: "approve", itemId: "A1" },
       { type: "reject", itemId: "A1", feedback: "fix X" },
       { type: "skip", itemId: "A1" },
@@ -665,6 +912,64 @@ describe("dashboard panel G1", () => {
     expect(dom.document.getElementById("spec-status-section").hidden).toBe(false);
     expect(dom.document.getElementById("spec-step-value").textContent).toBe("Reviewing Phases");
     expect(dom.document.getElementById("spec-pass-count").textContent).toBe("1");
+  });
+
+  it("renders bugfix status when bugfix-status messages arrive", () => {
+    const harness = createPanelHarness();
+    const dom = createDashboardDomHarness(harness.panelState.webview.html);
+
+    dom.window.dispatchMessage({
+      type: "bugfix-status",
+      data: {
+        bugIndex: 1,
+        bugCount: 3,
+        fixCycle: 4,
+        bugStep: "approving",
+      },
+    });
+
+    expect(dom.document.getElementById("bugfix-status-section").hidden).toBe(false);
+    expect(dom.document.getElementById("bugfix-current-value").textContent).toBe("2 / 3");
+    expect(dom.document.getElementById("bugfix-cycle-value").textContent).toBe("4");
+    expect(dom.document.getElementById("bugfix-step-value").textContent).toBe("Awaiting approval");
+  });
+
+  it("hides bugfix status when a cleared bugfix-status message arrives", () => {
+    const harness = createPanelHarness();
+    const dom = createDashboardDomHarness(harness.panelState.webview.html);
+
+    dom.window.dispatchMessage({
+      type: "bugfix-status",
+      data: {
+        bugIndex: 1,
+        bugCount: 3,
+        fixCycle: 4,
+        bugStep: "approving",
+      },
+    });
+
+    expect(dom.document.getElementById("bugfix-status-section").hidden).toBe(false);
+
+    dom.window.dispatchMessage({
+      type: "bugfix-status",
+      data: null,
+    });
+
+    expect(dom.document.getElementById("bugfix-status-section").hidden).toBe(true);
+  });
+
+  it("renders PR review status when pr-review-status messages arrive", () => {
+    const harness = createPanelHarness();
+    const dom = createDashboardDomHarness(harness.panelState.webview.html);
+
+    dom.window.dispatchMessage({
+      type: "pr-review-status",
+      data: { step: "spec-free", consecutivePasses: 2 },
+    });
+
+    expect(dom.document.getElementById("pr-review-status-section").hidden).toBe(false);
+    expect(dom.document.getElementById("pr-review-step-value").textContent).toBe("Spec Free");
+    expect(dom.document.getElementById("pr-review-pass-count").textContent).toBe("2");
   });
 
   it("renders clarification questions and emits submit-clarification from the UI", () => {

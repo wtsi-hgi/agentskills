@@ -38,6 +38,9 @@ const serversToClose: ServerHandle[] = [];
 function createState(): OrchestratorState {
   return {
     specDir: ".docs/conductor",
+    conventionsSkill: "",
+    testCommand: "npm test",
+    lintCommand: "",
     currentPhase: 1,
     currentItemIndex: 0,
     consecutivePasses: {},
@@ -58,11 +61,14 @@ function createOrchestrator(): Orchestrator {
 
   return {
     async run() {},
+    startCopilotReReview() {},
+    abandon() {},
     pause() {},
     resume() {},
     skip() {},
     retry() {},
     changeModel() {},
+    overrideCommands() {},
     approve() {},
     reject() {},
     submitClarification() {},

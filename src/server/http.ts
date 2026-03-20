@@ -7,6 +7,7 @@ import type { Duplex } from "node:stream";
 import { WebSocketServer } from "ws";
 
 import type { Orchestrator } from "../orchestrator/machine";
+import type { DashboardControlBridge } from "../types";
 import { validateAuth } from "./auth";
 import { handleWebSocket } from "./ws";
 
@@ -90,6 +91,7 @@ export async function startServer(
   staticDir: string,
   authToken: string,
   orchestrator: Orchestrator,
+  controlBridge?: DashboardControlBridge,
 ): Promise<ServerHandle> {
   const sockets = new Set<Socket>();
   const webSocketServer = new WebSocketServer({ noServer: true });
@@ -116,7 +118,7 @@ export async function startServer(
     }
 
     webSocketServer.handleUpgrade(request, socket, head, (ws) => {
-      handleWebSocket(ws, orchestrator);
+      handleWebSocket(ws, orchestrator, controlBridge);
     });
   });
 

@@ -1,7 +1,15 @@
 import type { WebSocket } from "ws";
 
 import type { Orchestrator } from "../orchestrator/machine";
-import type { AddendumEntry, ClientMessage, ServerMessage } from "../types";
+import type {
+  AddendumEntry,
+  BugfixStatus,
+  ClientMessage,
+  DashboardControlBridge,
+  OrchestratorState,
+  PrReviewStatus,
+  ServerMessage,
+} from "../types";
 
 type SubscriptionGroup = {
   sockets: Set<WebSocket>;
@@ -31,11 +39,40 @@ function createAddendumMessage(entry: AddendumEntry): ServerMessage {
   return { type: "addendum", entry };
 }
 
+function deriveBugfixStatus(state: OrchestratorState): BugfixStatus | undefined {
+  if (!state.bugStep || typeof state.bugIndex !== "number") {
+    return undefined;
+  }
+
+  return {
+    bugIndex: state.bugIndex,
+    bugCount: state.bugIssues?.length ?? 0,
+    fixCycle: state.bugFixCycle ?? 0,
+    bugStep: state.bugStep,
+  };
+}
+
+function derivePrReviewStatus(state: OrchestratorState): PrReviewStatus {
+  return {
+    step: state.prReviewStep ?? "done",
+    consecutivePasses: state.prReviewConsecutivePasses ?? 0,
+  };
+}
+
+function createBugfixStatusMessage(state: OrchestratorState): ServerMessage {
+  return {
+    type: "bugfix-status",
+    data: deriveBugfixStatus(state) ?? null,
+  };
+}
+
 function createSubscriptionGroup(orchestrator: Orchestrator): SubscriptionGroup {
   const group: SubscriptionGroup = {
     sockets: new Set<WebSocket>(),
     disposeState: orchestrator.onStateChange((state) => {
       broadcast(group, { type: "state", data: state });
+      broadcast(group, { type: "pr-review-status", data: derivePrReviewStatus(state) });
+      broadcast(group, createBugfixStatusMessage(state));
     }),
     disposeAudit: orchestrator.onAuditEntry((entry) => {
       broadcast(group, { type: "audit", entry });
@@ -83,7 +120,15 @@ function isClientMessage(value: unknown): value is ClientMessage {
   switch (candidate.type) {
     case "pause":
     case "resume":
+    case "abandon":
+    case "copilot-rereview":
       return true;
+    case "start-feature":
+    case "start-bugfix":
+      return typeof candidate.prompt === "string"
+        && typeof candidate.conventionsSkill === "string"
+        && typeof candidate.testCommand === "string"
+        && typeof candidate.lintCommand === "string";
     case "skip":
     case "retry":
     case "approve":
@@ -94,6 +139,9 @@ function isClientMessage(value: unknown): value is ClientMessage {
       return typeof candidate.role === "string"
         && typeof candidate.vendor === "string"
         && typeof candidate.family === "string";
+    case "override-commands":
+      return typeof candidate.testCommand === "string"
+        && typeof candidate.lintCommand === "string";
     case "addNote":
       return typeof candidate.itemId === "string" && typeof candidate.text === "string";
     case "submit-clarification":
@@ -115,6 +163,9 @@ function dispatchClientMessage(orchestrator: Orchestrator, message: ClientMessag
     case "resume":
       orchestrator.resume();
       return;
+    case "copilot-rereview":
+      orchestrator.startCopilotReReview();
+      return;
     case "skip":
       orchestrator.skip(message.itemId);
       return;
@@ -123,6 +174,9 @@ function dispatchClientMessage(orchestrator: Orchestrator, message: ClientMessag
       return;
     case "changeModel":
       orchestrator.changeModel(message.role, message.vendor, message.family);
+      return;
+    case "override-commands":
+      orchestrator.overrideCommands(message.testCommand, message.lintCommand);
       return;
     case "approve":
       orchestrator.approve(message.itemId);
@@ -139,13 +193,44 @@ function dispatchClientMessage(orchestrator: Orchestrator, message: ClientMessag
   }
 }
 
-export function handleWebSocket(ws: WebSocket, orchestrator: Orchestrator): void {
+function dispatchExternalClientMessage(controlBridge: DashboardControlBridge | undefined, message: ClientMessage): boolean {
+  if (!controlBridge) {
+    return false;
+  }
+
+  switch (message.type) {
+    case "abandon":
+      void controlBridge.abandonRun();
+      return true;
+    case "start-feature":
+      void controlBridge.startRun(message);
+      return true;
+    case "start-bugfix":
+      void controlBridge.fixBugs(message);
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function handleWebSocket(
+  ws: WebSocket,
+  orchestrator: Orchestrator,
+  controlBridge?: DashboardControlBridge,
+): void {
   const group = getSubscriptionGroup(orchestrator);
   group.sockets.add(ws);
 
-  sendMessage(ws, { type: "state", data: orchestrator.getState() });
+  const initialState = orchestrator.getState();
+  sendMessage(ws, { type: "state", data: initialState });
+  sendMessage(ws, { type: "pr-review-status", data: derivePrReviewStatus(initialState) });
+  sendMessage(ws, createBugfixStatusMessage(initialState));
   void (async () => {
     try {
+      if (controlBridge) {
+        sendMessage(ws, { type: "control-options", data: await controlBridge.getControlOptions() });
+      }
+
       for (const phase of await orchestrator.getPhases()) {
         sendMessage(ws, { type: "phase", data: phase });
       }
@@ -174,6 +259,10 @@ export function handleWebSocket(ws: WebSocket, orchestrator: Orchestrator): void
     try {
       const parsed = JSON.parse(raw.toString()) as unknown;
       if (isClientMessage(parsed)) {
+        if (dispatchExternalClientMessage(controlBridge, parsed)) {
+          return;
+        }
+
         dispatchClientMessage(orchestrator, parsed);
       }
     } catch {

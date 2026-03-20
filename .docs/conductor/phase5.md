@@ -27,8 +27,8 @@ and `conductor.testCommand` from `package.json`. Add
 first so subsequent items build on clean types. Covering
 all 4 acceptance tests from R1.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.2: P1 - Trusted Execution Path
 
@@ -44,8 +44,8 @@ existing `executeBash` remains unchanged. Depends on
 item 5.1 (R1) for the `lintCommand` field. Covering all 6
 acceptance tests from P1.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.3: O1 - Branch Safety Check
 
@@ -59,8 +59,8 @@ if on `main`, `master`, or the default branch. Hard gate
 at run start. Depends on item 5.2 (P1) for trusted
 execution. Covering all 6 acceptance tests from O1.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.4: Q1 - Lint Command Extraction
 
@@ -75,8 +75,8 @@ results in `OrchestratorState`. Support user override via
 trusted execution. Covering all 4 acceptance tests from
 Q1.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.5: Q2 - Lint Step in Quality Gate
 
@@ -90,8 +90,8 @@ implementor as retry feedback. Full cycle: test -> lint ->
 retest if lint modified files. Depends on items 5.4 (Q1)
 and 5.2 (P1). Covering all 6 acceptance tests from Q2.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.6: R2 - Conventions Skill Auto-Detection
 
@@ -106,8 +106,8 @@ from `skillsDir`. Store chosen skill in
 and `src/orchestrator/machine.ts`. Depends on item 5.1
 (R1). Covering all 5 acceptance tests from R2.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.7: K1 - Inline Prompt Entry for Features
 
@@ -123,8 +123,8 @@ Implement in `src/extension.ts` and
 `src/orchestrator/machine.ts`. Depends on items 5.1 (R1)
 and 5.6 (R2). Covering all 7 acceptance tests from K1.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.8: K2 - Inline Prompt Entry for Bugfixes
 
@@ -139,8 +139,8 @@ initialise `.conductor/state.json` with
 Implement in `src/extension.ts`. Depends on item 5.7
 (K1). Covering all 5 acceptance tests from K2.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.9: K3 - VS Code Input for Inline Prompts
 
@@ -154,8 +154,8 @@ on document close/confirm. Implement in `src/extension.ts`.
 Depends on item 5.7 (K1). Covering all 3 acceptance tests
 from K3.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.10: M3 - PR Reviewer Skill Loading
 
@@ -168,8 +168,8 @@ the pr-reviewer skill, tool definitions, and wire format
 without loading the conventions skill. Depends on item 5.1
 (R1). Covering all 3 acceptance tests from M3.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.11: M2 - PR Reviewer Model Config
 
@@ -183,8 +183,8 @@ in `src/llm/select.ts` to handle `"pr-reviewer"`. Depends
 on item 5.10 (M3). Covering all 2 acceptance tests from
 M2.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.12: M1 - PR Review State Machine
 
@@ -202,8 +202,8 @@ steps. Depends on items 5.11 (M2), 5.10 (M3), 5.5 (Q2),
 5.3 (O1), and 5.2 (P1). Covering all 12 acceptance tests
 from M1.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.13: O2 - Per-Phase Commit and Push
 
@@ -216,8 +216,8 @@ files, `git commit -m "Implement phase <N>"`, and
 (logged in audit). Depends on items 5.2 (P1) and 5.3
 (O1). Covering all 4 acceptance tests from O2.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.14: O3 - State File Commit and Push
 
@@ -231,8 +231,8 @@ audit entry. Implement in `src/orchestrator/machine.ts`.
 Depends on item 5.13 (O2). Covering all 4 acceptance
 tests from O3.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.15: O4 - Spec-Writing Commit
 
@@ -244,8 +244,8 @@ message `"conductor: write spec"`, and push. Implement in
 `src/orchestrator/machine.ts`. Depends on item 5.13 (O2).
 Covering all 2 acceptance tests from O4.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.16: L1 - Bug Description Parsing
 
@@ -259,8 +259,8 @@ prompt as single bug with title "Bug fix" if JSON is
 invalid or empty. Handle fenced code blocks. Depends on
 item 5.1 (R1). Covering all 4 acceptance tests from L1.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.17: L2 - Bugfix State Machine
 
@@ -277,8 +277,8 @@ step does git add, commit (max 72 chars), and push. Track
 5.16 (L1), 5.5 (Q2), 5.2 (P1), and 5.3 (O1). Covering
 all 10 acceptance tests from L2.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.18: L3 - Fix Bugs Command
 
@@ -292,8 +292,8 @@ Prevents concurrent runs with error message. Initialises
 Depends on items 5.17 (L2) and 5.8 (K2). Covering all 3
 acceptance tests from L3.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.19: N1 - Copilot Re-Review Command
 
@@ -309,8 +309,8 @@ prompt at cycle 3+. Stop after 20 cycles. Independent of
 main pipeline. Depends on items 5.2 (P1) and 5.12 (M1).
 Covering all 9 acceptance tests from N1.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.20: N2 - Re-Review Dashboard/Server Button
 
@@ -324,8 +324,8 @@ Add "Copilot Re-Review" button to
 `orchestrator.startCopilotReReview()`. Depends on item
 5.19 (N1). Covering all 2 acceptance tests from N2.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.21: R3 - Abandon Command
 
@@ -338,8 +338,8 @@ to start a new run. Show info message if no active run.
 Depends on item 5.1 (R1). Covering all 3 acceptance tests
 from R3.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.22: R4 - Crash Recovery with Per-Feature State
 
@@ -353,8 +353,8 @@ abandon. Per-feature state is self-contained with
 Implement in `src/extension.ts`. Depends on item 5.1 (R1).
 Covering all 5 acceptance tests from R4.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.23: P2 - File Trash Safety Net
 
@@ -367,8 +367,8 @@ Clean up `.trash/` after all phases complete. No action
 for files emptied but not deleted. Depends on item 5.2
 (P1). Covering all 4 acceptance tests from P2.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 5.24: G1/H2 updates - Dashboard and Server Updates
 
@@ -387,5 +387,5 @@ message types in `src/webview/panel.ts` and
 G1/H2 tests cover rendering and control paths. Depends on
 all prior items.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed

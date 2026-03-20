@@ -3,7 +3,7 @@ import * as path from "node:path";
 import type * as vscode from "vscode";
 
 import type { Orchestrator } from "../orchestrator/machine";
-import type { ClientMessage, ServerMessage } from "../types";
+import type { BugfixStatus, ClientMessage, DashboardControlBridge, OrchestratorState, PrReviewStatus, ServerMessage } from "../types";
 
 const DASHBOARD_VIEW_TYPE = "conductor.dashboard";
 const DASHBOARD_TITLE = "Conductor Dashboard";
@@ -46,8 +46,46 @@ async function postPhaseDefinition(panel: vscode.WebviewPanel, orchestrator: Orc
   postServerMessage(panel.webview, { type: "phase", data: await orchestrator.getPhase() });
 }
 
+async function postControlOptions(
+  panel: vscode.WebviewPanel,
+  controlBridge: DashboardControlBridge | undefined,
+): Promise<void> {
+  if (!controlBridge) {
+    return;
+  }
+
+  postServerMessage(panel.webview, { type: "control-options", data: await controlBridge.getControlOptions() });
+}
+
 function postServerMessage(webview: vscode.Webview, message: ServerMessage): void {
   void webview.postMessage(message);
+}
+
+function deriveBugfixStatus(state: OrchestratorState): BugfixStatus | undefined {
+  if (!state.bugStep || typeof state.bugIndex !== "number") {
+    return undefined;
+  }
+
+  return {
+    bugIndex: state.bugIndex,
+    bugCount: state.bugIssues?.length ?? 0,
+    fixCycle: state.bugFixCycle ?? 0,
+    bugStep: state.bugStep,
+  };
+}
+
+function derivePrReviewStatus(state: OrchestratorState): PrReviewStatus {
+  return {
+    step: state.prReviewStep ?? "done",
+    consecutivePasses: state.prReviewConsecutivePasses ?? 0,
+  };
+}
+
+function createBugfixStatusMessage(state: OrchestratorState): ServerMessage {
+  return {
+    type: "bugfix-status",
+    data: deriveBugfixStatus(state) ?? null,
+  };
 }
 
 async function postHistoricalEntries(panel: vscode.WebviewPanel, orchestrator: Orchestrator): Promise<void> {
@@ -70,13 +108,29 @@ async function postHistoricalEntries(panel: vscode.WebviewPanel, orchestrator: O
   }
 }
 
-function handleClientMessage(orchestrator: Orchestrator, message: ClientMessage): void {
+function handleClientMessage(
+  orchestrator: Orchestrator,
+  controlBridge: DashboardControlBridge | undefined,
+  message: ClientMessage,
+): void {
   switch (message.type) {
     case "pause":
       orchestrator.pause();
       return;
     case "resume":
       orchestrator.resume();
+      return;
+    case "abandon":
+      void controlBridge?.abandonRun();
+      return;
+    case "copilot-rereview":
+      orchestrator.startCopilotReReview();
+      return;
+    case "start-feature":
+      void controlBridge?.startRun(message);
+      return;
+    case "start-bugfix":
+      void controlBridge?.fixBugs(message);
       return;
     case "approve":
       orchestrator.approve(message.itemId);
@@ -93,6 +147,9 @@ function handleClientMessage(orchestrator: Orchestrator, message: ClientMessage)
     case "changeModel":
       orchestrator.changeModel(message.role, message.vendor, message.family);
       return;
+    case "override-commands":
+      orchestrator.overrideCommands(message.testCommand, message.lintCommand);
+      return;
     case "addNote":
       orchestrator.addNote(message.itemId, message.text);
       return;
@@ -105,6 +162,7 @@ function handleClientMessage(orchestrator: Orchestrator, message: ClientMessage)
 export function createDashboardPanel(
   context: vscode.ExtensionContext,
   orchestrator: Orchestrator,
+  controlBridge?: DashboardControlBridge,
   vscodeApi: DashboardVscodeApi = loadVscodeApi(),
 ): vscode.WebviewPanel {
   const dashboardRoot = path.join(context.extensionPath, "src", "webview");
@@ -126,6 +184,8 @@ export function createDashboardPanel(
 
   const stateSubscription = orchestrator.onStateChange((state) => {
     postServerMessage(panel.webview, { type: "state", data: state });
+    postServerMessage(panel.webview, { type: "pr-review-status", data: derivePrReviewStatus(state) });
+    postServerMessage(panel.webview, createBugfixStatusMessage(state));
     if (state.currentPhase !== currentPhaseNumber) {
       currentPhaseNumber = state.currentPhase;
       void postPhaseDefinition(panel, orchestrator);
@@ -141,7 +201,7 @@ export function createDashboardPanel(
     postServerMessage(panel.webview, { type: "transcript", entry });
   });
   const messageSubscription = panel.webview.onDidReceiveMessage((message: ClientMessage) => {
-    handleClientMessage(orchestrator, message);
+    handleClientMessage(orchestrator, controlBridge, message);
   });
   const disposeSubscription = panel.onDidDispose(() => {
     stateSubscription.dispose();
@@ -152,7 +212,11 @@ export function createDashboardPanel(
     disposeSubscription.dispose();
   });
 
-  postServerMessage(panel.webview, { type: "state", data: orchestrator.getState() });
+  const initialState = orchestrator.getState();
+  postServerMessage(panel.webview, { type: "state", data: initialState });
+  postServerMessage(panel.webview, { type: "pr-review-status", data: derivePrReviewStatus(initialState) });
+  postServerMessage(panel.webview, createBugfixStatusMessage(initialState));
+  void postControlOptions(panel, controlBridge);
   void postPhaseDefinition(panel, orchestrator);
   void postHistoricalEntries(panel, orchestrator);
 

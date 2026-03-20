@@ -26,6 +26,27 @@ export async function selectModelForRole(
   role: Role,
   assignments: ModelAssignment[],
 ): Promise<vscode.LanguageModelChat> {
+  if (role === "pr-reviewer") {
+    const assignment = assignments.find((candidate) => candidate.role === role);
+
+    if (!assignment) {
+      throw new Error(`no model found for role \"${role}\"`);
+    }
+
+    const models = await getVscodeApi().lm?.selectChatModels({
+      vendor: assignment.vendor,
+      family: assignment.family,
+    });
+
+    if (!models?.length) {
+      throw new Error(
+        `no model found for role \"${role}\" with vendor \"${assignment.vendor}\" and family \"${assignment.family}\"`,
+      );
+    }
+
+    return models[0];
+  }
+
   const assignment = assignments.find((candidate) => candidate.role === role);
 
   if (!assignment) {

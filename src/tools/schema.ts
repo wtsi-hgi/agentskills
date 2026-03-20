@@ -36,6 +36,13 @@ const TOOL_DEFINITIONS: Array<ToolDefinition & { parameters: ParameterDefinition
     },
   },
   {
+    name: "Delete",
+    description: "Delete a file relative to projectDir; LLM-written files are moved to .trash when applicable.",
+    parameters: {
+      path: { type: "string", description: "Path relative to projectDir.", required: true },
+    },
+  },
+  {
     name: "Grep",
     description: "Search files with ripgrep and return file:line:match output.",
     parameters: {

@@ -137,6 +137,9 @@ async function createProviderHarness(itemStatuses: OrchestratorState["itemStatus
 
   const state: OrchestratorState = {
     specDir,
+    conventionsSkill: "",
+    testCommand: "npm test",
+    lintCommand: "",
     currentPhase: 1,
     currentItemIndex: 1,
     consecutivePasses: {},
@@ -171,6 +174,9 @@ async function createProviderHarnessWithArtifacts(
 
   const state: OrchestratorState = {
     specDir,
+    conventionsSkill: "",
+    testCommand: "npm test",
+    lintCommand: "",
     currentPhase: 1,
     currentItemIndex: 1,
     consecutivePasses: {},
@@ -200,6 +206,9 @@ async function createProviderHarnessWithRelativeSpecDir(itemStatuses: Orchestrat
 
   const state: OrchestratorState = {
     specDir: path.join(".docs", "conductor"),
+    conventionsSkill: "",
+    testCommand: "npm test",
+    lintCommand: "",
     currentPhase: 1,
     currentItemIndex: 1,
     consecutivePasses: {},

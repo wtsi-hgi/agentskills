@@ -1,6 +1,7 @@
 export type Role =
   | "implementor"
   | "reviewer"
+  | "pr-reviewer"
   | "spec-author"
   | "spec-reviewer"
   | "spec-proofreader"
@@ -17,7 +18,12 @@ export type ItemStatus =
   | "skipped"
   | "pending-approval";
 
-export type RunStatus = "idle" | "running" | "paused" | "pending-approval" | "done" | "error";
+export type RunStatus = "idle" | "running" | "paused" | "pending-approval" | "abandoned" | "done" | "error";
+
+export interface CommandExtraction {
+  testCommand: string;
+  lintCommand: string;
+}
 
 export interface ClarificationQuestion {
   question: string;
@@ -38,6 +44,21 @@ export type SpecStep =
   | "reviewing-phases"
   | "done";
 
+export type BugStep = "fixing" | "reviewing" | "approving" | "committing" | "done";
+
+export interface BugIssue {
+  title: string;
+  description: string;
+}
+
+export type PrReviewStep = "spec-aware" | "spec-free" | "done";
+
+export interface PrReviewFinding {
+  file: string;
+  line: number;
+  description: string;
+}
+
 export interface ToolDefinition {
   name: string;
   description: string;
@@ -54,6 +75,12 @@ export interface ToolResult {
   output: string;
   error?: string;
 }
+
+export type TrustedExecutor = (
+  command: string,
+  projectDir: string,
+  timeoutMs?: number,
+) => Promise<ToolResult>;
 
 export interface PhaseItem {
   id: string;
@@ -78,19 +105,24 @@ export interface ModelAssignment {
 }
 
 export interface OrchestratorConfig {
-  specDir: string;
   projectDir: string;
   skillsDir: string;
-  conventionsSkill: string;
+  docsDir: string;
   modelAssignments: ModelAssignment[];
   maxTurns: number;
   maxRetries: number;
-  testCommand: string;
   requireApproval: boolean;
 }
 
 export interface OrchestratorState {
   specDir: string;
+  conventionsSkill: string;
+  testCommand: string;
+  lintCommand: string;
+  bugStep?: BugStep;
+  bugIndex?: number;
+  bugFixCycle?: number;
+  bugIssues?: BugIssue[];
   currentPhase: number;
   currentItemIndex: number;
   consecutivePasses: Record<string, number>;
@@ -101,6 +133,8 @@ export interface OrchestratorState {
   status: RunStatus;
   modelAssignments: ModelAssignment[];
   itemStatuses: Record<string, ItemStatus>;
+  prReviewStep?: PrReviewStep;
+  prReviewConsecutivePasses?: number;
   startedBy?: string;
 }
 
@@ -148,12 +182,47 @@ export interface InvocationResult {
   error?: string;
 }
 
+export interface BugfixStatus {
+  bugIndex: number;
+  bugCount: number;
+  fixCycle: number;
+  bugStep: NonNullable<OrchestratorState["bugStep"]>;
+}
+
+export interface PrReviewStatus {
+  step: PrReviewStep;
+  consecutivePasses: number;
+}
+
+export interface DashboardControlOptions {
+  conventionsSkills: string[];
+}
+
+export interface InlineRunRequest {
+  prompt: string;
+  conventionsSkill: string;
+  testCommand: string;
+  lintCommand: string;
+}
+
+export interface DashboardControlBridge {
+  getControlOptions(): Promise<DashboardControlOptions> | DashboardControlOptions;
+  startRun(request: InlineRunRequest): Promise<void> | void;
+  fixBugs(request: InlineRunRequest): Promise<void> | void;
+  abandonRun(): Promise<void> | void;
+}
+
 export type ClientMessage =
   | { type: "pause" }
   | { type: "resume" }
+  | { type: "abandon" }
+  | { type: "copilot-rereview" }
+  | ({ type: "start-feature" } & InlineRunRequest)
+  | ({ type: "start-bugfix" } & InlineRunRequest)
   | { type: "skip"; itemId: string }
   | { type: "retry"; itemId: string }
   | { type: "changeModel"; role: Role; vendor: string; family: string }
+  | { type: "override-commands"; testCommand: string; lintCommand: string }
   | { type: "approve"; itemId: string }
   | { type: "reject"; itemId: string; feedback: string }
   | { type: "addNote"; itemId: string; text: string }
@@ -161,6 +230,9 @@ export type ClientMessage =
 
 export type ServerMessage =
   | { type: "state"; data: OrchestratorState }
+  | { type: "bugfix-status"; data: BugfixStatus | null }
+  | { type: "pr-review-status"; data: PrReviewStatus }
+  | { type: "control-options"; data: DashboardControlOptions }
   | { type: "phase"; data: Phase }
   | { type: "audit"; entry: AuditEntry }
   | { type: "addendum"; entry: AddendumEntry }
@@ -170,6 +242,25 @@ export interface DisposableLike {
   dispose(): void;
 }
 
+export interface TextDocumentLike {
+  uri: {
+    fsPath?: string;
+    path?: string;
+    scheme?: string;
+    toString?(): string;
+  };
+  getText(): string;
+}
+
+export interface TextDocumentShowOptions {
+  preview?: boolean;
+}
+
+export interface TextDocumentOpenOptions {
+  content?: string;
+  language?: string;
+}
+
 export interface CommandRegistry {
   registerCommand(command: string, callback: (...args: unknown[]) => unknown): DisposableLike;
 }
@@ -177,6 +268,21 @@ export interface CommandRegistry {
 export interface WindowLike {
   showInformationMessage(message: string, ...items: string[]): Promise<string | undefined>;
   showErrorMessage?(message: string, ...items: string[]): Promise<string | undefined>;
+  showInputBox?(
+    options?: {
+      prompt?: string;
+      placeHolder?: string;
+      value?: string;
+    },
+  ): Promise<string | undefined>;
+  showQuickPick?(
+    items: readonly string[],
+    options?: {
+      placeHolder?: string;
+      activeItem?: string;
+    },
+  ): Promise<string | undefined>;
+  showTextDocument?(document: TextDocumentLike, options?: TextDocumentShowOptions): Promise<unknown>;
   registerTreeDataProvider?<T>(viewId: string, treeDataProvider: T): DisposableLike;
 }
 
@@ -193,6 +299,9 @@ export interface ConfigurationLike {
 export interface WorkspaceLike {
   workspaceFolders?: WorkspaceFolderLike[];
   getConfiguration(section?: string): ConfigurationLike;
+  openTextDocument?(options?: TextDocumentOpenOptions): Promise<TextDocumentLike>;
+  onDidCloseTextDocument?(listener: (document: TextDocumentLike) => void): DisposableLike;
+  onDidSaveTextDocument?(listener: (document: TextDocumentLike) => void): DisposableLike;
 }
 
 export interface ExtensionContextLike {
@@ -209,6 +318,7 @@ export interface ExtensionDependencies {
   vscode: VscodeApiLike;
   fs: {
     mkdir(path: string, options?: { recursive?: boolean }): Promise<string | undefined>;
+    readdir(path: string): Promise<string[]>;
     readFile(path: string, encoding: BufferEncoding): Promise<string>;
     writeFile(path: string, data: string, encoding: BufferEncoding): Promise<void>;
     access(path: string): Promise<void>;

@@ -1,9 +1,9 @@
-import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { executeBash, validateBashCommand } from "../../tools/bash";
+import { executeBash, executeTrusted, validateBashCommand } from "../../tools/bash";
 
 const projectDirsToCleanup: string[] = [];
 
@@ -11,6 +11,13 @@ async function createProjectDir(): Promise<string> {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "conductor-b2-"));
   projectDirsToCleanup.push(projectDir);
   return projectDir;
+}
+
+async function writeExecutable(projectDir: string, relativePath: string, content: string): Promise<void> {
+  const filePath = path.join(projectDir, relativePath);
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, content, "utf8");
+  await chmod(filePath, 0o755);
 }
 
 afterEach(async () => {
@@ -121,5 +128,67 @@ describe("bash tool B2", () => {
 
     expect(result.success).toBe(false);
     expect(result.output).toContain("exit code: 1");
+  });
+});
+
+describe("bash tool P1", () => {
+  it("allows compound commands for trusted execution", async () => {
+    const projectDir = await createProjectDir();
+
+    const result = await executeTrusted("echo a && echo b", projectDir);
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("a");
+    expect(result.output).toContain("b");
+  });
+
+  it("does not block git push for trusted execution", async () => {
+    const projectDir = await createProjectDir();
+    await writeExecutable(projectDir, "bin/git", "#!/bin/sh\nprintf 'git %s\\n' \"$*\"\n");
+
+    const result = await executeTrusted('PATH="$PWD/bin:$PATH" git push origin feature', projectDir);
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("git push origin feature");
+  });
+
+  it("allows lint-style trusted commands with shell operators", async () => {
+    const projectDir = await createProjectDir();
+    await mkdir(path.join(projectDir, "src"), { recursive: true });
+    await writeExecutable(projectDir, "ruff", "#!/bin/sh\nprintf 'ruff %s\\n' \"$*\"\n");
+
+    const result = await executeTrusted(
+      'PATH="$PWD:$PATH" ruff check --fix src/ && PATH="$PWD:$PATH" ruff format src/',
+      projectDir,
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("ruff check --fix src/");
+    expect(result.output).toContain("ruff format src/");
+  });
+
+  it("enforces timeout for trusted execution", async () => {
+    const projectDir = await createProjectDir();
+
+    const result = await executeTrusted("sleep 60", projectDir, 100);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("timeout");
+  });
+
+  it("keeps LLM-facing executeBash validation unchanged", () => {
+    expect(validateBashCommand("echo a && echo b", "/proj")).toEqual({
+      valid: false,
+      reason: "shell metacharacters and expansions are prohibited",
+    });
+  });
+
+  it("runs trusted commands in the provided project directory", async () => {
+    const projectDir = await createProjectDir();
+
+    const result = await executeTrusted("pwd", projectDir);
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain(path.resolve(projectDir));
   });
 });

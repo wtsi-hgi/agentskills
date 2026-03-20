@@ -60,7 +60,7 @@ Install the `.vsix` file:
 
 ### Prepare Your Project
 
-Conductor needs one of the following in your project's spec directory (`.docs/conductor/` by default):
+Conductor needs one of the following in your project's active feature directory (`.docs/conductor/` by default, under `conductor.docsDir`):
 
 **Option A — start from a prompt (spec-writing + implementation):**
 
@@ -83,10 +83,8 @@ Open VS Code settings and search for "Conductor". Key settings:
 
 | Setting | Default | Description |
 |---|---|---|
-| `conductor.specDir` | `.docs/conductor` | Path to the spec and phase files. |
+| `conductor.docsDir` | `.docs/` | Root directory for Conductor feature folders. The default active feature directory is `.docs/conductor/`. |
 | `conductor.skillsDir` | `~/.agents/skills/` | Path to agentskills.io skills. |
-| `conductor.conventionsSkill` | *(empty)* | Conventions skill for your stack (e.g. `go-conventions`, `python-conventions`). |
-| `conductor.testCommand` | `npm test` | Command to run tests. |
 | `conductor.maxTurns` | `50` | Maximum tool-call turns per LLM invocation. |
 | `conductor.maxRetries` | `3` | Max retries on failure before moving on. |
 | `conductor.requireApproval` | `false` | Pause for human approval after each item. |
@@ -100,16 +98,15 @@ Open VS Code settings and search for "Conductor". Key settings:
 | `conductor.server.port` | `8484` | HTTP/WebSocket server port. |
 | `conductor.server.authToken` | *(empty)* | Bearer token for server authentication. |
 
-You **must** set `conductor.conventionsSkill` to match your project's tech
-stack. The extension derives the implementor and reviewer skill names from it
-(e.g. `go-conventions` → `go-implementor` + `go-reviewer`).
+Conductor stores the selected conventions skill plus the test and lint commands
+per feature in `.conductor/state.json`, rather than as workspace-wide settings.
 
 ### Run
 
 1. Open the Command Palette.
 2. Run **Conductor: Start**.
 
-Conductor auto-detects what to do based on the files present in `specDir`:
+Conductor auto-detects what to do based on the files present in the active feature directory:
 
 - **`prompt.md` found, no `spec.md`** — runs the spec-writing pipeline first:
   1. **Clarifying** — asks the LLM for clarification questions; you answer them

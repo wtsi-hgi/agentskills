@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { assembleSystemPrompt, buildClarificationSystemPrompt } from "../../llm/prompts";
+import { assembleSystemPrompt, buildClarificationSystemPrompt, deriveRoleSkillName } from "../../llm/prompts";
 import { discoverSkills, loadSkill } from "../../skills/loader";
 import type { ToolDefinition } from "../../types";
 
@@ -174,6 +174,47 @@ describe("assembleSystemPrompt", () => {
     expect(prompt).toContain("Read: Read files");
   });
 
+  it("returns pr-reviewer directly when deriving the role skill name", () => {
+    expect(deriveRoleSkillName("pr-reviewer", "go-conventions")).toBe("pr-reviewer");
+  });
+
+  it("loads the pr-reviewer skill without conventions skill content", async () => {
+    const skillsDir = await createSkillsDir();
+    await writeSkill(skillsDir, "go-conventions", "# Go Conventions\nShared rules\n");
+    await writeSkill(skillsDir, "pr-reviewer", "# PR Reviewer\nReview PR findings.\n");
+
+    const prompt = await assembleSystemPrompt(
+      "pr-reviewer",
+      skillsDir,
+      "go-conventions",
+      "Context",
+      [],
+    );
+
+    expect(prompt).toContain("# PR Reviewer");
+    expect(prompt).toContain("Review PR findings.");
+    expect(prompt).not.toContain("# Go Conventions");
+    expect(prompt).not.toContain("Shared rules");
+  });
+
+  it("includes tool definitions and wire format for pr-reviewer prompts", async () => {
+    const skillsDir = await createSkillsDir();
+    await writeSkill(skillsDir, "pr-reviewer", "# PR Reviewer\nReview PR findings.\n");
+
+    const prompt = await assembleSystemPrompt(
+      "pr-reviewer",
+      skillsDir,
+      "",
+      "Context",
+      [{ name: "Read", description: "Read files", parameters: { path: { type: "string" } } }],
+    );
+
+    expect(prompt).toContain("# Tool Definitions");
+    expect(prompt).toContain("Read: Read files");
+    expect(prompt).toContain("# Tool Call Wire Format");
+    expect(prompt).toContain("<tool_call>");
+  });
+
   it("strips agent-conduct references from spec-proofreader prompts", async () => {
     const skillsDir = await createSkillsDir();
     await writeSkill(
@@ -207,6 +248,16 @@ describe("assembleSystemPrompt", () => {
         [],
       ),
     ).rejects.toThrow(/cannot infer implementor skill/i);
+
+    await expect(
+      assembleSystemPrompt(
+        "implementor",
+        skillsDir,
+        "",
+        "Context",
+        [],
+      ),
+    ).rejects.not.toThrow(/conductor\.conventionsSkill/i);
   });
 
   it("fails clearly when reviewer skill cannot be inferred from a non-stack conventions skill", async () => {

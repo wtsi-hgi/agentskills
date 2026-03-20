@@ -169,6 +169,47 @@ function formatOutput(stdout: string, stderr: string, exitCode: number | null, s
   return sections.join("\n");
 }
 
+function runBashCommand(
+  shellPath: string,
+  command: string,
+  projectDir: string,
+  timeoutMs: number,
+): Promise<ToolResult> {
+  return new Promise<ToolResult>((resolve) => {
+    execFile(shellPath, ["-lc", command], {
+      cwd: projectDir,
+      timeout: timeoutMs,
+      killSignal: "SIGKILL",
+    }, (error, stdout, stderr) => {
+      if (!error) {
+        resolve({
+          success: true,
+          output: formatOutput(stdout, stderr, 0, null),
+        });
+        return;
+      }
+
+      const exitCode = typeof error.code === "number" ? error.code : null;
+      const output = formatOutput(stdout, stderr, exitCode, error.signal ?? null);
+
+      if (error.killed) {
+        resolve({
+          success: false,
+          output,
+          error: `command timeout after ${timeoutMs}ms`,
+        });
+        return;
+      }
+
+      resolve({
+        success: false,
+        output,
+        error: `command exited with code ${exitCode ?? "unknown"}`,
+      });
+    });
+  });
+}
+
 export function validateBashCommand(
   command: string,
   projectDir: string,
@@ -230,37 +271,13 @@ export function executeBash(
     });
   }
 
-  return new Promise<ToolResult>((resolve) => {
-    execFile("bash", ["-lc", command], {
-      cwd: projectDir,
-      timeout: timeoutMs,
-      killSignal: "SIGKILL",
-    }, (error, stdout, stderr) => {
-      if (!error) {
-        resolve({
-          success: true,
-          output: formatOutput(stdout, stderr, 0, null),
-        });
-        return;
-      }
+  return runBashCommand("bash", command, projectDir, timeoutMs);
+}
 
-      const exitCode = typeof error.code === "number" ? error.code : null;
-      const output = formatOutput(stdout, stderr, exitCode, error.signal ?? null);
-
-      if (error.killed) {
-        resolve({
-          success: false,
-          output,
-          error: `command timeout after ${timeoutMs}ms`,
-        });
-        return;
-      }
-
-      resolve({
-        success: false,
-        output,
-        error: `command exited with code ${exitCode ?? "unknown"}`,
-      });
-    });
-  });
+export function executeTrusted(
+  command: string,
+  projectDir: string,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<ToolResult> {
+  return runBashCommand("/bin/bash", command, projectDir, timeoutMs);
 }

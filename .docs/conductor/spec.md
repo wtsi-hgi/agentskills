@@ -106,19 +106,20 @@ export interface ModelAssignment {
   family: string;
 }
 export interface OrchestratorConfig {
-  specDir: string;
   projectDir: string;
   skillsDir: string;
-  conventionsSkill: string;
+  docsDir: string;
   modelAssignments: ModelAssignment[];
   maxTurns: number;
   maxRetries: number;
-  testCommand: string;
   requireApproval: boolean;
 }
 
 export interface OrchestratorState {
   specDir: string;
+  conventionsSkill: string;
+  testCommand: string;
+  lintCommand: string;
   currentPhase: number;
   currentItemIndex: number;
   consecutivePasses: Record<string, number>;
@@ -258,16 +259,18 @@ export function deactivate(): void;
 
 Configuration (`contributes.configuration`):
 
-- `conductor.specDir`: string, default `.docs/`
+- `conductor.docsDir`: string, default `.docs/`
 - `conductor.skillsDir`: string, default `~/.agents/skills/`
-- `conductor.conventionsSkill`: string, default `""`
 - `conductor.maxTurns`: number, default `50`
 - `conductor.maxRetries`: number, default `3`
-- `conductor.testCommand`: string, default `"npm test"`
 - `conductor.requireApproval`: boolean, default `false`
 - `conductor.models.implementor`: `{vendor,family}` object
 - `conductor.models.reviewer`: `{vendor,family}` object
 - `conductor.models.specWriter`: `{vendor,family}` object
+
+Per-feature state persists `specDir`, `conventionsSkill`,
+`testCommand`, and `lintCommand` in `state.json`.
+
 - `conductor.server.port`: number, default `8484`
 - `conductor.server.authToken`: string, default `""`
 

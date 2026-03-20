@@ -29,6 +29,25 @@ describe("selectModelForRole", () => {
     expect(model.family).toBe("gpt-4o");
   });
 
+  it("returns the matching model for pr-reviewer", async () => {
+    const assignments: ModelAssignment[] = [
+      { role: "pr-reviewer", vendor: "copilot", family: "o3" },
+    ];
+
+    globalThis.__conductorVscode = {
+      lm: {
+        async selectChatModels(selector) {
+          expect(selector).toEqual({ vendor: "copilot", family: "o3" });
+          return [{ family: "o3" }] as unknown as vscode.LanguageModelChat[];
+        },
+      },
+    };
+
+    const model = await selectModelForRole("pr-reviewer", assignments);
+
+    expect(model.family).toBe("o3");
+  });
+
   it("throws when no matching model is returned", async () => {
     const assignments: ModelAssignment[] = [
       { role: "implementor", vendor: "copilot", family: "gpt-4o" },

@@ -6,7 +6,14 @@ import { WebSocket, WebSocketServer } from "ws";
 
 import type { Orchestrator } from "../../orchestrator/machine";
 import { handleWebSocket } from "../../server/ws";
-import type { AddendumEntry, AuditEntry, ClarificationAnswer, OrchestratorState, RunTranscript } from "../../types";
+import type {
+  AddendumEntry,
+  AuditEntry,
+  ClarificationAnswer,
+  DashboardControlBridge,
+  OrchestratorState,
+  RunTranscript,
+} from "../../types";
 
 class TestEmitter<T> {
   private readonly listeners = new Set<(value: T) => void>();
@@ -35,9 +42,15 @@ type OrchestratorHarness = {
   transcriptEmitter: TestEmitter<RunTranscript>;
   calls: {
     pause: number;
+    startCopilotReReview: number;
+    startRun: Array<{ prompt: string; conventionsSkill: string; testCommand: string; lintCommand: string }>;
+    fixBugs: Array<{ prompt: string; conventionsSkill: string; testCommand: string; lintCommand: string }>;
+    abandonRun: number;
     addNote: Array<{ itemId: string; text: string; author?: string }>;
     submitClarification: ClarificationAnswer[][];
+    overrideCommands: Array<{ testCommand: string; lintCommand: string }>;
   };
+  controlBridge: DashboardControlBridge;
 };
 
 const socketsToClose: WebSocket[] = [];
@@ -47,6 +60,9 @@ const httpServersToClose: Array<ReturnType<typeof createServer>> = [];
 function createState(overrides: Partial<OrchestratorState> = {}): OrchestratorState {
   return {
     specDir: ".docs/conductor",
+    conventionsSkill: "",
+    testCommand: "npm test",
+    lintCommand: "",
     currentPhase: 1,
     currentItemIndex: 0,
     consecutivePasses: {},
@@ -68,14 +84,23 @@ function createHarness(initialState = createState()): OrchestratorHarness {
   const transcriptEmitter = new TestEmitter<RunTranscript>();
   const calls = {
     pause: 0,
+    startCopilotReReview: 0,
+    startRun: [] as Array<{ prompt: string; conventionsSkill: string; testCommand: string; lintCommand: string }>,
+    fixBugs: [] as Array<{ prompt: string; conventionsSkill: string; testCommand: string; lintCommand: string }>,
+    abandonRun: 0,
     addNote: [] as Array<{ itemId: string; text: string; author?: string }>,
     submitClarification: [] as ClarificationAnswer[][],
+    overrideCommands: [] as Array<{ testCommand: string; lintCommand: string }>,
   };
 
   let currentState = initialState;
 
   const orchestrator: Orchestrator = {
     async run() {},
+    startCopilotReReview() {
+      calls.startCopilotReReview += 1;
+    },
+    abandon() {},
     pause() {
       calls.pause += 1;
     },
@@ -83,6 +108,9 @@ function createHarness(initialState = createState()): OrchestratorHarness {
     skip() {},
     retry() {},
     changeModel() {},
+    overrideCommands(testCommand: string, lintCommand: string) {
+      calls.overrideCommands.push({ testCommand, lintCommand });
+    },
     approve() {},
     reject() {},
     submitClarification(answers: ClarificationAnswer[]) {
@@ -127,14 +155,32 @@ function createHarness(initialState = createState()): OrchestratorHarness {
     onTranscript: transcriptEmitter.event as never,
   };
 
-  return { orchestrator, stateEmitter, auditEmitter, addendumEmitter, transcriptEmitter, calls };
+  const controlBridge: DashboardControlBridge = {
+    getControlOptions() {
+      return { conventionsSkills: ["python-conventions", "nextjs-fastapi-conventions"] };
+    },
+    startRun(request) {
+      calls.startRun.push(request);
+    },
+    fixBugs(request) {
+      calls.fixBugs.push(request);
+    },
+    abandonRun() {
+      calls.abandonRun += 1;
+    },
+  };
+
+  return { orchestrator, stateEmitter, auditEmitter, addendumEmitter, transcriptEmitter, calls, controlBridge };
 }
 
-async function createWsServer(orchestrator: Orchestrator): Promise<{ server: WebSocketServer; port: number }> {
+async function createWsServer(
+  orchestrator: Orchestrator,
+  controlBridge?: DashboardControlBridge,
+): Promise<{ server: WebSocketServer; port: number }> {
   const httpServer = createServer();
   const server = new WebSocketServer({ server: httpServer });
   server.on("connection", (socket: WebSocket) => {
-    handleWebSocket(socket, orchestrator);
+    handleWebSocket(socket, orchestrator, controlBridge);
   });
 
   await new Promise<void>((resolve) => {
@@ -203,7 +249,7 @@ afterEach(async () => {
 describe("handleWebSocket", () => {
   it("sends all phases to newly connected clients", async () => {
     const harness = createHarness();
-    const { port } = await createWsServer(harness.orchestrator);
+    const { port } = await createWsServer(harness.orchestrator, harness.controlBridge);
     const client = await openClient(port);
 
     const phaseMessages = await waitFor(() => {
@@ -218,6 +264,25 @@ describe("handleWebSocket", () => {
       { type: "phase", data: { number: 1, title: "Phase 1", items: [], batches: [] } },
       { type: "phase", data: { number: 2, title: "Phase 2", items: [], batches: [] } },
     ]);
+  });
+
+  it("sends control options to newly connected clients", async () => {
+    const harness = createHarness();
+    const { port } = await createWsServer(harness.orchestrator, harness.controlBridge);
+    const client = await openClient(port);
+
+    const controlOptionsMessage = await waitFor(() => client.messages.find((message) => {
+      return typeof message === "object"
+        && message !== null
+        && (message as { type?: string }).type === "control-options"
+        ? message
+        : undefined;
+    }));
+
+    expect(controlOptionsMessage).toEqual({
+      type: "control-options",
+      data: { conventionsSkills: ["python-conventions", "nextjs-fastapi-conventions"] },
+    });
   });
 
   it("broadcasts state updates to multiple connected clients", async () => {
@@ -244,6 +309,166 @@ describe("handleWebSocket", () => {
         ? message
         : undefined;
     }));
+  });
+
+  it("broadcasts bugfix-status updates when bugfix state is present", async () => {
+    const harness = createHarness(createState({
+      bugStep: "reviewing",
+      bugIndex: 1,
+      bugFixCycle: 3,
+      bugIssues: [
+        { title: "one", description: "first" },
+        { title: "two", description: "second" },
+      ],
+    }));
+    const { port } = await createWsServer(harness.orchestrator);
+    const client = await openClient(port);
+
+    const initialBugfixStatus = await waitFor(() => client.messages.find((message) => {
+      return typeof message === "object"
+        && message !== null
+        && (message as { type?: string }).type === "bugfix-status"
+        ? message
+        : undefined;
+    }));
+
+    expect(initialBugfixStatus).toEqual({
+      type: "bugfix-status",
+      data: {
+        bugIndex: 1,
+        bugCount: 2,
+        fixCycle: 3,
+        bugStep: "reviewing",
+      },
+    });
+
+    harness.stateEmitter.fire(createState({
+      bugStep: "done",
+      bugIndex: 2,
+      bugFixCycle: 5,
+      bugIssues: [
+        { title: "one", description: "first" },
+        { title: "two", description: "second" },
+      ],
+    }));
+
+    const finalBugfixStatus = await waitFor(() => {
+      const reversed = [...client.messages].reverse();
+      return reversed.find((message) => {
+        return typeof message === "object"
+          && message !== null
+          && (message as { type?: string }).type === "bugfix-status"
+          && (message as { data?: { bugStep?: string } }).data?.bugStep === "done"
+          ? message
+          : undefined;
+      });
+    });
+
+    expect(finalBugfixStatus).toEqual({
+      type: "bugfix-status",
+      data: {
+        bugIndex: 2,
+        bugCount: 2,
+        fixCycle: 5,
+        bugStep: "done",
+      },
+    });
+  });
+
+  it("broadcasts a cleared bugfix-status when the next state is not a bugfix run", async () => {
+    const harness = createHarness(createState({
+      bugStep: "reviewing",
+      bugIndex: 0,
+      bugFixCycle: 2,
+      bugIssues: [{ title: "one", description: "first" }],
+    }));
+    const { port } = await createWsServer(harness.orchestrator);
+    const client = await openClient(port);
+
+    await waitFor(() => client.messages.find((message) => {
+      return typeof message === "object"
+        && message !== null
+        && (message as { type?: string }).type === "bugfix-status"
+        && (message as { data?: { bugStep?: string } }).data?.bugStep === "reviewing"
+        ? message
+        : undefined;
+    }));
+
+    harness.stateEmitter.fire(createState({
+      currentPhase: 2,
+      currentItemIndex: 1,
+      bugStep: undefined,
+      bugIndex: undefined,
+      bugFixCycle: undefined,
+      bugIssues: undefined,
+    }));
+
+    const clearedBugfixStatus = await waitFor(() => {
+      const reversed = [...client.messages].reverse();
+      return reversed.find((message) => {
+        return typeof message === "object"
+          && message !== null
+          && (message as { type?: string }).type === "bugfix-status"
+          && (message as { data?: unknown }).data === null
+          ? message
+          : undefined;
+      });
+    });
+
+    expect(clearedBugfixStatus).toEqual({
+      type: "bugfix-status",
+      data: null,
+    });
+  });
+
+  it("broadcasts pr-review-status updates on connect and state changes", async () => {
+    const harness = createHarness(createState({
+      prReviewStep: "spec-aware",
+      prReviewConsecutivePasses: 1,
+    }));
+    const { port } = await createWsServer(harness.orchestrator);
+    const client = await openClient(port);
+
+    const initialPrReviewStatus = await waitFor(() => client.messages.find((message) => {
+      return typeof message === "object"
+        && message !== null
+        && (message as { type?: string }).type === "pr-review-status"
+        ? message
+        : undefined;
+    }));
+
+    expect(initialPrReviewStatus).toEqual({
+      type: "pr-review-status",
+      data: {
+        step: "spec-aware",
+        consecutivePasses: 1,
+      },
+    });
+
+    harness.stateEmitter.fire(createState({
+      prReviewStep: "spec-free",
+      prReviewConsecutivePasses: 2,
+    }));
+
+    const finalPrReviewStatus = await waitFor(() => {
+      const reversed = [...client.messages].reverse();
+      return reversed.find((message) => {
+        return typeof message === "object"
+          && message !== null
+          && (message as { type?: string }).type === "pr-review-status"
+          && (message as { data?: { step?: string } }).data?.step === "spec-free"
+          ? message
+          : undefined;
+      });
+    });
+
+    expect(finalPrReviewStatus).toEqual({
+      type: "pr-review-status",
+      data: {
+        step: "spec-free",
+        consecutivePasses: 2,
+      },
+    });
   });
 
   it("sends historical addendum entries to newly connected clients", async () => {
@@ -420,5 +645,94 @@ describe("handleWebSocket", () => {
         answer: "TypeScript",
       },
     ]]);
+  });
+
+  it("calls orchestrator.overrideCommands when a client sends an override-commands message", async () => {
+    const harness = createHarness();
+    const { port } = await createWsServer(harness.orchestrator);
+    const client = await openClient(port);
+
+    client.socket.send(JSON.stringify({
+      type: "override-commands",
+      testCommand: "pnpm test",
+      lintCommand: "pnpm lint --fix",
+    }));
+
+    await waitFor(() => harness.calls.overrideCommands[0]);
+    expect(harness.calls.overrideCommands).toEqual([
+      { testCommand: "pnpm test", lintCommand: "pnpm lint --fix" },
+    ]);
+  });
+
+  it("calls orchestrator.startCopilotReReview when a client sends a copilot-rereview message", async () => {
+    const harness = createHarness();
+    const { port } = await createWsServer(harness.orchestrator, harness.controlBridge);
+    const client = await openClient(port);
+
+    client.socket.send(JSON.stringify({ type: "copilot-rereview" }));
+
+    await waitFor(() => harness.calls.startCopilotReReview > 0 ? harness.calls.startCopilotReReview : undefined);
+    expect(harness.calls.startCopilotReReview).toBe(1);
+  });
+
+  it("calls the control bridge when a client sends a start-feature message", async () => {
+    const harness = createHarness();
+    const { port } = await createWsServer(harness.orchestrator, harness.controlBridge);
+    const client = await openClient(port);
+
+    client.socket.send(JSON.stringify({
+      type: "start-feature",
+      prompt: "Add dashboard controls",
+      conventionsSkill: "python-conventions",
+      testCommand: "pytest",
+      lintCommand: "ruff check .",
+    }));
+
+    await waitFor(() => harness.calls.startRun[0]);
+    expect(harness.calls.startRun).toEqual([
+      {
+        type: "start-feature",
+        prompt: "Add dashboard controls",
+        conventionsSkill: "python-conventions",
+        testCommand: "pytest",
+        lintCommand: "ruff check .",
+      },
+    ]);
+  });
+
+  it("calls the control bridge when a client sends a start-bugfix message", async () => {
+    const harness = createHarness();
+    const { port } = await createWsServer(harness.orchestrator, harness.controlBridge);
+    const client = await openClient(port);
+
+    client.socket.send(JSON.stringify({
+      type: "start-bugfix",
+      prompt: "Fix the websocket status bug",
+      conventionsSkill: "nextjs-fastapi-conventions",
+      testCommand: "pnpm test",
+      lintCommand: "pnpm lint",
+    }));
+
+    await waitFor(() => harness.calls.fixBugs[0]);
+    expect(harness.calls.fixBugs).toEqual([
+      {
+        type: "start-bugfix",
+        prompt: "Fix the websocket status bug",
+        conventionsSkill: "nextjs-fastapi-conventions",
+        testCommand: "pnpm test",
+        lintCommand: "pnpm lint",
+      },
+    ]);
+  });
+
+  it("calls the control bridge when a client sends an abandon message", async () => {
+    const harness = createHarness();
+    const { port } = await createWsServer(harness.orchestrator, harness.controlBridge);
+    const client = await openClient(port);
+
+    client.socket.send(JSON.stringify({ type: "abandon" }));
+
+    await waitFor(() => harness.calls.abandonRun > 0 ? harness.calls.abandonRun : undefined);
+    expect(harness.calls.abandonRun).toBe(1);
   });
 });

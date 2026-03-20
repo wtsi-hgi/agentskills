@@ -14,6 +14,8 @@
   "activationEvents": [
     "onView:conductor.sidebar",
     "onCommand:conductor.start",
+    "onCommand:conductor.fixBugs",
+    "onCommand:conductor.abandon",
     "onCommand:conductor.pause",
     "onCommand:conductor.resume",
     "onCommand:conductor.status",
@@ -44,6 +46,14 @@
         "title": "Conductor: Start"
       },
       {
+        "command": "conductor.fixBugs",
+        "title": "Conductor: Fix Bugs"
+      },
+      {
+        "command": "conductor.abandon",
+        "title": "Conductor: Abandon Run"
+      },
+      {
         "command": "conductor.pause",
         "title": "Conductor: Pause"
       },
@@ -63,20 +73,15 @@
     "configuration": {
       "title": "Conductor",
       "properties": {
-        "conductor.specDir": {
+        "conductor.docsDir": {
           "type": "string",
-          "default": ".docs/conductor",
-          "description": "Path to the conductor specification directory."
+          "default": ".docs/",
+          "description": "Path to the conductor documents directory."
         },
         "conductor.skillsDir": {
           "type": "string",
           "default": "~/.agents/skills/",
           "description": "Path to the shared skills directory."
-        },
-        "conductor.conventionsSkill": {
-          "type": "string",
-          "default": "",
-          "description": "Optional conventions skill name."
         },
         "conductor.maxTurns": {
           "type": "number",
@@ -87,11 +92,6 @@
           "type": "number",
           "default": 3,
           "description": "Maximum retries before advancing."
-        },
-        "conductor.testCommand": {
-          "type": "string",
-          "default": "npm test",
-          "description": "Command used to run project tests."
         },
         "conductor.requireApproval": {
           "type": "boolean",
@@ -113,6 +113,14 @@
             "family": ""
           },
           "description": "Model assignment for the reviewer role."
+        },
+        "conductor.models.prReviewer": {
+          "type": "object",
+          "default": {
+            "vendor": "",
+            "family": ""
+          },
+          "description": "Model assignment for the pr-reviewer role."
         },
         "conductor.models.specAuthor": {
           "type": "object",

@@ -452,6 +452,26 @@
             <span>Consecutive passes</span>
             <strong id="spec-pass-count">0</strong>
           </div>
+          <div class="status-card" id="bugfix-current-card" hidden>
+            <span>Current bug</span>
+            <strong id="bugfix-current">1 / 1</strong>
+          </div>
+          <div class="status-card" id="bugfix-cycle-card" hidden>
+            <span>Fix-review cycle</span>
+            <strong id="bugfix-cycle">0</strong>
+          </div>
+          <div class="status-card" id="bugfix-approval-card" hidden>
+            <span>Approval status</span>
+            <strong id="bugfix-approval">Fix in progress</strong>
+          </div>
+          <div class="status-card" id="pr-review-step-card" hidden>
+            <span>PR review step</span>
+            <strong id="pr-review-step">Spec Aware</strong>
+          </div>
+          <div class="status-card" id="pr-review-pass-card" hidden>
+            <span>PR consecutive passes</span>
+            <strong id="pr-review-pass-count">0</strong>
+          </div>
         </div>
       </section>
 
@@ -499,6 +519,34 @@
             <div class="button-row">
               <button id="pause-button" type="button">Pause</button>
               <button class="secondary" id="resume-button" type="button">Resume</button>
+              <button class="secondary" id="copilot-rereview-button" type="button">Copilot Re-Review</button>
+              <button class="secondary" id="abandon-button" type="button">Abandon</button>
+            </div>
+          </div>
+          <div class="control-card">
+            <label>
+              Inline prompt
+              <textarea id="inline-prompt-input"
+                placeholder="Describe the feature or bugfix to run from the browser."></textarea>
+            </label>
+            <label>
+              Conventions skill
+              <select id="conventions-skill-select">
+                <option value="">None</option>
+              </select>
+            </label>
+            <label>
+              Test command
+              <input id="test-command-input" type="text" value="npm test">
+            </label>
+            <label>
+              Lint command
+              <input id="lint-command-input" type="text" value="">
+            </label>
+            <div class="button-row">
+              <button class="secondary" id="override-commands-button" type="button">Apply Commands</button>
+              <button id="start-run-button" type="button">Start</button>
+              <button class="secondary" id="fix-bugs-button" type="button">Fix Bugs</button>
             </div>
           </div>
           <div class="control-card">
@@ -568,6 +616,9 @@
         reconnectAttempt: 0,
         filterRole: "all",
         filterStatus: "all",
+        bugfixStatus: null,
+        prReviewStatus: { step: "done", consecutivePasses: 0 },
+        controlOptions: { conventionsSkills: [] },
         state: {
           currentPhase: 1,
           currentItemIndex: 0,
@@ -594,6 +645,16 @@
         specStep: documentRef.getElementById("spec-step"),
         specPassCard: documentRef.getElementById("spec-pass-card"),
         specPassCount: documentRef.getElementById("spec-pass-count"),
+        bugfixCurrentCard: documentRef.getElementById("bugfix-current-card"),
+        bugfixCurrent: documentRef.getElementById("bugfix-current"),
+        bugfixCycleCard: documentRef.getElementById("bugfix-cycle-card"),
+        bugfixCycle: documentRef.getElementById("bugfix-cycle"),
+        bugfixApprovalCard: documentRef.getElementById("bugfix-approval-card"),
+        bugfixApproval: documentRef.getElementById("bugfix-approval"),
+        prReviewStepCard: documentRef.getElementById("pr-review-step-card"),
+        prReviewStep: documentRef.getElementById("pr-review-step"),
+        prReviewPassCard: documentRef.getElementById("pr-review-pass-card"),
+        prReviewPassCount: documentRef.getElementById("pr-review-pass-count"),
         phaseStack: documentRef.getElementById("phase-stack"),
         auditList: documentRef.getElementById("audit-list"),
         auditRoleFilter: documentRef.getElementById("audit-role-filter"),
@@ -606,6 +667,15 @@
         notesList: documentRef.getElementById("notes-list"),
         pauseButton: documentRef.getElementById("pause-button"),
         resumeButton: documentRef.getElementById("resume-button"),
+        copilotRereviewButton: documentRef.getElementById("copilot-rereview-button"),
+        abandonButton: documentRef.getElementById("abandon-button"),
+        inlinePromptInput: documentRef.getElementById("inline-prompt-input"),
+        conventionsSkillSelect: documentRef.getElementById("conventions-skill-select"),
+        testCommandInput: documentRef.getElementById("test-command-input"),
+        lintCommandInput: documentRef.getElementById("lint-command-input"),
+        overrideCommandsButton: documentRef.getElementById("override-commands-button"),
+        startRunButton: documentRef.getElementById("start-run-button"),
+        fixBugsButton: documentRef.getElementById("fix-bugs-button"),
         approveButton: documentRef.getElementById("approve-button"),
         rejectButton: documentRef.getElementById("reject-button"),
         approvalItemId: documentRef.getElementById("approval-item-id"),
@@ -647,6 +717,44 @@
             return segment.charAt(0).toUpperCase() + segment.slice(1);
           })
           .join(" ");
+      }
+
+      function formatBugApprovalStatus(step) {
+        switch (String(step || "")) {
+          case "reviewing":
+            return "Under review";
+          case "approving":
+            return "Awaiting approval";
+          case "committing":
+          case "done":
+            return "Approved";
+          case "fixing":
+          default:
+            return "Fix in progress";
+        }
+      }
+
+      function populateConventionsSelect() {
+        const selected = typeof store.state.conventionsSkill === "string" ? store.state.conventionsSkill : "";
+        const available = Array.isArray(store.controlOptions && store.controlOptions.conventionsSkills)
+          ? store.controlOptions.conventionsSkills.slice()
+          : [];
+
+        if (selected && available.indexOf(selected) === -1) {
+          available.unshift(selected);
+        }
+
+        elements.conventionsSkillSelect.innerHTML = ['<option value="">None</option>'].concat(available.map(function (skill) {
+          const isSelected = skill === selected ? ' selected' : '';
+          return '<option value="' + escapeHtml(skill) + '"' + isSelected + '>' + escapeHtml(skill) + '</option>';
+        })).join("");
+        elements.conventionsSkillSelect.value = selected;
+      }
+
+      function syncControlInputs() {
+        elements.testCommandInput.value = store.state.testCommand || "npm test";
+        elements.lintCommandInput.value = typeof store.state.lintCommand === "string" ? store.state.lintCommand : "";
+        populateConventionsSelect();
       }
 
       function sendMessage(payload) {
@@ -864,6 +972,8 @@
         const currentItem = getCurrentItem();
         const specStep = String(store.state.specStep || "done");
         const specActive = specStep !== "done";
+        const bugfixActive = Boolean(store.bugfixStatus);
+        const prReviewActive = store.prReviewStatus.step !== "done";
         elements.runStatus.textContent = String(store.state.status || "idle");
         elements.startedBy.textContent = String(store.state.startedBy || "unknown");
         elements.connectionStatus.dataset.connected = String(store.connected);
@@ -872,12 +982,28 @@
         elements.currentItem.textContent = currentItem ? currentItem.id + ' - ' + currentItem.title : 'None selected';
         elements.specStepCard.hidden = !specActive;
         elements.specPassCard.hidden = !specActive;
-        if (!specActive) {
-          return;
+        if (specActive) {
+          elements.specStep.textContent = formatSpecStep(specStep);
+          elements.specPassCount.textContent = String(Number(store.state.specConsecutivePasses || 0));
         }
 
-        elements.specStep.textContent = formatSpecStep(specStep);
-        elements.specPassCount.textContent = String(Number(store.state.specConsecutivePasses || 0));
+        elements.bugfixCurrentCard.hidden = !bugfixActive;
+        elements.bugfixCycleCard.hidden = !bugfixActive;
+        elements.bugfixApprovalCard.hidden = !bugfixActive;
+        if (bugfixActive) {
+          elements.bugfixCurrent.textContent = String(Number(store.bugfixStatus.bugIndex || 0) + 1) + ' / ' + String(Number(store.bugfixStatus.bugCount || 0));
+          elements.bugfixCycle.textContent = String(Number(store.bugfixStatus.fixCycle || 0));
+          elements.bugfixApproval.textContent = formatBugApprovalStatus(store.bugfixStatus.bugStep || '');
+        }
+
+        elements.prReviewStepCard.hidden = !prReviewActive;
+        elements.prReviewPassCard.hidden = !prReviewActive;
+        if (prReviewActive) {
+          elements.prReviewStep.textContent = formatSpecStep(store.prReviewStatus.step || '');
+          elements.prReviewPassCount.textContent = String(Number(store.prReviewStatus.consecutivePasses || 0));
+        }
+
+        syncControlInputs();
       }
 
       function render() {
@@ -900,6 +1026,24 @@
           store.state = Object.assign({}, store.state, message.data || {});
           store.phases = normalizePhases(message.data);
           render();
+          return;
+        }
+
+        if (message.type === "bugfix-status") {
+          store.bugfixStatus = message.data || null;
+          renderSummary();
+          return;
+        }
+
+        if (message.type === "pr-review-status") {
+          store.prReviewStatus = message.data || { step: "done", consecutivePasses: 0 };
+          renderSummary();
+          return;
+        }
+
+        if (message.type === "control-options") {
+          store.controlOptions = message.data || { conventionsSkills: [] };
+          syncControlInputs();
           return;
         }
 
@@ -998,6 +1142,52 @@
 
       elements.resumeButton.addEventListener("click", function () {
         sendMessage({ type: "resume" });
+      });
+
+      elements.abandonButton.addEventListener("click", function () {
+        sendMessage({ type: "abandon" });
+      });
+
+      elements.copilotRereviewButton.addEventListener("click", function () {
+        sendMessage({ type: "copilot-rereview" });
+      });
+
+      elements.overrideCommandsButton.addEventListener("click", function () {
+        sendMessage({
+          type: "override-commands",
+          testCommand: elements.testCommandInput.value || "",
+          lintCommand: elements.lintCommandInput.value || "",
+        });
+      });
+
+      elements.startRunButton.addEventListener("click", function () {
+        const prompt = elements.inlinePromptInput.value.trim();
+        if (!prompt) {
+          return;
+        }
+
+        sendMessage({
+          type: "start-feature",
+          prompt: prompt,
+          conventionsSkill: elements.conventionsSkillSelect.value || "",
+          testCommand: elements.testCommandInput.value || "",
+          lintCommand: elements.lintCommandInput.value || "",
+        });
+      });
+
+      elements.fixBugsButton.addEventListener("click", function () {
+        const prompt = elements.inlinePromptInput.value.trim();
+        if (!prompt) {
+          return;
+        }
+
+        sendMessage({
+          type: "start-bugfix",
+          prompt: prompt,
+          conventionsSkill: elements.conventionsSkillSelect.value || "",
+          testCommand: elements.testCommandInput.value || "",
+          lintCommand: elements.lintCommandInput.value || "",
+        });
       });
 
       elements.approveButton.addEventListener("click", function () {
