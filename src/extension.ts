@@ -10,6 +10,7 @@ import type {
   OrchestratorConfig,
   OrchestratorState,
   RunStatus,
+  SpecStep,
   VscodeApiLike,
 } from "./types";
 import { createOrchestrator, type Orchestrator } from "./orchestrator/machine";
@@ -27,6 +28,7 @@ const COMMAND_STATUS = "conductor.status";
 const COMMAND_DASHBOARD = "conductor.dashboard";
 const SIDEBAR_VIEW_ID = "conductor.sidebar";
 const SERVER_APP_DIR = ["src", "server", "app"];
+const MISSING_SPEC_INPUT_MESSAGE = "No spec.md or prompt.md found in specDir.";
 
 const DEFAULTS = {
   specDir: ".docs/conductor",
@@ -114,6 +116,10 @@ function normalizeState(deps: ExtensionDependencies, workspaceDir: string, state
   return {
     ...state,
     specDir: resolveSpecDir(deps, workspaceDir, state.specDir || DEFAULTS.specDir),
+    specStep: state.specStep ?? "done",
+    specConsecutivePasses: state.specConsecutivePasses ?? 0,
+    specPhaseFileIndex: state.specPhaseFileIndex ?? 0,
+    clarificationQuestions: state.clarificationQuestions ?? [],
   };
 }
 
@@ -136,7 +142,23 @@ function getModelAssignments(vscodeApi: VscodeApiLike): ModelAssignment[] {
     vendor: "",
     family: "",
   });
-  const specWriter = configuration.get<{ vendor: string; family: string }>("models.specWriter", {
+  const specAuthor = configuration.get<{ vendor: string; family: string }>("models.specAuthor", {
+    vendor: "",
+    family: "",
+  });
+  const specReviewer = configuration.get<{ vendor: string; family: string }>("models.specReviewer", {
+    vendor: "",
+    family: "",
+  });
+  const specProofreader = configuration.get<{ vendor: string; family: string }>("models.specProofreader", {
+    vendor: "",
+    family: "",
+  });
+  const phaseCreator = configuration.get<{ vendor: string; family: string }>("models.phaseCreator", {
+    vendor: "",
+    family: "",
+  });
+  const phaseReviewer = configuration.get<{ vendor: string; family: string }>("models.phaseReviewer", {
     vendor: "",
     family: "",
   });
@@ -144,11 +166,20 @@ function getModelAssignments(vscodeApi: VscodeApiLike): ModelAssignment[] {
   return [
     { role: "implementor", ...implementor },
     { role: "reviewer", ...reviewer },
-    { role: "spec-writer", ...specWriter },
+    { role: "spec-author", ...specAuthor },
+    { role: "spec-reviewer", ...specReviewer },
+    { role: "spec-proofreader", ...specProofreader },
+    { role: "phase-creator", ...phaseCreator },
+    { role: "phase-reviewer", ...phaseReviewer },
   ];
 }
 
-function createInitialState(deps: ExtensionDependencies, workspaceDir: string, status: RunStatus): OrchestratorState {
+function createInitialState(
+  deps: ExtensionDependencies,
+  workspaceDir: string,
+  status: RunStatus,
+  specStep: SpecStep = "done",
+): OrchestratorState {
   const configuration = deps.vscode.workspace.getConfiguration("conductor");
   const configuredSpecDir = configuration.get("specDir", DEFAULTS.specDir);
 
@@ -157,6 +188,10 @@ function createInitialState(deps: ExtensionDependencies, workspaceDir: string, s
     currentPhase: 1,
     currentItemIndex: 0,
     consecutivePasses: {},
+    specStep,
+    specConsecutivePasses: 0,
+    specPhaseFileIndex: 0,
+    clarificationQuestions: [],
     status,
     modelAssignments: getModelAssignments(deps.vscode),
     itemStatuses: {},
@@ -230,6 +265,57 @@ async function showWorkspaceRequiredMessage(vscodeApi: VscodeApiLike): Promise<v
   await vscodeApi.window.showInformationMessage("Open a workspace folder to use Conductor.");
 }
 
+async function showStartErrorMessage(vscodeApi: VscodeApiLike, message: string): Promise<void> {
+  if (vscodeApi.window.showErrorMessage) {
+    await vscodeApi.window.showErrorMessage(message);
+    return;
+  }
+
+  await vscodeApi.window.showInformationMessage(message);
+}
+
+async function canStartRun(
+  deps: ExtensionDependencies,
+  state: OrchestratorState,
+): Promise<boolean> {
+  const specPath = deps.path.join(state.specDir, "spec.md");
+  const promptPath = deps.path.join(state.specDir, "prompt.md");
+  const [hasSpec, hasPrompt] = await Promise.all([
+    fileExists(deps, specPath),
+    fileExists(deps, promptPath),
+  ]);
+
+  if (hasSpec || hasPrompt) {
+    return true;
+  }
+
+  await showStartErrorMessage(deps.vscode, MISSING_SPEC_INPUT_MESSAGE);
+  return false;
+}
+
+async function detectStartSpecStep(
+  deps: ExtensionDependencies,
+  specDir: string,
+): Promise<SpecStep | undefined> {
+  const specPath = deps.path.join(specDir, "spec.md");
+  const promptPath = deps.path.join(specDir, "prompt.md");
+  const [hasSpec, hasPrompt] = await Promise.all([
+    fileExists(deps, specPath),
+    fileExists(deps, promptPath),
+  ]);
+
+  if (hasSpec) {
+    return "done";
+  }
+
+  if (hasPrompt) {
+    return "clarifying";
+  }
+
+  await showStartErrorMessage(deps.vscode, MISSING_SPEC_INPUT_MESSAGE);
+  return undefined;
+}
+
 async function maybePromptToResume(deps: ExtensionDependencies, workspaceDir: string): Promise<boolean> {
   const state = await readState(deps, workspaceDir);
   if (!state || (state.status !== "paused" && state.status !== "running")) {
@@ -246,14 +332,23 @@ async function maybePromptToResume(deps: ExtensionDependencies, workspaceDir: st
   return false;
 }
 
-async function handleStart(deps: ExtensionDependencies): Promise<void> {
+async function handleStart(deps: ExtensionDependencies): Promise<boolean> {
   const workspaceDir = getWorkspaceDir(deps.vscode);
   if (!workspaceDir) {
     await showWorkspaceRequiredMessage(deps.vscode);
-    return;
+    return false;
   }
 
-  await writeState(deps, workspaceDir, createInitialState(deps, workspaceDir, "running"));
+  const probeState = createInitialState(deps, workspaceDir, "running");
+  const specStep = await detectStartSpecStep(deps, probeState.specDir);
+  if (!specStep) {
+    return false;
+  }
+
+  const initialState = createInitialState(deps, workspaceDir, "running", specStep);
+
+  await writeState(deps, workspaceDir, initialState);
+  return true;
 }
 
 async function handlePause(deps: ExtensionDependencies): Promise<void> {
@@ -410,7 +505,11 @@ export function createExtensionController(
       }
 
       register(COMMAND_START, async () => {
-        await handleStart(deps);
+        const started = await handleStart(deps);
+        if (!started) {
+          return;
+        }
+
         void orchestrator?.run(runToken);
         if (workspaceDir) {
           const nextState = await readState(deps, workspaceDir);

@@ -1,4 +1,13 @@
-export type Role = "implementor" | "reviewer" | "spec-writer";
+export type Role =
+  | "implementor"
+  | "reviewer"
+  | "spec-author"
+  | "spec-reviewer"
+  | "spec-proofreader"
+  | "phase-creator"
+  | "phase-reviewer";
+
+export type AuditRole = Role | "clarifier";
 
 export type ItemStatus =
   | "pending"
@@ -8,7 +17,26 @@ export type ItemStatus =
   | "skipped"
   | "pending-approval";
 
-export type RunStatus = "idle" | "running" | "paused" | "done" | "error";
+export type RunStatus = "idle" | "running" | "paused" | "pending-approval" | "done" | "error";
+
+export interface ClarificationQuestion {
+  question: string;
+  suggestedOptions: string[];
+}
+
+export interface ClarificationAnswer {
+  question: string;
+  answer: string;
+}
+
+export type SpecStep =
+  | "clarifying"
+  | "authoring"
+  | "reviewing"
+  | "proofreading"
+  | "creating-phases"
+  | "reviewing-phases"
+  | "done";
 
 export interface ToolDefinition {
   name: string;
@@ -66,6 +94,10 @@ export interface OrchestratorState {
   currentPhase: number;
   currentItemIndex: number;
   consecutivePasses: Record<string, number>;
+  specStep: SpecStep;
+  specConsecutivePasses: number;
+  specPhaseFileIndex: number;
+  clarificationQuestions: ClarificationQuestion[];
   status: RunStatus;
   modelAssignments: ModelAssignment[];
   itemStatuses: Record<string, ItemStatus>;
@@ -74,7 +106,7 @@ export interface OrchestratorState {
 
 export interface AuditEntry {
   timestamp: string;
-  role: Role;
+  role: AuditRole;
   model: string;
   itemId: string;
   promptSummary: string;
@@ -99,7 +131,7 @@ export interface TranscriptMessage {
 
 export interface RunTranscript {
   timestamp: string;
-  role: Role;
+  role: AuditRole;
   model: string;
   itemId: string;
   messages: TranscriptMessage[];
@@ -124,7 +156,8 @@ export type ClientMessage =
   | { type: "changeModel"; role: Role; vendor: string; family: string }
   | { type: "approve"; itemId: string }
   | { type: "reject"; itemId: string; feedback: string }
-  | { type: "addNote"; itemId: string; text: string };
+  | { type: "addNote"; itemId: string; text: string }
+  | { type: "submit-clarification"; answers: ClarificationAnswer[] };
 
 export type ServerMessage =
   | { type: "state"; data: OrchestratorState }

@@ -2,7 +2,7 @@ import { readFile, readdir, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import type * as vscode from "vscode";
 
-import { assembleSystemPrompt } from "../llm/prompts";
+import { assembleSystemPrompt, buildClarificationSystemPrompt } from "../llm/prompts";
 import { invokeWithToolLoop } from "../llm/invoke";
 import { selectModelForRole } from "../llm/select";
 import { parsePhaseFile } from "./parser";
@@ -14,7 +14,10 @@ import { executeBash } from "../tools/bash";
 import { getToolDefinitions } from "../tools/schema";
 import type {
   AddendumEntry,
+  AuditRole,
   AuditEntry,
+  ClarificationAnswer,
+  ClarificationQuestion,
   InvocationResult,
   OrchestratorConfig,
   OrchestratorState,
@@ -22,10 +25,13 @@ import type {
   PhaseItem,
   Role,
   RunTranscript,
+  SpecStep,
   TranscriptMessage,
 } from "../types";
 
 const CONDUCTOR_DIR = ".conductor";
+
+const SPEC_APPROVAL_SENTINEL = "__spec__";
 
 type ApprovalAction =
   | { type: "approve" }
@@ -63,6 +69,7 @@ export interface Orchestrator {
   changeModel(role: Role, vendor: string, family: string): void;
   approve(itemId: string): void;
   reject(itemId: string, feedback: string): void;
+  submitClarification(answers: ClarificationAnswer[]): void;
   addNote(itemId: string, text: string, author?: string): void;
   getState(): OrchestratorState;
   getPhase(): Promise<Phase>;
@@ -105,6 +112,10 @@ function createDefaultState(config: OrchestratorConfig): OrchestratorState {
     currentPhase: 1,
     currentItemIndex: 0,
     consecutivePasses: {},
+    specStep: "done",
+    specConsecutivePasses: 0,
+    specPhaseFileIndex: 0,
+    clarificationQuestions: [],
     status: "idle",
     modelAssignments: config.modelAssignments.map((assignment) => ({ ...assignment })),
     itemStatuses: {},
@@ -115,6 +126,10 @@ function cloneState(state: OrchestratorState): OrchestratorState {
   return {
     ...state,
     consecutivePasses: { ...state.consecutivePasses },
+    clarificationQuestions: state.clarificationQuestions.map((question) => ({
+      question: question.question,
+      suggestedOptions: [...question.suggestedOptions],
+    })),
     modelAssignments: state.modelAssignments.map((assignment) => ({ ...assignment })),
     itemStatuses: { ...state.itemStatuses },
   };
@@ -147,10 +162,95 @@ function getVerdict(result: InvocationResult): "PASS" | "FAIL" | "error" {
   if (normalized.startsWith("PASS")) {
     return "PASS";
   }
-  if (normalized.startsWith("FAIL")) {
+  if (normalized.startsWith("FAIL") || normalized.startsWith("FIXED")) {
     return "FAIL";
   }
   return "error";
+}
+
+function isMissingPathError(error: unknown): error is NodeJS.ErrnoException {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && ((error as NodeJS.ErrnoException).code === "ENOENT" || (error as NodeJS.ErrnoException).code === "ENOTDIR");
+}
+
+function normalizeSpecStep(step: unknown): SpecStep {
+  if (
+    step === "clarifying"
+    || step === "authoring"
+    || step === "reviewing"
+    || step === "proofreading"
+    || step === "creating-phases"
+    || step === "reviewing-phases"
+    || step === "done"
+  ) {
+    return step;
+  }
+
+  return "done";
+}
+
+function deriveImplementationSkillName(role: "implementor" | "reviewer", conventionsSkill: string): string {
+  if (!conventionsSkill.endsWith("-conventions")) {
+    return role;
+  }
+
+  return `${conventionsSkill.slice(0, -"-conventions".length)}-${role}`;
+}
+
+function parseSpecStepResult(response: string): "PASS" | "FAIL" | "FIXED" | "NONE" | "error" {
+  const normalized = response.trim().toUpperCase();
+  if (normalized.startsWith("PASS")) {
+    return "PASS";
+  }
+  if (normalized.startsWith("FAIL")) {
+    return "FAIL";
+  }
+  if (normalized.startsWith("FIXED")) {
+    return "FIXED";
+  }
+  if (normalized === "NONE" || normalized.startsWith("NONE")) {
+    return "NONE";
+  }
+  return "error";
+}
+
+function extractClarificationQuestions(response: string): ClarificationQuestion[] | null {
+  const trimmed = response.trim();
+  if (trimmed.length === 0 || parseSpecStepResult(trimmed) === "NONE") {
+    return [];
+  }
+
+  const candidates = [trimmed];
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/u);
+  if (fencedMatch?.[1]) {
+    candidates.push(fencedMatch[1].trim());
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      if (!Array.isArray(parsed)) {
+        continue;
+      }
+
+      return parsed
+        .filter((entry): entry is { question: string; suggestedOptions?: unknown } => {
+          return typeof entry === "object" && entry !== null && typeof entry.question === "string";
+        })
+        .map((entry) => ({
+          question: entry.question,
+          suggestedOptions: Array.isArray(entry.suggestedOptions)
+            ? entry.suggestedOptions.filter((option): option is string => typeof option === "string")
+            : [],
+        }));
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
 }
 
 function truncatePromptSummary(text: string): string {
@@ -158,9 +258,44 @@ function truncatePromptSummary(text: string): string {
   return collapsed.length > 160 ? `${collapsed.slice(0, 157)}...` : collapsed;
 }
 
+function normalizeMarkdownSpacing(text: string): string {
+  return text.replace(/\s+$/u, "");
+}
+
+function formatClarificationNote(answer: ClarificationAnswer): string {
+  const question = answer.question.trim().replace(/\s+/gu, " ");
+  const normalizedAnswer = answer.answer.trim().replace(/\s+/gu, " ");
+  return `- \`Clarification: ${question} => ${normalizedAnswer}\``;
+}
+
+function appendNotesSection(promptContent: string, noteLines: string[]): string {
+  const normalizedPrompt = normalizeMarkdownSpacing(promptContent);
+  const notesBlock = noteLines.join("\n");
+  const notesHeadingPattern = /^## Notes\s*$/mu;
+  const headingMatch = notesHeadingPattern.exec(normalizedPrompt);
+
+  if (!headingMatch || headingMatch.index === undefined) {
+    const separator = normalizedPrompt.length === 0 ? "" : "\n\n";
+    return `${normalizedPrompt}${separator}## Notes\n\n${notesBlock}\n`;
+  }
+
+  const insertStart = headingMatch.index + headingMatch[0].length;
+  const remainder = normalizedPrompt.slice(insertStart);
+  const nextHeadingOffset = remainder.search(/^##\s/mu);
+
+  if (nextHeadingOffset < 0) {
+    const suffix = remainder.trim().length === 0 ? "\n\n" : "\n";
+    return `${normalizedPrompt}${suffix}${notesBlock}\n`;
+  }
+
+  const beforeNextHeading = remainder.slice(0, nextHeadingOffset).replace(/\s*$/u, "");
+  const afterNextHeading = remainder.slice(nextHeadingOffset).replace(/^\n*/u, "");
+  return `${normalizedPrompt.slice(0, insertStart)}\n\n${beforeNextHeading}${beforeNextHeading.length > 0 ? "\n" : ""}${notesBlock}\n\n${afterNextHeading}`;
+}
+
 function buildTranscript(
   timestamp: string,
-  role: Role,
+  role: AuditRole,
   model: string,
   itemId: string,
   systemPrompt: string,
@@ -182,7 +317,7 @@ function buildTranscript(
 
 function buildAuditEntry(
   timestamp: string,
-  role: Role,
+  role: AuditRole,
   model: string,
   itemId: string,
   promptSummary: string,
@@ -290,6 +425,7 @@ export function createOrchestrator(
   overrides: Partial<OrchestratorDependencies> = {},
 ): Orchestrator {
   const conductorDir = path.join(config.projectDir, CONDUCTOR_DIR);
+  const promptPath = path.join(config.specDir, "prompt.md");
   const specPath = path.join(config.specDir, "spec.md");
   const stateEmitter = new SimpleEventEmitter<OrchestratorState>();
   const auditEmitter = new SimpleEventEmitter<AuditEntry>();
@@ -339,13 +475,17 @@ export function createOrchestrator(
   let cachedSpecContent = "";
   let pauseRequested = false;
   let persistChain = Promise.resolve();
+  let visibleState = cloneState(state);
   const itemFeedback = new Map<string, string>();
+  const specFeedback = new Map<SpecStep, string>();
   const approvalResolvers = new Map<string, (action: ApprovalAction) => void>();
   const approvalGroups = new Map<string, string[]>();
+  let specApprovalResolver: ((action: ApprovalAction) => void) | undefined;
+  let pendingSpecApprovalStep: SpecStep | undefined;
   const fallbackToken = createFallbackToken();
 
   const emitState = () => {
-    stateEmitter.fire(cloneState(state));
+    stateEmitter.fire(cloneState(visibleState));
   };
 
   const emitAudit = (entry: AuditEntry) => {
@@ -358,6 +498,47 @@ export function createOrchestrator(
 
   const emitTranscript = (transcript: RunTranscript) => {
     transcriptEmitter.fire(transcript);
+  };
+
+  const pathExists = async (filePath: string): Promise<boolean> => {
+    try {
+      await deps.readFile(filePath, "utf8");
+      return true;
+    } catch (error) {
+      if (isMissingPathError(error)) {
+        return false;
+      }
+      throw error;
+    }
+  };
+
+  const readOptionalFile = async (filePath: string): Promise<string | undefined> => {
+    try {
+      return await deps.readFile(filePath, "utf8");
+    } catch (error) {
+      if (isMissingPathError(error)) {
+        return undefined;
+      }
+      throw error;
+    }
+  };
+
+  const invalidatePhaseCache = () => {
+    cachedPhase = undefined;
+    cachedPhaseNumber = undefined;
+    cachedPhasePath = undefined;
+  };
+
+  const getSortedPhaseFiles = async (): Promise<string[]> => {
+    const entries = await deps.readDirectory(config.specDir);
+    return entries
+      .filter((entry) => /^phase\d+\.md$/i.test(entry))
+      .sort((left, right) => {
+        const leftNumber = Number.parseInt(left.replace(/\D+/g, ""), 10);
+        const rightNumber = Number.parseInt(right.replace(/\D+/g, ""), 10);
+        return leftNumber - rightNumber;
+      })
+      .map((entry) => path.join(config.specDir, entry));
   };
 
   const getPhasePath = (phaseNumber: number): string => path.join(config.specDir, `phase${phaseNumber}.md`);
@@ -386,7 +567,8 @@ export function createOrchestrator(
       return;
     }
 
-    cachedPhase = parsePhaseFile(await deps.readFile(phasePath, "utf8"));
+    const phaseContent = await readOptionalFile(phasePath);
+    cachedPhase = phaseContent ? parsePhaseFile(phaseContent) : undefined;
     cachedPhaseNumber = phaseNumber;
     cachedPhasePath = phasePath;
   };
@@ -395,6 +577,7 @@ export function createOrchestrator(
     const snapshot = cloneState(state);
     persistChain = persistChain.then(async () => {
       await deps.saveState(conductorDir, snapshot);
+      visibleState = cloneState(snapshot);
       emitState();
     });
     await persistChain;
@@ -407,10 +590,14 @@ export function createOrchestrator(
 
     const loaded = await deps.loadState(conductorDir);
     const defaultState = createDefaultState(config);
-    const persistedState = loaded.specDir ? loaded : defaultState;
+    const hasPersistedState = loaded.specDir.length > 0;
+    const persistedState = hasPersistedState ? loaded : defaultState;
+    const hasPersistedSpecStep = hasPersistedState && Object.prototype.hasOwnProperty.call(loaded, "specStep");
     const currentHasAssignmentOverrides = !haveSameModelAssignments(state.modelAssignments, defaultState.modelAssignments);
     const currentHasConsecutivePasses = Object.keys(state.consecutivePasses).length > 0;
     const currentHasItemStatuses = Object.keys(state.itemStatuses).length > 0;
+    const specExists = await pathExists(specPath);
+    const promptExists = await pathExists(promptPath);
     state = {
       ...defaultState,
       ...persistedState,
@@ -428,14 +615,40 @@ export function createOrchestrator(
       consecutivePasses: currentHasConsecutivePasses
         ? { ...state.consecutivePasses }
         : { ...(persistedState.consecutivePasses ?? {}) },
+      specStep: hasPersistedSpecStep
+        ? normalizeSpecStep(persistedState.specStep)
+        : specExists
+        ? "done"
+        : promptExists
+        ? "clarifying"
+        : defaultState.specStep,
+      specConsecutivePasses: typeof persistedState.specConsecutivePasses === "number"
+        ? persistedState.specConsecutivePasses
+        : defaultState.specConsecutivePasses,
+      specPhaseFileIndex: typeof persistedState.specPhaseFileIndex === "number"
+        ? persistedState.specPhaseFileIndex
+        : defaultState.specPhaseFileIndex,
+      clarificationQuestions: Array.isArray(persistedState.clarificationQuestions)
+        ? persistedState.clarificationQuestions.map((question) => ({
+          question: typeof question?.question === "string" ? question.question : "",
+          suggestedOptions: Array.isArray(question?.suggestedOptions)
+            ? question.suggestedOptions.filter((option): option is string => typeof option === "string")
+            : [],
+        })).filter((question) => question.question.length > 0)
+        : [],
       itemStatuses: currentHasItemStatuses
         ? { ...state.itemStatuses }
         : { ...(persistedState.itemStatuses ?? {}) },
       startedBy: persistedState.startedBy ?? defaultState.startedBy,
     };
 
-    await ensurePhaseLoaded();
-    cachedSpecContent = await deps.readFile(specPath, "utf8");
+    cachedSpecContent = (await readOptionalFile(specPath)) ?? "";
+    if (state.specStep === "done" && specExists) {
+      await ensurePhaseLoaded();
+    } else {
+      invalidatePhaseCache();
+    }
+    visibleState = cloneState(state);
     initialized = true;
   };
 
@@ -446,37 +659,31 @@ export function createOrchestrator(
     await persistState();
   };
 
-  const invokeRole = async (
-    role: Role,
+  const invokePreparedPrompt = async (
+    selectionRole: Role,
+    auditRole: AuditRole,
     itemId: string,
-    itemContext: string,
+    systemPrompt: string,
     userPrompt: string,
     token: vscode.CancellationToken,
   ): Promise<InvocationResult> => {
-    const model = await deps.selectModelForRole(role, state.modelAssignments);
-    const modelLabel = `${role}:${String((model as { family?: string }).family ?? "unknown")}`;
-    const systemPrompt = await deps.assembleSystemPrompt(
-      role,
-      config.skillsDir,
-      config.conventionsSkill,
-      itemContext,
-      getToolDefinitions(),
-    );
+    const model = await deps.selectModelForRole(selectionRole, state.modelAssignments);
+    const modelLabel = `${auditRole}:${String((model as { family?: string }).family ?? "unknown")}`;
     const timestamp = deps.now();
     const result = await deps.invokeWithToolLoop(model, systemPrompt, userPrompt, config.projectDir, {
       maxTurns: config.maxTurns,
       token,
     });
 
-    const transcript = buildTranscript(timestamp, role, modelLabel, itemId, systemPrompt, userPrompt, result.messages);
-    const auditEntry = buildAuditEntry(timestamp, role, modelLabel, itemId, userPrompt, result);
+    const transcript = buildTranscript(timestamp, auditRole, modelLabel, itemId, systemPrompt, userPrompt, result.messages);
+    const auditEntry = buildAuditEntry(timestamp, auditRole, modelLabel, itemId, userPrompt, result);
 
     await deps.saveTranscript(conductorDir, transcript);
     emitTranscript(transcript);
     await deps.appendAudit(conductorDir, auditEntry);
     emitAudit(auditEntry);
 
-    if (role === "reviewer" && result.addendum) {
+    if (auditRole === "reviewer" && result.addendum) {
       const addendumEntry = {
         timestamp,
         itemId,
@@ -490,6 +697,541 @@ export function createOrchestrator(
     }
 
     return result;
+  };
+
+  const invokeRole = async (
+    role: Role,
+    itemId: string,
+    itemContext: string,
+    userPrompt: string,
+    token: vscode.CancellationToken,
+  ): Promise<InvocationResult> => {
+    const systemPrompt = await deps.assembleSystemPrompt(
+      role,
+      config.skillsDir,
+      config.conventionsSkill,
+      itemContext,
+      getToolDefinitions(),
+    );
+
+    return await invokePreparedPrompt(role, role, itemId, systemPrompt, userPrompt, token);
+  };
+
+  const failSpecStep = async (step: SpecStep, role: Role, message: string) => {
+    state.specStep = step;
+    state.status = "error";
+    await persistState();
+
+    const auditEntry = {
+      timestamp: deps.now(),
+      role,
+      model: "system",
+      itemId: `phase0:${step}`,
+      promptSummary: truncatePromptSummary(message),
+      result: "error",
+      tokensIn: 0,
+      tokensOut: 0,
+      durationMs: 0,
+    } satisfies AuditEntry;
+
+    await deps.appendAudit(conductorDir, auditEntry);
+    emitAudit(auditEntry);
+  };
+
+  const waitForSpecApproval = async (step: SpecStep): Promise<ApprovalAction> => {
+    pendingSpecApprovalStep = step;
+    state.status = "pending-approval";
+    await persistState();
+
+    return await new Promise<ApprovalAction>((resolve) => {
+      specApprovalResolver = resolve;
+    });
+  };
+
+  const handleSpecApproval = async (step: SpecStep, nextStep: SpecStep): Promise<"approved" | "rejected" | "skipped"> => {
+    const action = await waitForSpecApproval(step);
+    specApprovalResolver = undefined;
+    pendingSpecApprovalStep = undefined;
+    state.status = "running";
+
+    if (action.type === "approve") {
+      state.specConsecutivePasses = 0;
+      state.specStep = nextStep;
+      await persistState();
+      return "approved";
+    }
+
+    if (action.type === "skip") {
+      state.specConsecutivePasses = 0;
+      state.specStep = "done";
+      await persistState();
+      return "skipped";
+    }
+
+    state.specConsecutivePasses = 0;
+    specFeedback.set(step, action.feedback);
+
+    if (step === "reviewing") {
+      specFeedback.set("authoring", action.feedback);
+      state.specStep = "authoring";
+    } else {
+      state.specStep = step;
+    }
+
+    if (step === "reviewing-phases") {
+      state.specPhaseFileIndex = 0;
+    }
+
+    await persistState();
+    return "rejected";
+  };
+
+  const submitClarificationAnswersInternal = async (answers: ClarificationAnswer[]) => {
+    await ensureInitialized();
+    const validAnswers = answers
+      .map((answer) => ({
+        question: answer.question.trim(),
+        answer: answer.answer.trim(),
+      }))
+      .filter((answer) => answer.question.length > 0 && answer.answer.length > 0);
+
+    if (state.specStep !== "clarifying" || state.clarificationQuestions.length === 0 || validAnswers.length === 0) {
+      emitState();
+      return;
+    }
+
+    const promptContent = await readOptionalFile(promptPath);
+    if (!promptContent) {
+      await failSpecStep("clarifying", "spec-author", "prompt.md is required for clarification answers.");
+      return;
+    }
+
+    const updatedPrompt = appendNotesSection(promptContent, validAnswers.map(formatClarificationNote));
+    await deps.writeFile(promptPath, updatedPrompt, "utf8");
+
+    state.clarificationQuestions = [];
+    state.status = "running";
+    await persistState();
+    await startRun(lastToken ?? fallbackToken);
+  };
+
+  const runClarifyingStep = async (token: vscode.CancellationToken): Promise<ProcessingOutcome> => {
+    if (state.clarificationQuestions.length > 0) {
+      state.status = "paused";
+      await persistState();
+      return "interrupted";
+    }
+
+    const promptContent = await readOptionalFile(promptPath);
+    if (!promptContent) {
+      await failSpecStep("clarifying", "spec-author", "No spec.md or prompt.md found in specDir.");
+      return "completed";
+    }
+
+    let retriesUsed = 0;
+
+    while (retriesUsed < config.maxRetries) {
+      try {
+        const result = await invokePreparedPrompt(
+          "spec-author",
+          "clarifier",
+          "phase0:clarifying",
+          await buildClarificationSystemPrompt(config.skillsDir, config.conventionsSkill, getToolDefinitions()),
+          promptContent,
+          token,
+        );
+
+        if (pauseRequested || token.isCancellationRequested) {
+          return "interrupted";
+        }
+
+        const parsedQuestions = extractClarificationQuestions(result.response);
+        if (parsedQuestions === null || parsedQuestions.length === 0) {
+          state.clarificationQuestions = [];
+          state.specStep = "authoring";
+          await persistState();
+          return "completed";
+        }
+
+        state.clarificationQuestions = parsedQuestions;
+        state.status = "paused";
+        await persistState();
+        return "interrupted";
+      } catch (error) {
+        retriesUsed += 1;
+        if (retriesUsed >= config.maxRetries) {
+          const message = error instanceof Error ? error.message : String(error);
+          await failSpecStep("clarifying", "spec-author", `Clarification failed: ${message}`);
+          return "completed";
+        }
+      }
+    }
+
+    return "completed";
+  };
+
+  const runAuthoringStep = async (token: vscode.CancellationToken): Promise<ProcessingOutcome> => {
+    const promptContent = await readOptionalFile(promptPath);
+    if (!promptContent) {
+      await failSpecStep("authoring", "spec-author", "prompt.md is required for spec authoring.");
+      return "completed";
+    }
+
+    let retriesUsed = 0;
+
+    while (retriesUsed < config.maxRetries) {
+      if (pauseRequested || token.isCancellationRequested) {
+        return "interrupted";
+      }
+
+      const feedback = specFeedback.get("authoring");
+      const result = await invokeRole(
+        "spec-author",
+        "phase0:authoring",
+        "Spec writing phase 0 authoring.",
+        [
+          "Write the requested spec file.",
+          `Target spec path: ${specPath}`,
+          `Conventions skill: ${config.conventionsSkill}`,
+          "Requirements from prompt.md:",
+          promptContent,
+          feedback ? `Feedback:\n${feedback}` : "",
+        ].filter(Boolean).join("\n\n"),
+        token,
+      );
+
+      if (parseSpecStepResult(result.response) === "PASS") {
+        specFeedback.delete("authoring");
+        state.specConsecutivePasses = 0;
+        state.specStep = "reviewing";
+        cachedSpecContent = (await readOptionalFile(specPath)) ?? cachedSpecContent;
+        await persistState();
+        return "completed";
+      }
+
+      retriesUsed += 1;
+      if (retriesUsed >= config.maxRetries) {
+        await failSpecStep("authoring", "spec-author", `Spec authoring failed: ${result.response}`);
+        return "completed";
+      }
+    }
+
+    return "completed";
+  };
+
+  const runReviewingStep = async (token: vscode.CancellationToken): Promise<ProcessingOutcome> => {
+    const promptContent = (await readOptionalFile(promptPath)) ?? "";
+    let retriesUsed = 0;
+
+    while (retriesUsed < config.maxRetries) {
+      if (pauseRequested || token.isCancellationRequested) {
+        return "interrupted";
+      }
+
+      const authorFeedback = specFeedback.get("authoring");
+      if (authorFeedback) {
+        const authorResult = await invokeRole(
+          "spec-author",
+          "phase0:authoring",
+          "Spec writing phase 0 authoring.",
+          [
+            "Update the spec in response to reviewer feedback.",
+            `Target spec path: ${specPath}`,
+            `Conventions skill: ${config.conventionsSkill}`,
+            "Requirements from prompt.md:",
+            promptContent,
+            `Feedback:\n${authorFeedback}`,
+          ].join("\n\n"),
+          token,
+        );
+
+        if (parseSpecStepResult(authorResult.response) !== "PASS") {
+          retriesUsed += 1;
+          if (retriesUsed >= config.maxRetries) {
+            await failSpecStep("reviewing", "spec-author", `Spec rewrite failed: ${authorResult.response}`);
+            return "completed";
+          }
+
+          continue;
+        }
+
+        specFeedback.delete("authoring");
+        cachedSpecContent = (await readOptionalFile(specPath)) ?? cachedSpecContent;
+      }
+
+      const reviewerResult = await invokeRole(
+        "spec-reviewer",
+        "phase0:reviewing",
+        "Spec writing phase 0 review.",
+        [
+          `Review spec file: ${specPath}`,
+          "Feature description from prompt.md:",
+          promptContent,
+        ].join("\n\n"),
+        token,
+      );
+
+      const verdict = parseSpecStepResult(reviewerResult.response);
+      if (verdict === "PASS") {
+        state.specConsecutivePasses += 1;
+        await persistState();
+
+        if (state.specConsecutivePasses < 2) {
+          continue;
+        }
+
+        if (config.requireApproval) {
+          const approval = await handleSpecApproval("reviewing", "proofreading");
+          if (approval === "approved" || approval === "skipped") {
+            return "completed";
+          }
+          continue;
+        }
+
+        state.specConsecutivePasses = 0;
+        state.specStep = "proofreading";
+        await persistState();
+        return "completed";
+      }
+
+      state.specConsecutivePasses = 0;
+      await persistState();
+      retriesUsed += 1;
+
+      if (retriesUsed >= config.maxRetries) {
+        await failSpecStep("reviewing", "spec-reviewer", `Spec review failed after ${config.maxRetries} retries.`);
+        return "completed";
+      }
+
+      specFeedback.set("authoring", reviewerResult.response);
+    }
+
+    return "completed";
+  };
+
+  const runProofreadingStep = async (token: vscode.CancellationToken): Promise<ProcessingOutcome> => {
+    let retriesUsed = 0;
+
+    while (retriesUsed < config.maxRetries) {
+      if (pauseRequested || token.isCancellationRequested) {
+        return "interrupted";
+      }
+
+      const feedback = specFeedback.get("proofreading");
+      const proofreaderResult = await invokeRole(
+        "spec-proofreader",
+        "phase0:proofreading",
+        "Spec writing phase 0 proofreading.",
+        [
+          `Proofread spec file: ${specPath}`,
+          feedback ? `Feedback:\n${feedback}` : "",
+        ].filter(Boolean).join("\n\n"),
+        token,
+      );
+
+      const verdict = parseSpecStepResult(proofreaderResult.response);
+      if (verdict === "PASS") {
+        specFeedback.delete("proofreading");
+        state.specConsecutivePasses += 1;
+        await persistState();
+
+        if (state.specConsecutivePasses < 2) {
+          continue;
+        }
+
+        if (config.requireApproval) {
+          const approval = await handleSpecApproval("proofreading", "creating-phases");
+          if (approval === "approved" || approval === "skipped") {
+            return "completed";
+          }
+          continue;
+        }
+
+        state.specConsecutivePasses = 0;
+        state.specStep = "creating-phases";
+        await persistState();
+        return "completed";
+      }
+
+      if (verdict !== "FIXED") {
+        retriesUsed += 1;
+        if (retriesUsed >= config.maxRetries) {
+          await failSpecStep("proofreading", "spec-proofreader", `Spec proofreading failed: ${proofreaderResult.response}`);
+          return "completed";
+        }
+      } else {
+        retriesUsed += 1;
+        if (retriesUsed >= config.maxRetries) {
+          await failSpecStep("proofreading", "spec-proofreader", `Spec proofreading exhausted retries: ${proofreaderResult.response}`);
+          return "completed";
+        }
+      }
+
+      state.specConsecutivePasses = 0;
+      await persistState();
+    }
+
+    return "completed";
+  };
+
+  const runCreatingPhasesStep = async (token: vscode.CancellationToken): Promise<ProcessingOutcome> => {
+    let retriesUsed = 0;
+
+    while (retriesUsed < config.maxRetries) {
+      if (pauseRequested || token.isCancellationRequested) {
+        return "interrupted";
+      }
+
+      const feedback = specFeedback.get("reviewing-phases");
+
+      const result = await invokeRole(
+        "phase-creator",
+        "phase0:creating-phases",
+        "Spec writing phase 0 phase creation.",
+        [
+          `Read spec from: ${specPath}`,
+          `Write phase files to: ${config.specDir}`,
+          `Implementor skill: ${deriveImplementationSkillName("implementor", config.conventionsSkill)}`,
+          `Reviewer skill: ${deriveImplementationSkillName("reviewer", config.conventionsSkill)}`,
+          feedback ? `Feedback:\n${feedback}` : "",
+        ].join("\n\n"),
+        token,
+      );
+
+      if (parseSpecStepResult(result.response) === "PASS") {
+        specFeedback.delete("reviewing-phases");
+        invalidatePhaseCache();
+        state.specPhaseFileIndex = 0;
+        state.specStep = "reviewing-phases";
+        await persistState();
+        return "completed";
+      }
+
+      retriesUsed += 1;
+      if (retriesUsed >= config.maxRetries) {
+        await failSpecStep("creating-phases", "phase-creator", `Phase creation failed: ${result.response}`);
+        return "completed";
+      }
+    }
+
+    return "completed";
+  };
+
+  const runReviewingPhasesStep = async (token: vscode.CancellationToken): Promise<ProcessingOutcome> => {
+    const phaseFiles = await getSortedPhaseFiles();
+    let retriesUsed = 0;
+
+    while (state.specPhaseFileIndex < phaseFiles.length) {
+      if (pauseRequested || token.isCancellationRequested) {
+        return "interrupted";
+      }
+
+      const feedback = specFeedback.get("reviewing-phases");
+      const phasePath = phaseFiles[state.specPhaseFileIndex];
+      const result = await invokeRole(
+        "phase-reviewer",
+        `phase0:reviewing-phases:${state.specPhaseFileIndex}`,
+        "Spec writing phase 0 phase review.",
+        [
+          `Review phase file: ${phasePath}`,
+          `Spec file: ${specPath}`,
+          feedback ? `Feedback:\n${feedback}` : "",
+        ].filter(Boolean).join("\n\n"),
+        token,
+      );
+
+      const verdict = parseSpecStepResult(result.response);
+      if (verdict === "PASS") {
+        specFeedback.delete("reviewing-phases");
+        state.specPhaseFileIndex += 1;
+        await persistState();
+        continue;
+      }
+
+      retriesUsed += 1;
+      if (retriesUsed >= config.maxRetries) {
+        await failSpecStep("reviewing-phases", "phase-reviewer", `Phase review failed: ${result.response}`);
+        return "completed";
+      }
+
+      if (verdict === "FIXED") {
+        continue;
+      }
+
+      specFeedback.set("reviewing-phases", result.response);
+      state.specPhaseFileIndex = 0;
+      state.specStep = "creating-phases";
+      await persistState();
+      return "completed";
+    }
+
+    if (config.requireApproval) {
+      const approval = await handleSpecApproval("reviewing-phases", "done");
+      if (approval === "approved" || approval === "skipped") {
+        return "completed";
+      }
+
+      return await runReviewingPhasesStep(token);
+    }
+
+    state.specStep = "done";
+    state.specPhaseFileIndex = phaseFiles.length;
+    await persistState();
+    return "completed";
+  };
+
+  const runSpecWritingLoop = async (token: vscode.CancellationToken): Promise<ProcessingOutcome> => {
+    const specExists = await pathExists(specPath);
+    const promptExists = await pathExists(promptPath);
+
+    if (!specExists && !promptExists) {
+      await failSpecStep(state.specStep === "done" ? "clarifying" : state.specStep, "spec-author", "No spec.md or prompt.md found in specDir.");
+      return "completed";
+    }
+
+    if (specExists && state.specStep === "done") {
+      cachedSpecContent = (await readOptionalFile(specPath)) ?? "";
+      return "completed";
+    }
+
+    while (state.specStep !== "done") {
+      if (pauseRequested || token.isCancellationRequested) {
+        state.status = "paused";
+        await persistState();
+        return "interrupted";
+      }
+
+      let outcome: ProcessingOutcome;
+
+      switch (state.specStep) {
+        case "clarifying":
+          outcome = await runClarifyingStep(token);
+          break;
+        case "authoring":
+          outcome = await runAuthoringStep(token);
+          break;
+        case "reviewing":
+          outcome = await runReviewingStep(token);
+          break;
+        case "proofreading":
+          outcome = await runProofreadingStep(token);
+          break;
+        case "creating-phases":
+          outcome = await runCreatingPhasesStep(token);
+          break;
+        case "reviewing-phases":
+          outcome = await runReviewingPhasesStep(token);
+          break;
+      }
+
+      if (outcome === "interrupted" || state.status === "error") {
+        return outcome;
+      }
+    }
+
+    cachedSpecContent = (await readOptionalFile(specPath)) ?? cachedSpecContent;
+    await ensurePhaseLoaded();
+    return "completed";
   };
 
   const markItemFailed = async (itemId: string, message?: string, result: AuditEntry["result"] = "FAIL") => {
@@ -882,6 +1624,11 @@ export function createOrchestrator(
     state.status = "running";
     await persistState();
 
+    const specWritingOutcome = await runSpecWritingLoop(token);
+    if (specWritingOutcome === "interrupted" || state.status !== "running") {
+      return;
+    }
+
     while (true) {
       await ensurePhaseLoaded();
       if (!cachedPhase || state.currentItemIndex >= cachedPhase.items.length) {
@@ -995,6 +1742,14 @@ export function createOrchestrator(
     },
 
     skip(itemId: string): void {
+      if (specApprovalResolver) {
+        const resolver = specApprovalResolver;
+        specApprovalResolver = undefined;
+        pendingSpecApprovalStep = undefined;
+        resolver({ type: "skip" });
+        return;
+      }
+
       state.itemStatuses[itemId] = "skipped";
       const itemIds = getApprovalItemIds(itemId);
       const resolver = itemIds.map((candidate) => approvalResolvers.get(candidate)).find((candidate) => candidate !== undefined);
@@ -1011,16 +1766,24 @@ export function createOrchestrator(
 
     changeModel(role: Role, vendor: string, family: string): void {
       const existing = state.modelAssignments.find((assignment) => assignment.role === role);
-      if (existing) {
-        existing.vendor = vendor;
-        existing.family = family;
-      } else {
-        state.modelAssignments.push({ role, vendor, family });
+      if (!existing) {
+        return;
       }
+
+      existing.vendor = vendor;
+      existing.family = family;
       void persistState();
     },
 
     approve(itemId: string): void {
+      if (specApprovalResolver && pendingSpecApprovalStep) {
+        const resolver = specApprovalResolver;
+        specApprovalResolver = undefined;
+        pendingSpecApprovalStep = undefined;
+        resolver({ type: "approve" });
+        return;
+      }
+
       const itemIds = getApprovalItemIds(itemId);
       const resolver = itemIds.map((candidate) => approvalResolvers.get(candidate)).find((candidate) => candidate !== undefined);
       if (resolver) {
@@ -1030,6 +1793,14 @@ export function createOrchestrator(
     },
 
     reject(itemId: string, feedback: string): void {
+      if (specApprovalResolver && pendingSpecApprovalStep) {
+        const resolver = specApprovalResolver;
+        specApprovalResolver = undefined;
+        pendingSpecApprovalStep = undefined;
+        resolver({ type: "reject", feedback });
+        return;
+      }
+
       const itemIds = getApprovalItemIds(itemId);
       for (const candidate of itemIds) {
         itemFeedback.set(candidate, feedback);
@@ -1044,6 +1815,12 @@ export function createOrchestrator(
       void persistState();
     },
 
+    submitClarification(answers: ClarificationAnswer[]): void {
+      runDetached(async () => {
+        await submitClarificationAnswersInternal(answers);
+      });
+    },
+
     addNote(itemId: string, text: string, author?: string): void {
       void (async () => {
         const entry = buildManualAddendumEntry(deps.now(), itemId, text, author);
@@ -1053,7 +1830,7 @@ export function createOrchestrator(
     },
 
     getState(): OrchestratorState {
-      return cloneState(state);
+      return cloneState(visibleState);
     },
 
     async getPhase(): Promise<Phase> {

@@ -5,7 +5,7 @@ export async function loadSkill(skillsDir: string, skillName: string): Promise<s
   const skillPath = path.join(skillsDir, skillName, "SKILL.md");
 
   try {
-    return await readFile(skillPath, "utf8");
+    return normalizeSkillContent(await readFile(skillPath, "utf8"));
   } catch (error) {
     if (isMissingPathError(error)) {
       throw new Error(`skill not found: ${skillName}`);
@@ -44,4 +44,8 @@ function isMissingPathError(error: unknown): error is NodeJS.ErrnoException {
     "code" in error &&
     (error.code === "ENOENT" || error.code === "ENOTDIR")
   );
+}
+
+function normalizeSkillContent(content: string): string {
+  return content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n*/u, "");
 }

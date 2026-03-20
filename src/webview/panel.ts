@@ -96,6 +96,9 @@ function handleClientMessage(orchestrator: Orchestrator, message: ClientMessage)
     case "addNote":
       orchestrator.addNote(message.itemId, message.text);
       return;
+    case "submit-clarification":
+      orchestrator.submitClarification(message.answers);
+      return;
   }
 }
 

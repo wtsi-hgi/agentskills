@@ -96,6 +96,12 @@ function isClientMessage(value: unknown): value is ClientMessage {
         && typeof candidate.family === "string";
     case "addNote":
       return typeof candidate.itemId === "string" && typeof candidate.text === "string";
+    case "submit-clarification":
+      return Array.isArray(candidate.answers)
+        && candidate.answers.every((answer) => typeof answer === "object"
+          && answer !== null
+          && typeof (answer as { question?: unknown }).question === "string"
+          && typeof (answer as { answer?: unknown }).answer === "string");
     default:
       return false;
   }
@@ -126,6 +132,9 @@ function dispatchClientMessage(orchestrator: Orchestrator, message: ClientMessag
       return;
     case "addNote":
       orchestrator.addNote(message.itemId, message.text);
+      return;
+    case "submit-clarification":
+      orchestrator.submitClarification(message.answers);
       return;
   }
 }

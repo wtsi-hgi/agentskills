@@ -3,11 +3,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { assembleSystemPrompt } from "../../llm/prompts";
+import { assembleSystemPrompt, buildClarificationSystemPrompt } from "../../llm/prompts";
 import { discoverSkills, loadSkill } from "../../skills/loader";
 import type { ToolDefinition } from "../../types";
 
 const tempDirs: string[] = [];
+const repoSkillsDir = path.join(process.cwd(), "skills");
 
 async function createSkillsDir(): Promise<string> {
   const skillsDir = await mkdtemp(path.join(os.tmpdir(), "conductor-c1-"));
@@ -32,6 +33,14 @@ describe("skill loading", () => {
     const skill = await loadSkill(skillsDir, "go-conventions");
 
     expect(skill.startsWith("# Go Conventions")).toBe(true);
+  });
+
+  it("strips frontmatter from loaded repository skills", async () => {
+    const skill = await loadSkill(repoSkillsDir, "go-implementor");
+
+    expect(skill.startsWith("# Go Implementor Skill")).toBe(true);
+    expect(skill).not.toContain("description: Go TDD implementation workflow.");
+    expect(skill).not.toContain("---\nname: go-implementor");
   });
 
   it("throws when a skill is missing", async () => {
@@ -94,7 +103,96 @@ describe("assembleSystemPrompt", () => {
       [],
     );
 
+    expect(prompt).toContain("# Go Conventions");
     expect(prompt).toContain("# Go Implementor");
+  });
+
+  it("allows spec-author prompts without a conventions skill", async () => {
+    const skillsDir = await createSkillsDir();
+    await writeSkill(skillsDir, "spec-author", "# Spec Author\n");
+
+    const prompt = await assembleSystemPrompt(
+      "spec-author",
+      skillsDir,
+      "",
+      "Context",
+      [],
+    );
+
+    expect(prompt).toContain("# Spec Author");
+  });
+
+  it("allows spec-reviewer prompts without a conventions skill", async () => {
+    const skillsDir = await createSkillsDir();
+    await writeSkill(skillsDir, "spec-reviewer", "# Spec Reviewer\n");
+
+    const prompt = await assembleSystemPrompt(
+      "spec-reviewer",
+      skillsDir,
+      "",
+      "Context",
+      [],
+    );
+
+    expect(prompt).toContain("# Spec Reviewer");
+  });
+
+  it("skips conventions skills for spec-reviewer prompts", async () => {
+    const skillsDir = await createSkillsDir();
+    await writeSkill(skillsDir, "go-conventions", "# Go Conventions\nShared rules\n");
+    await writeSkill(skillsDir, "spec-reviewer", "# Spec Reviewer\nReview the spec.\n");
+
+    const prompt = await assembleSystemPrompt(
+      "spec-reviewer",
+      skillsDir,
+      "go-conventions",
+      "Context",
+      [],
+    );
+
+    expect(prompt).toContain("# Spec Reviewer");
+    expect(prompt).not.toContain("# Go Conventions");
+  });
+
+  it("includes phase-creator skills and tool definitions without a conventions skill", async () => {
+    const skillsDir = await createSkillsDir();
+    await writeSkill(skillsDir, "phase-creator", "# Phase Creator\nCreate phase files.\n");
+    const tools: ToolDefinition[] = [
+      { name: "Read", description: "Read files", parameters: { path: { type: "string" } } },
+    ];
+
+    const prompt = await assembleSystemPrompt(
+      "phase-creator",
+      skillsDir,
+      "",
+      "Context",
+      tools,
+    );
+
+    expect(prompt).toContain("# Phase Creator");
+    expect(prompt).toContain("# Tool Definitions");
+    expect(prompt).toContain("Read: Read files");
+  });
+
+  it("strips agent-conduct references from spec-proofreader prompts", async () => {
+    const skillsDir = await createSkillsDir();
+    await writeSkill(
+      skillsDir,
+      "spec-proofreader",
+      "Read and follow **agent-conduct** before starting.\n\n# Spec Proofreader\n\nPolish wording.\n",
+    );
+
+    const prompt = await assembleSystemPrompt(
+      "spec-proofreader",
+      skillsDir,
+      "",
+      "Context",
+      [],
+    );
+
+    expect(prompt).toContain("# Spec Proofreader");
+    expect(prompt).toContain("Polish wording.");
+    expect(prompt).not.toContain("agent-conduct");
   });
 
   it("fails clearly when implementor skill cannot be inferred from the default empty conventions skill", async () => {
@@ -126,21 +224,6 @@ describe("assembleSystemPrompt", () => {
     ).rejects.toThrow(/expected a '<stack>-conventions' skill name/i);
   });
 
-  it("still allows spec-writer prompts without a conventions skill", async () => {
-    const skillsDir = await createSkillsDir();
-    await writeSkill(skillsDir, "spec-writer", "# Spec Writer\n");
-
-    const prompt = await assembleSystemPrompt(
-      "spec-writer",
-      skillsDir,
-      "",
-      "Context",
-      [],
-    );
-
-    expect(prompt).toContain("# Spec Writer");
-  });
-
   it("strips agent-conduct references from loaded skills", async () => {
     const skillsDir = await createSkillsDir();
     await writeSkill(
@@ -164,6 +247,42 @@ describe("assembleSystemPrompt", () => {
 
     expect(prompt).toContain("# Go Implementor");
     expect(prompt).toContain("Follow TDD.");
+    expect(prompt).not.toContain("agent-conduct");
+  });
+
+  it("strips wrapped agent-conduct instructions from repository skills", async () => {
+    const prompt = await assembleSystemPrompt(
+      "implementor",
+      repoSkillsDir,
+      "nextjs-fastapi-conventions",
+      "Context",
+      [],
+    );
+
+    expect(prompt).toContain("# Next.js + FastAPI Conventions");
+    expect(prompt).toContain("# Next.js + FastAPI Implementor Skill");
+    expect(prompt).not.toContain("agent-conduct");
+    expect(prompt).not.toContain("description: Full-stack TDD implementation workflow.");
+    expect(prompt).not.toContain("---\nname: nextjs-fastapi-implementor");
+  });
+
+  it("builds clarification prompts from conventions context and the clarification template", async () => {
+    const skillsDir = await createSkillsDir();
+    await writeSkill(
+      skillsDir,
+      "go-conventions",
+      "Read and follow **agent-conduct** before starting.\n\n# Go Conventions\n\nUse the existing architecture.\n",
+    );
+
+    const prompt = await buildClarificationSystemPrompt(
+      skillsDir,
+      "go-conventions",
+      [{ name: "Read", description: "Read files", parameters: {} }],
+    );
+
+    expect(prompt).toContain("# Go Conventions");
+    expect(prompt).toContain("Return ONLY the questions as a JSON array");
+    expect(prompt).toContain("If prompt.md already addresses everything, return NONE.");
     expect(prompt).not.toContain("agent-conduct");
   });
 });

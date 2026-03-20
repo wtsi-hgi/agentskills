@@ -6,7 +6,7 @@ import { WebSocket, WebSocketServer } from "ws";
 
 import type { Orchestrator } from "../../orchestrator/machine";
 import { handleWebSocket } from "../../server/ws";
-import type { AddendumEntry, AuditEntry, OrchestratorState, RunTranscript } from "../../types";
+import type { AddendumEntry, AuditEntry, ClarificationAnswer, OrchestratorState, RunTranscript } from "../../types";
 
 class TestEmitter<T> {
   private readonly listeners = new Set<(value: T) => void>();
@@ -36,6 +36,7 @@ type OrchestratorHarness = {
   calls: {
     pause: number;
     addNote: Array<{ itemId: string; text: string; author?: string }>;
+    submitClarification: ClarificationAnswer[][];
   };
 };
 
@@ -49,6 +50,10 @@ function createState(overrides: Partial<OrchestratorState> = {}): OrchestratorSt
     currentPhase: 1,
     currentItemIndex: 0,
     consecutivePasses: {},
+    specStep: "done",
+    specConsecutivePasses: 0,
+    specPhaseFileIndex: 0,
+    clarificationQuestions: [],
     status: "running",
     modelAssignments: [],
     itemStatuses: {},
@@ -64,6 +69,7 @@ function createHarness(initialState = createState()): OrchestratorHarness {
   const calls = {
     pause: 0,
     addNote: [] as Array<{ itemId: string; text: string; author?: string }>,
+    submitClarification: [] as ClarificationAnswer[][],
   };
 
   let currentState = initialState;
@@ -79,6 +85,9 @@ function createHarness(initialState = createState()): OrchestratorHarness {
     changeModel() {},
     approve() {},
     reject() {},
+    submitClarification(answers: ClarificationAnswer[]) {
+      calls.submitClarification.push(answers);
+    },
     addNote(itemId: string, text: string, author?: string) {
       calls.addNote.push({ itemId, text, author });
     },
@@ -387,5 +396,29 @@ describe("handleWebSocket", () => {
 
     await waitFor(() => harness.calls.addNote[0]);
     expect(harness.calls.addNote).toEqual([{ itemId: "A1", text: "needs fix", author: undefined }]);
+  });
+
+  it("calls orchestrator.submitClarification when a client sends a submit-clarification message", async () => {
+    const harness = createHarness();
+    const { port } = await createWsServer(harness.orchestrator);
+    const client = await openClient(port);
+
+    client.socket.send(JSON.stringify({
+      type: "submit-clarification",
+      answers: [
+        {
+          question: "Which language should the extension target?",
+          answer: "TypeScript",
+        },
+      ],
+    }));
+
+    await waitFor(() => harness.calls.submitClarification[0]);
+    expect(harness.calls.submitClarification).toEqual([[
+      {
+        question: "Which language should the extension target?",
+        answer: "TypeScript",
+      },
+    ]]);
   });
 });

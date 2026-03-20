@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { createDashboardPanel, dashboardPanelConstants } from "../../webview/panel";
 import type { Orchestrator } from "../../orchestrator/machine";
-import type { AuditEntry, ClientMessage, DisposableLike, OrchestratorState, Phase } from "../../types";
+import type { AuditEntry, ClarificationAnswer, ClientMessage, DisposableLike, OrchestratorState, Phase } from "../../types";
 
 class TestEmitter<T> {
   private readonly listeners = new Set<(value: T) => void>();
@@ -30,15 +30,16 @@ class FakeElement {
   public textContent = "";
   public innerHTML = "";
   public value = "all";
-  private readonly listeners = new Map<string, Array<() => void>>();
+  public hidden = false;
+  private readonly listeners = new Map<string, Array<(event?: { type: string; preventDefault?: () => void }) => void>>();
 
-  public addEventListener(type: string, listener: () => void): void {
+  public addEventListener(type: string, listener: (event?: { type: string; preventDefault?: () => void }) => void): void {
     const entries = this.listeners.get(type) ?? [];
     entries.push(listener);
     this.listeners.set(type, entries);
   }
 
-  public dispatchEvent(event: { type: string }): void {
+  public dispatchEvent(event: { type: string; preventDefault?: () => void }): void {
     for (const listener of this.listeners.get(event.type) ?? []) {
       listener();
     }
@@ -85,6 +86,10 @@ function createState(overrides: Partial<OrchestratorState> = {}): OrchestratorSt
     currentPhase: 1,
     currentItemIndex: 0,
     consecutivePasses: {},
+    specStep: "done",
+    specConsecutivePasses: 0,
+    specPhaseFileIndex: 0,
+    clarificationQuestions: [],
     status: "running",
     modelAssignments: [
       { role: "implementor", vendor: "copilot", family: "gpt-5.4" },
@@ -136,6 +141,7 @@ function createOrchestratorSpy(initialState: OrchestratorState = createState()) 
     reject: [] as Array<{ itemId: string; feedback: string }>,
     changeModel: [] as Array<{ role: string; vendor: string; family: string }>,
     addNote: [] as Array<{ itemId: string; text: string; author?: string }>,
+    submitClarification: [] as ClarificationAnswer[][],
   };
 
   const orchestrator: Orchestrator = {
@@ -160,6 +166,9 @@ function createOrchestratorSpy(initialState: OrchestratorState = createState()) 
     },
     reject(itemId: string, feedback: string) {
       calls.reject.push({ itemId, feedback });
+    },
+    submitClarification(answers: ClarificationAnswer[]) {
+      calls.submitClarification.push(answers);
     },
     addNote(itemId: string, text: string, author?: string) {
       calls.addNote.push({ itemId, text, author });
@@ -471,6 +480,39 @@ describe("dashboard panel G1", () => {
     expect(harness.panelState.webview.html).toMatch(/script-src 'nonce-[^']+'/);
   });
 
+  it("renders the current audit role filter options", () => {
+    const harness = createPanelHarness();
+    const auditFilterMarkup = harness.panelState.webview.html.match(
+      /<select id="audit-filter">([\s\S]*?)<\/select>/,
+    )?.[1] ?? "";
+    const optionValues = Array.from(auditFilterMarkup.matchAll(/<option value="([^"]+)">/g), (match) => match[1]);
+
+    expect(optionValues).toEqual([
+      "all",
+      "implementor",
+      "reviewer",
+      "clarifier",
+      "spec-author",
+      "spec-reviewer",
+      "spec-proofreader",
+      "phase-creator",
+      "phase-reviewer",
+    ]);
+  });
+
+  it("routes submit-clarification messages to orchestrator.submitClarification", () => {
+    const harness = createPanelHarness();
+
+    harness.receiveMessage({
+      type: "submit-clarification",
+      answers: [{ question: "Which language?", answer: "TypeScript" }],
+    });
+
+    expect(harness.calls.submitClarification).toEqual([
+      [{ question: "Which language?", answer: "TypeScript" }],
+    ]);
+  });
+
   it("routes skip messages to orchestrator.skip", () => {
     const harness = createPanelHarness();
 
@@ -532,6 +574,19 @@ describe("dashboard panel G1", () => {
       { type: "retry", itemId: "A1" },
       { type: "changeModel", role: "reviewer", vendor: "copilot", family: "o3" },
     ]);
+  });
+
+  it("renders spec-writing roles in the dashboard model selector", () => {
+    const harness = createPanelHarness();
+    const html = harness.panelState.webview.html;
+
+    expect(html).toContain('<option value="implementor">Implementor</option>');
+    expect(html).toContain('<option value="reviewer">Reviewer</option>');
+    expect(html).toContain('<option value="spec-author">Spec author</option>');
+    expect(html).toContain('<option value="spec-reviewer">Spec reviewer</option>');
+    expect(html).toContain('<option value="spec-proofreader">Spec proofreader</option>');
+    expect(html).toContain('<option value="phase-creator">Phase creator</option>');
+    expect(html).toContain('<option value="phase-reviewer">Phase reviewer</option>');
   });
 
   it("filters audit entries by reviewer role", () => {
@@ -596,5 +651,72 @@ describe("dashboard panel G1", () => {
     expect(phaseHtml).toContain("pass");
     expect(phaseHtml).toContain("B1");
     expect(phaseHtml).toContain("in-progress");
+  });
+
+  it("renders spec-writing progress when specStep is active", () => {
+    const harness = createPanelHarness();
+    const dom = createDashboardDomHarness(harness.panelState.webview.html);
+
+    dom.window.dispatchMessage({
+      type: "state",
+      data: createState({ specStep: "reviewing-phases", specConsecutivePasses: 1 }),
+    });
+
+    expect(dom.document.getElementById("spec-status-section").hidden).toBe(false);
+    expect(dom.document.getElementById("spec-step-value").textContent).toBe("Reviewing Phases");
+    expect(dom.document.getElementById("spec-pass-count").textContent).toBe("1");
+  });
+
+  it("renders clarification questions and emits submit-clarification from the UI", () => {
+    const harness = createPanelHarness();
+    const dom = createDashboardDomHarness(harness.panelState.webview.html);
+
+    dom.window.dispatchMessage({
+      type: "state",
+      data: createState({
+        specStep: "clarifying",
+        clarificationQuestions: [
+          {
+            question: "Which language should the extension target?",
+            suggestedOptions: ["TypeScript", "JavaScript"],
+          },
+        ],
+      }),
+    });
+
+    expect(dom.document.getElementById("clarification-section").hidden).toBe(false);
+    expect(dom.document.getElementById("clarification-questions").innerHTML).toContain("Which language should the extension target?");
+
+    dom.document.getElementById("clarification-answer-0").value = "TypeScript";
+    dom.document.getElementById("clarification-form").dispatchEvent({
+      type: "submit",
+      preventDefault() {},
+    });
+
+    expect(dom.vscodeMessages).toContainEqual({
+      type: "submit-clarification",
+      answers: [{ question: "Which language should the extension target?", answer: "TypeScript" }],
+    });
+  });
+
+  it("hides clarification questions when questions exist outside the clarifying step", () => {
+    const harness = createPanelHarness();
+    const dom = createDashboardDomHarness(harness.panelState.webview.html);
+
+    dom.window.dispatchMessage({
+      type: "state",
+      data: createState({
+        specStep: "reviewing",
+        clarificationQuestions: [
+          {
+            question: "Which language should the extension target?",
+            suggestedOptions: ["TypeScript", "JavaScript"],
+          },
+        ],
+      }),
+    });
+
+    expect(dom.document.getElementById("clarification-section").hidden).toBe(true);
+    expect(dom.document.getElementById("clarification-questions").innerHTML).toBe("");
   });
 });

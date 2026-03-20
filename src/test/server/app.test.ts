@@ -146,6 +146,27 @@ afterEach(() => {
 });
 
 describe("team dashboard SPA", () => {
+  it("renders the spec-writing audit role filter options", async () => {
+    const dashboard = await loadDashboard();
+
+    const options = Array.from(
+      dashboard.window.document.querySelectorAll("#audit-role-filter option"),
+      (option) => (option as HTMLOptionElement).value,
+    );
+
+    expect(options).toEqual([
+      "all",
+      "implementor",
+      "reviewer",
+      "clarifier",
+      "spec-author",
+      "spec-reviewer",
+      "spec-proofreader",
+      "phase-creator",
+      "phase-reviewer",
+    ]);
+  });
+
   it("renders 2 phase headings and 5 item rows from a state update", async () => {
     const dashboard = await loadDashboard();
     const socket = dashboard.sockets[0];
@@ -254,5 +275,95 @@ describe("team dashboard SPA", () => {
     );
 
     expect(socket?.sent).toEqual([{ type: "addNote", itemId: "A1", text: "needs fix" }]);
+  });
+
+  it("renders explicit spec-writing status when specStep is active", async () => {
+    const dashboard = await loadDashboard();
+    const socket = dashboard.sockets[0];
+    socket?.open();
+
+    socket?.emitMessage({
+      type: "state",
+      data: {
+        status: "running",
+        currentPhase: 1,
+        currentItemIndex: 0,
+        itemStatuses: {},
+        specStep: "reviewing-phases",
+        specConsecutivePasses: 1,
+        clarificationQuestions: [],
+      },
+    });
+
+    expect((dashboard.window.document.getElementById("spec-step-card") as HTMLDivElement).hidden).toBe(false);
+    expect((dashboard.window.document.getElementById("spec-pass-card") as HTMLDivElement).hidden).toBe(false);
+    expect(dashboard.window.document.getElementById("spec-step")?.textContent).toBe("Reviewing Phases");
+    expect(dashboard.window.document.getElementById("spec-pass-count")?.textContent).toBe("1");
+  });
+
+  it("renders clarification questions and sends submit-clarification from the browser UI", async () => {
+    const dashboard = await loadDashboard();
+    const socket = dashboard.sockets[0];
+    socket?.open();
+
+    socket?.emitMessage({
+      type: "state",
+      data: {
+        status: "running",
+        currentPhase: 1,
+        currentItemIndex: 0,
+        itemStatuses: {},
+        specStep: "clarifying",
+        clarificationQuestions: [
+          {
+            question: "Which language should the extension target?",
+            suggestedOptions: ["TypeScript", "JavaScript"],
+          },
+        ],
+      },
+    });
+
+    const panel = dashboard.window.document.getElementById("clarification-panel") as HTMLDivElement;
+    expect(panel.hidden).toBe(false);
+    expect(dashboard.window.document.getElementById("clarification-questions")?.textContent).toContain(
+      "Which language should the extension target?",
+    );
+
+    ((dashboard.window.document.getElementById("clarification-answer-0") as unknown) as { value: string }).value = "TypeScript";
+    (dashboard.window.document.getElementById("clarification-form") as HTMLFormElement).dispatchEvent(
+      new dashboard.window.Event("submit", { bubbles: true, cancelable: true }),
+    );
+
+    expect(socket?.sent).toContainEqual({
+      type: "submit-clarification",
+      answers: [{ question: "Which language should the extension target?", answer: "TypeScript" }],
+    });
+  });
+
+  it("hides clarification questions when questions exist outside the clarifying step", async () => {
+    const dashboard = await loadDashboard();
+    const socket = dashboard.sockets[0];
+    socket?.open();
+
+    socket?.emitMessage({
+      type: "state",
+      data: {
+        status: "running",
+        currentPhase: 1,
+        currentItemIndex: 0,
+        itemStatuses: {},
+        specStep: "reviewing",
+        clarificationQuestions: [
+          {
+            question: "Which language should the extension target?",
+            suggestedOptions: ["TypeScript", "JavaScript"],
+          },
+        ],
+      },
+    });
+
+    const panel = dashboard.window.document.getElementById("clarification-panel") as HTMLDivElement;
+    expect(panel.hidden).toBe(true);
+    expect(dashboard.window.document.getElementById("clarification-questions")?.innerHTML).toBe("");
   });
 });

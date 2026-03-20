@@ -41,6 +41,10 @@ function createState(): OrchestratorState {
     currentPhase: 1,
     currentItemIndex: 0,
     consecutivePasses: {},
+    specStep: "done",
+    specConsecutivePasses: 0,
+    specPhaseFileIndex: 0,
+    clarificationQuestions: [],
     status: "running",
     modelAssignments: [],
     itemStatuses: {},
@@ -61,6 +65,7 @@ function createOrchestrator(): Orchestrator {
     changeModel() {},
     approve() {},
     reject() {},
+    submitClarification() {},
     addNote() {},
     getState() {
       return createState();

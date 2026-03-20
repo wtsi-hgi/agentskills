@@ -8,6 +8,7 @@ import { createOrchestrator } from "../../orchestrator/machine";
 import { readAudit } from "../../state/audit";
 import { loadState, saveState } from "../../state/persistence";
 import type {
+  ClarificationAnswer,
   InvocationResult,
   ModelAssignment,
   OrchestratorConfig,
@@ -22,6 +23,7 @@ type ScriptedInvocation = {
   addendum?: string | null;
   messages?: TranscriptMessage[];
   waitFor?: Promise<void>;
+  error?: Error;
 };
 
 type TestCommandResult = {
@@ -53,8 +55,10 @@ type MachineHarness = {
   selectCalls: Array<{ role: Role; family: string }>;
   orchestrator: ReturnType<typeof createOrchestrator>;
   run: () => Promise<void>;
+  submitClarification: (answers: ClarificationAnswer[]) => void;
   loadPersistedState: () => Promise<OrchestratorState>;
   readPhaseFile: (phaseNumber?: number) => Promise<string>;
+  readPromptFile: () => Promise<string>;
 };
 
 type HarnessRuntime = {
@@ -69,7 +73,11 @@ const dirsToCleanup: string[] = [];
 const DEFAULT_ASSIGNMENTS: ModelAssignment[] = [
   { role: "implementor", vendor: "copilot", family: "gpt-5.4" },
   { role: "reviewer", vendor: "copilot", family: "gpt-4.1" },
-  { role: "spec-writer", vendor: "copilot", family: "gpt-4.1" },
+  { role: "spec-author", vendor: "copilot", family: "gpt-4.1" },
+  { role: "spec-reviewer", vendor: "copilot", family: "gpt-4.1-mini" },
+  { role: "spec-proofreader", vendor: "copilot", family: "o3" },
+  { role: "phase-creator", vendor: "copilot", family: "gpt-4.1" },
+  { role: "phase-reviewer", vendor: "copilot", family: "o3-mini" },
 ];
 
 function createToken() {
@@ -109,6 +117,21 @@ async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<voi
   throw new Error("Timed out waiting for condition");
 }
 
+async function waitForValue<T>(predicate: () => T | undefined | Promise<T | undefined>): Promise<T> {
+  const timeoutAt = Date.now() + 3_000;
+
+  while (Date.now() < timeoutAt) {
+    const value = await predicate();
+    if (value !== undefined) {
+      return value;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  throw new Error("Timed out waiting for condition");
+}
+
 async function createWorkspace(): Promise<string> {
   const workspaceDir = await mkdtemp(path.join(os.tmpdir(), "conductor-d2-"));
   dirsToCleanup.push(workspaceDir);
@@ -120,6 +143,9 @@ async function writeFixtureFiles(
   options?: {
     phaseContent?: string;
     phaseFiles?: Record<number, string>;
+    createSpec?: boolean;
+    createPrompt?: boolean;
+    promptContent?: string;
   },
 ): Promise<void> {
   const specDir = path.join(workspaceDir, ".docs", "conductor");
@@ -130,25 +156,37 @@ async function writeFixtureFiles(
   await mkdir(path.join(skillsDir, "test-implementor"), { recursive: true });
   await mkdir(path.join(skillsDir, "test-reviewer"), { recursive: true });
 
-  await writeFile(path.join(specDir, "spec.md"), [
-    "# Spec",
-    "",
-    "### A1: Item A1",
-    "Implement A1.",
-    "",
-    "### A2: Item A2",
-    "Implement A2.",
-    "",
-    "### B1: Batch item B1",
-    "Implement B1.",
-    "",
-    "### B2: Batch item B2",
-    "Implement B2.",
-    "",
-    "### B3: Batch item B3",
-    "Implement B3.",
-    "",
-  ].join("\n"), "utf8");
+  if (options?.createSpec ?? true) {
+    await writeFile(path.join(specDir, "spec.md"), [
+      "# Spec",
+      "",
+      "### A1: Item A1",
+      "Implement A1.",
+      "",
+      "### A2: Item A2",
+      "Implement A2.",
+      "",
+      "### B1: Batch item B1",
+      "Implement B1.",
+      "",
+      "### B2: Batch item B2",
+      "Implement B2.",
+      "",
+      "### B3: Batch item B3",
+      "Implement B3.",
+      "",
+    ].join("\n"), "utf8");
+  }
+
+  if (options?.createPrompt) {
+    await writeFile(path.join(specDir, "prompt.md"), options.promptContent ?? [
+      "# Prompt",
+      "",
+      "Build the requested feature.",
+      "",
+      "Respect the repository architecture.",
+    ].join("\n"), "utf8");
+  }
 
   const phaseFiles = options?.phaseFiles ?? {
     1: options?.phaseContent ?? [
@@ -187,17 +225,22 @@ function createOrchestratorOverrides(
   options?: {
     invocationScripts?: Partial<Record<Role, ScriptedInvocation[]>>;
     executeResults?: TestCommandResult[];
+    persistTranscripts?: boolean;
   },
 ): Parameters<typeof createOrchestrator>[2] {
   const invocationQueues = {
     implementor: [...(options?.invocationScripts?.implementor ?? [])],
     reviewer: [...(options?.invocationScripts?.reviewer ?? [])],
-    "spec-writer": [...(options?.invocationScripts?.["spec-writer"] ?? [])],
+    "spec-author": [...(options?.invocationScripts?.["spec-author"] ?? [])],
+    "spec-reviewer": [...(options?.invocationScripts?.["spec-reviewer"] ?? [])],
+    "spec-proofreader": [...(options?.invocationScripts?.["spec-proofreader"] ?? [])],
+    "phase-creator": [...(options?.invocationScripts?.["phase-creator"] ?? [])],
+    "phase-reviewer": [...(options?.invocationScripts?.["phase-reviewer"] ?? [])],
   } satisfies Record<Role, ScriptedInvocation[]>;
 
   const executeResults = [...(options?.executeResults ?? [])];
 
-  return {
+  const overrides: Parameters<typeof createOrchestrator>[2] = {
     async selectModelForRole(role, assignments) {
       const family = assignments.find((assignment) => assignment.role === role)?.family ?? "unknown";
       runtime.selectCalls.push({ role, family });
@@ -224,6 +267,10 @@ function createOrchestratorOverrides(
         await next.waitFor;
       }
 
+      if (next.error) {
+        throw next.error;
+      }
+
       return createInvocationResult(next);
     },
     async executeBash(command) {
@@ -241,25 +288,38 @@ function createOrchestratorOverrides(
         author: entry.author,
       });
     },
-    async saveTranscript(_conductorDir, _transcript: RunTranscript) {
-    },
     now() {
       return "2026-03-19T10:11:12.000Z";
     },
   };
+
+  if (!options?.persistTranscripts) {
+    overrides.saveTranscript = async (_conductorDir, _transcript: RunTranscript) => {
+    };
+  }
+
+  return overrides;
 }
 
 async function createHarness(options?: {
   phaseContent?: string;
   phaseFiles?: Record<number, string>;
+  createSpec?: boolean;
+  createPrompt?: boolean;
+  promptContent?: string;
   invocationScripts?: Partial<Record<Role, ScriptedInvocation[]>>;
   executeResults?: TestCommandResult[];
   initialState?: Partial<OrchestratorState>;
+  modelAssignments?: ModelAssignment[];
+  persistTranscripts?: boolean;
 }): Promise<MachineHarness> {
   const workspaceDir = await createWorkspace();
   await writeFixtureFiles(workspaceDir, {
     phaseContent: options?.phaseContent,
     phaseFiles: options?.phaseFiles,
+    createSpec: options?.createSpec,
+    createPrompt: options?.createPrompt,
+    promptContent: options?.promptContent,
   });
 
   const config: OrchestratorConfig = {
@@ -267,7 +327,8 @@ async function createHarness(options?: {
     projectDir: workspaceDir,
     skillsDir: path.join(workspaceDir, "skills"),
     conventionsSkill: "test-conventions",
-    modelAssignments: DEFAULT_ASSIGNMENTS.map((assignment) => ({ ...assignment })),
+    modelAssignments: (options?.modelAssignments ?? DEFAULT_ASSIGNMENTS)
+      .map((assignment) => ({ ...assignment })),
     maxTurns: 5,
     maxRetries: 2,
     testCommand: "npm test",
@@ -280,6 +341,10 @@ async function createHarness(options?: {
       currentPhase: 1,
       currentItemIndex: 0,
       consecutivePasses: {},
+      specStep: "done",
+      specConsecutivePasses: 0,
+      specPhaseFileIndex: 0,
+      clarificationQuestions: [],
       status: "idle",
       modelAssignments: config.modelAssignments,
       itemStatuses: {},
@@ -304,8 +369,10 @@ async function createHarness(options?: {
     selectCalls: runtime.selectCalls,
     orchestrator,
     run: () => orchestrator.run(createToken() as never),
+    submitClarification: (answers) => orchestrator.submitClarification(answers),
     loadPersistedState: () => loadState(path.join(workspaceDir, ".conductor")),
     readPhaseFile: (phaseNumber = 1) => readFile(path.join(workspaceDir, ".docs", "conductor", `phase${phaseNumber}.md`), "utf8"),
+    readPromptFile: () => readFile(path.join(workspaceDir, ".docs", "conductor", "prompt.md"), "utf8"),
   };
 }
 
@@ -314,6 +381,517 @@ afterEach(async () => {
 });
 
 describe("createOrchestrator", () => {
+  it("starts in clarifying mode from prompt.md and invokes the clarification prompt with conventions context", async () => {
+    const promptContent = [
+      "# Prompt",
+      "",
+      "Add the requested orchestration feature.",
+      "",
+      "Keep the repository architecture intact.",
+    ].join("\n");
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      promptContent,
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [{ response: "NONE" }, { response: "PASS" }],
+        "spec-reviewer": [{ response: "PASS" }, { response: "PASS" }],
+        "spec-proofreader": [{ response: "PASS" }, { response: "PASS" }],
+        "phase-creator": [{ response: "PASS" }],
+        "phase-reviewer": [{ response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    expect(harness.invocationRecords[0]?.role).toBe("spec-author");
+    expect(harness.invocationRecords[0]?.systemPrompt).toContain("# test conventions");
+    expect(harness.invocationRecords[0]?.userPrompt).toContain("Add the requested orchestration feature.");
+    expect(harness.orchestrator.getState().specStep).toBe("done");
+  });
+
+  it("uses the spec-author model for clarification while auditing the invocation as clarifier", async () => {
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      persistTranscripts: true,
+      invocationScripts: {
+        "spec-author": [{ response: "NONE" }, { response: "PASS" }],
+        "spec-reviewer": [{ response: "PASS" }, { response: "PASS" }],
+        "spec-proofreader": [{ response: "PASS" }, { response: "PASS" }],
+        "phase-creator": [{ response: "PASS" }],
+        "phase-reviewer": [{ response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+    const transcripts = await harness.orchestrator.getTranscripts();
+    const clarificationAudit = auditEntries.find((entry) => entry.itemId === "phase0:clarifying");
+    const clarificationTranscript = transcripts.find((entry) => entry.itemId === "phase0:clarifying");
+
+    expect(harness.selectCalls[0]).toMatchObject({ role: "spec-author", family: "gpt-4.1" });
+    expect(clarificationAudit).toMatchObject({
+      role: "clarifier",
+      model: "clarifier:gpt-4.1",
+      itemId: "phase0:clarifying",
+    });
+    expect(clarificationTranscript).toMatchObject({
+      role: "clarifier",
+      model: "clarifier:gpt-4.1",
+      itemId: "phase0:clarifying",
+    });
+  });
+
+  it("stores parsed clarification questions and pauses for user answers", async () => {
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [{ response: JSON.stringify([
+          { question: "Which API should this extend?", suggestedOptions: ["REST", "GraphQL"] },
+          { question: "Should this include UI work?", suggestedOptions: ["yes", "no"] },
+          { question: "What is out of scope?", suggestedOptions: ["migration", "none"] },
+        ]) }],
+      },
+    });
+
+    await harness.run();
+
+    expect(harness.orchestrator.getState().status).toBe("paused");
+    expect(harness.orchestrator.getState().specStep).toBe("clarifying");
+    expect(harness.orchestrator.getState().clarificationQuestions).toHaveLength(3);
+    expect(harness.orchestrator.getState().clarificationQuestions[0]).toMatchObject({
+      question: "Which API should this extend?",
+      suggestedOptions: ["REST", "GraphQL"],
+    });
+  });
+
+  it("appends submitted clarification answers under notes, clears questions, and re-invokes clarification with the updated prompt", async () => {
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      promptContent: [
+        "# Prompt",
+        "",
+        "Build the orchestration layer.",
+        "",
+        "## Notes",
+        "",
+        "- `Existing note: keep extension settings stable.`",
+        "",
+      ].join("\n"),
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [
+          { response: JSON.stringify([
+            { question: "Which transport should be supported?", suggestedOptions: ["webview", "server"] },
+            { question: "Should this include UI work?", suggestedOptions: ["yes", "no"] },
+          ]) },
+          { response: "NONE" },
+          { response: "PASS" },
+        ],
+        "spec-reviewer": [{ response: "PASS" }, { response: "PASS" }],
+        "spec-proofreader": [{ response: "PASS" }, { response: "PASS" }],
+        "phase-creator": [{ response: "PASS" }],
+        "phase-reviewer": [{ response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    harness.submitClarification([
+      { question: "Which transport should be supported?", answer: "webview only for this item" },
+      { question: "Should this include UI work?", answer: "no, keep UI for a later item" },
+    ]);
+
+    await waitFor(() => harness.orchestrator.getState().specStep === "done");
+
+    const updatedPrompt = await harness.readPromptFile();
+    const clarificationCalls = harness.invocationRecords.filter((record) => record.role === "spec-author");
+
+    expect(updatedPrompt).toContain("## Notes");
+    expect(updatedPrompt).toContain("Existing note: keep extension settings stable.");
+    expect(updatedPrompt).toContain("Clarification: Which transport should be supported? => webview only for this item");
+    expect(updatedPrompt).toContain("Clarification: Should this include UI work? => no, keep UI for a later item");
+    expect(harness.orchestrator.getState().clarificationQuestions).toHaveLength(0);
+    expect(clarificationCalls[1]?.userPrompt).toContain("Clarification: Which transport should be supported? => webview only for this item");
+  });
+
+  it("creates a notes section when clarification answers are submitted to a prompt without notes", async () => {
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      promptContent: ["# Prompt", "", "Capture the requirements.", ""].join("\n"),
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [
+          {
+            response: JSON.stringify([
+              { question: "What should the first draft cover?", suggestedOptions: ["scope", "tests"] },
+            ]),
+          },
+          { response: "NONE" },
+          { response: "PASS" },
+        ],
+        "spec-reviewer": [{ response: "PASS" }, { response: "PASS" }],
+        "spec-proofreader": [{ response: "PASS" }, { response: "PASS" }],
+        "phase-creator": [{ response: "PASS" }],
+        "phase-reviewer": [{ response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+    harness.submitClarification([
+      { question: "What should the first draft cover?", answer: "scope only" },
+    ]);
+
+    await waitFor(() => harness.orchestrator.getState().specStep === "done");
+
+    const updatedPrompt = await harness.readPromptFile();
+    expect(updatedPrompt).toContain("## Notes");
+    expect(updatedPrompt).toContain("Clarification: What should the first draft cover? => scope only");
+  });
+
+  it("treats malformed clarification JSON as NONE and proceeds without an approval pause", async () => {
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [{ response: "{not valid json" }, { response: "PASS" }],
+        "spec-reviewer": [{ response: "PASS" }, { response: "PASS" }],
+        "spec-proofreader": [{ response: "PASS" }, { response: "PASS" }],
+        "phase-creator": [{ response: "PASS" }],
+        "phase-reviewer": [{ response: "PASS" }],
+      },
+    });
+    harness.config.requireApproval = true;
+
+    const runPromise = harness.run();
+    await waitFor(() => harness.invocationRecords.some((record) => record.role === "spec-reviewer"));
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval" && harness.orchestrator.getState().specStep === "reviewing");
+    harness.orchestrator.skip("spec-review");
+    await runPromise;
+
+    expect(harness.orchestrator.getState().clarificationQuestions).toHaveLength(0);
+    expect(harness.invocationRecords.filter((record) => record.role === "spec-author")).toHaveLength(2);
+    expect(harness.invocationRecords.some((record) => record.role === "spec-reviewer")).toBe(true);
+  });
+
+  it("restores pending clarification questions across pause and resume without re-asking them", async () => {
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [{ response: JSON.stringify([
+          { question: "Which runtime should own this?", suggestedOptions: ["extension", "server"] },
+        ]) }],
+      },
+    });
+
+    await harness.run();
+
+    const pausedState = await waitForValue(async () => {
+      try {
+        const persistedState = await harness.loadPersistedState();
+        return persistedState.clarificationQuestions.length === 1 ? persistedState : undefined;
+      } catch {
+        return undefined;
+      }
+    });
+
+    harness.orchestrator.resume();
+
+    const resumedState = await waitForValue(async () => {
+      try {
+        const persistedState = await harness.loadPersistedState();
+        return persistedState.status === "paused" && persistedState.clarificationQuestions.length === 1
+          ? persistedState
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    });
+
+    expect(pausedState.clarificationQuestions).toHaveLength(1);
+    expect(resumedState.clarificationQuestions).toHaveLength(1);
+    expect(harness.invocationRecords.filter((record) => record.role === "spec-author")).toHaveLength(1);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+
+  it("fails clarification after exhausting retries on invocation errors", async () => {
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [
+          { response: "unused", error: new Error("tool error") },
+          { response: "unused", error: new Error("tool error") },
+        ],
+      },
+    });
+
+    await harness.run();
+
+    expect(harness.orchestrator.getState().status).toBe("error");
+    expect(harness.orchestrator.getState().specStep).toBe("clarifying");
+  });
+
+  it("skips phase 0 when spec.md already exists and proceeds directly to implementation", async () => {
+    const harness = await createHarness({
+      createPrompt: true,
+      invocationScripts: {
+        implementor: [{ response: "implemented" }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    expect(harness.orchestrator.getState().specStep).toBe("done");
+    expect(harness.invocationRecords[0]?.role).toBe("implementor");
+  });
+
+  it("errors when neither spec.md nor prompt.md exists", async () => {
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: false,
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+    });
+
+    await harness.run();
+
+    expect(harness.orchestrator.getState().status).toBe("error");
+    expect(harness.invocationRecords).toHaveLength(0);
+  });
+
+  it("moves from clarification to authoring and reviewing with prompt.md content in the reviewer prompt", async () => {
+    const promptContent = ["# Prompt", "", "Need a stronger spec review loop.", ""].join("\n");
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      promptContent,
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [{ response: "NONE" }, { response: "PASS" }],
+        "spec-reviewer": [{ response: "PASS" }, { response: "PASS" }],
+        "spec-proofreader": [{ response: "PASS" }, { response: "PASS" }],
+        "phase-creator": [{ response: "PASS" }],
+        "phase-reviewer": [{ response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    const reviewerCall = harness.invocationRecords.find((record) => record.role === "spec-reviewer");
+    expect(reviewerCall?.userPrompt).toContain("Need a stronger spec review loop.");
+  });
+
+  it("requires two spec review PASSes before proofreading and excludes prompt.md contents from proofreading prompts", async () => {
+    const promptContent = ["# Prompt", "", "This text should not appear in proofreading.", ""].join("\n");
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      promptContent,
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [{ response: "NONE" }, { response: "PASS" }],
+        "spec-reviewer": [{ response: "PASS" }, { response: "PASS" }],
+        "spec-proofreader": [{ response: "PASS" }, { response: "PASS" }],
+        "phase-creator": [{ response: "PASS" }],
+        "phase-reviewer": [{ response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    expect(harness.invocationRecords.filter((record) => record.role === "spec-reviewer")).toHaveLength(2);
+    const proofreaderCall = harness.invocationRecords.find((record) => record.role === "spec-proofreader");
+    expect(proofreaderCall?.userPrompt).toContain(`${harness.config.specDir}/spec.md`);
+    expect(proofreaderCall?.userPrompt).not.toContain("This text should not appear in proofreading.");
+  });
+
+  it("advances phase review by file index and retries the same phase file after FIXED", async () => {
+    const harness = await createHarness({
+      phaseFiles: {
+        1: ["# Phase 1: Empty", ""].join("\n"),
+        2: ["# Phase 2: Empty", ""].join("\n"),
+      },
+      initialState: {
+        status: "paused",
+        specStep: "reviewing-phases",
+        specPhaseFileIndex: 0,
+      },
+      invocationScripts: {
+        "phase-reviewer": [{ response: "FIXED" }, { response: "PASS" }, { response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+    harness.orchestrator.resume();
+    await waitFor(() => harness.orchestrator.getState().specStep === "done");
+
+    const phaseReviewerCalls = harness.invocationRecords.filter((record) => record.role === "phase-reviewer");
+    expect(phaseReviewerCalls).toHaveLength(3);
+    expect(phaseReviewerCalls[0]?.userPrompt).toContain("phase1.md");
+    expect(phaseReviewerCalls[1]?.userPrompt).toContain("phase1.md");
+    expect(phaseReviewerCalls[2]?.userPrompt).toContain("phase2.md");
+    expect(harness.orchestrator.getState().specPhaseFileIndex).toBe(2);
+  });
+
+  it("routes failed phase review feedback back through phase creation before retrying review", async () => {
+    const harness = await createHarness({
+      phaseFiles: {
+        1: ["# Phase 1: Empty", ""].join("\n"),
+        2: ["# Phase 2: Empty", ""].join("\n"),
+      },
+      initialState: {
+        status: "paused",
+        specStep: "reviewing-phases",
+        specPhaseFileIndex: 0,
+      },
+      invocationScripts: {
+        "phase-reviewer": [{ response: "FAIL tighten phase scope" }, { response: "PASS" }, { response: "PASS" }],
+        "phase-creator": [{ response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+    harness.orchestrator.resume();
+    await waitFor(() => harness.orchestrator.getState().specStep === "done");
+
+    const phaseCreatorCalls = harness.invocationRecords.filter((record) => record.role === "phase-creator");
+    const phaseReviewerCalls = harness.invocationRecords.filter((record) => record.role === "phase-reviewer");
+
+    expect(phaseCreatorCalls).toHaveLength(1);
+    expect(phaseCreatorCalls[0]?.userPrompt).toContain("Feedback:\nFAIL tighten phase scope");
+    expect(phaseReviewerCalls).toHaveLength(3);
+    expect(phaseReviewerCalls[0]?.userPrompt).toContain("phase1.md");
+    expect(phaseReviewerCalls[1]?.userPrompt).toContain("phase1.md");
+    expect(phaseReviewerCalls[2]?.userPrompt).toContain("phase2.md");
+  });
+
+  it("waits for approval after spec review and resumes into proofreading when approved", async () => {
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [{ response: "NONE" }, { response: "PASS" }],
+        "spec-reviewer": [{ response: "PASS" }, { response: "PASS" }],
+        "spec-proofreader": [{ response: "PASS" }, { response: "PASS" }],
+        "phase-creator": [{ response: "PASS" }],
+        "phase-reviewer": [{ response: "PASS" }],
+      },
+    });
+    harness.config.requireApproval = true;
+
+    const runPromise = harness.run();
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval");
+    expect(harness.orchestrator.getState().specStep).toBe("reviewing");
+    harness.orchestrator.approve("spec-review");
+    await waitFor(() => harness.invocationRecords.some((record) => record.role === "spec-proofreader"));
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval" && harness.orchestrator.getState().specStep === "proofreading");
+    harness.orchestrator.skip("spec-proofreading");
+    await runPromise;
+  });
+
+  it("re-enters authoring with rejection feedback after spec review approval is rejected", async () => {
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [{ response: "NONE" }, { response: "PASS" }, { response: "PASS" }],
+        "spec-reviewer": [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
+        "spec-proofreader": [{ response: "PASS" }, { response: "PASS" }],
+        "phase-creator": [{ response: "PASS" }],
+        "phase-reviewer": [{ response: "PASS" }],
+      },
+    });
+    harness.config.requireApproval = true;
+
+    const runPromise = harness.run();
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval");
+    harness.orchestrator.reject("spec-review", "narrow the scope");
+    await waitFor(() => harness.invocationRecords.filter((record) => record.role === "spec-author").length === 3);
+    expect(harness.invocationRecords.filter((record) => record.role === "spec-author").at(-1)?.userPrompt).toContain("narrow the scope");
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval");
+    harness.orchestrator.approve("spec-review");
+    await waitFor(() => harness.orchestrator.getState().status === "pending-approval" && harness.orchestrator.getState().specStep === "proofreading");
+    harness.orchestrator.skip("spec-proofreading");
+    await runPromise;
+  });
+
+  it("stops with error after exhausting spec review retries and records reviewer FAIL audits", async () => {
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [{ response: "NONE" }, { response: "PASS" }, { response: "PASS" }],
+        "spec-reviewer": [{ response: "FAIL once" }, { response: "FAIL twice" }],
+      },
+    });
+
+    await harness.run();
+
+    const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+    expect(harness.orchestrator.getState().status).toBe("error");
+    expect(harness.orchestrator.getState().specStep).toBe("reviewing");
+    expect(auditEntries.filter((entry) => entry.role === "spec-reviewer" && entry.result === "FAIL")).toHaveLength(2);
+  });
+
+  it("persists spec-writing progress across pause and resume and writes spec author transcripts and audits", async () => {
+    let releaseReview!: () => void;
+    const waitForReview = new Promise<void>((resolve) => {
+      releaseReview = resolve;
+    });
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      phaseFiles: {
+        1: ["# Phase 1: Empty", ""].join("\n"),
+        2: ["# Phase 2: Empty", ""].join("\n"),
+      },
+      persistTranscripts: true,
+      invocationScripts: {
+        "spec-author": [{ response: "NONE" }, { response: "PASS" }],
+        "spec-reviewer": [{ response: "PASS", waitFor: waitForReview }, { response: "PASS" }],
+        "spec-proofreader": [{ response: "PASS" }, { response: "PASS" }],
+        "phase-creator": [{ response: "PASS" }],
+        "phase-reviewer": [{ response: "PASS" }, { response: "PASS" }],
+      },
+    });
+
+    const runPromise = harness.run();
+    await waitFor(() => harness.invocationRecords.filter((record) => record.role === "spec-reviewer").length === 1);
+    harness.orchestrator.pause();
+    releaseReview();
+    await runPromise;
+
+    const pausedState = await harness.loadPersistedState();
+    expect(pausedState.specStep).toBe("reviewing");
+    expect(pausedState.specConsecutivePasses).toBe(1);
+
+    harness.orchestrator.resume();
+    await waitFor(() => harness.orchestrator.getState().specPhaseFileIndex === 2);
+
+    const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+    const transcripts = await harness.orchestrator.getTranscripts();
+
+    expect(auditEntries.some((entry) => entry.role === "spec-author")).toBe(true);
+    expect(auditEntries.some((entry) => entry.role === "spec-reviewer" && entry.result === "PASS")).toBe(true);
+    expect(transcripts.some((entry) => entry.role === "spec-author")).toBe(true);
+  });
+
   it("marks an item pass after two consecutive PASS reviews", async () => {
     const harness = await createHarness({
       invocationScripts: {
@@ -603,7 +1181,11 @@ describe("createOrchestrator", () => {
         modelAssignments: [
           { role: "implementor", vendor: "copilot", family: "gpt-5.4" },
           { role: "reviewer", vendor: "copilot", family: "o3" },
-          { role: "spec-writer", vendor: "copilot", family: "gpt-4.1" },
+          { role: "spec-author", vendor: "copilot", family: "gpt-4.1" },
+          { role: "spec-reviewer", vendor: "copilot", family: "gpt-4.1-mini" },
+          { role: "spec-proofreader", vendor: "copilot", family: "o3" },
+          { role: "phase-creator", vendor: "copilot", family: "gpt-4.1" },
+          { role: "phase-reviewer", vendor: "copilot", family: "o3-mini" },
         ],
       },
       invocationScripts: {
@@ -885,6 +1467,10 @@ describe("createOrchestrator", () => {
       currentPhase: 1,
       currentItemIndex: 1,
       consecutivePasses: { A1: 2 },
+      specStep: "done",
+      specConsecutivePasses: 0,
+      specPhaseFileIndex: 0,
+      clarificationQuestions: [],
       status: "paused",
       modelAssignments: config.modelAssignments,
       itemStatuses: { A1: "pass" },
@@ -925,6 +1511,17 @@ describe("createOrchestrator", () => {
       family: "o3",
     });
     expect(harness.selectCalls.find((call) => call.role === "reviewer")?.family).toBe("o3");
+  });
+
+  it("ignores changeModel requests for roles without configured assignments", async () => {
+    const harness = await createHarness({
+      modelAssignments: DEFAULT_ASSIGNMENTS.filter((assignment) => assignment.role !== "phase-reviewer"),
+    });
+    const before = harness.orchestrator.getState().modelAssignments;
+
+    harness.orchestrator.changeModel("phase-reviewer", "copilot", "o3");
+
+    expect(harness.orchestrator.getState().modelAssignments).toEqual(before);
   });
 
   it("retries implementation when the test command exits non-zero and appends failure output to feedback", async () => {

@@ -114,13 +114,45 @@
           },
           "description": "Model assignment for the reviewer role."
         },
-        "conductor.models.specWriter": {
+        "conductor.models.specAuthor": {
           "type": "object",
           "default": {
             "vendor": "",
             "family": ""
           },
-          "description": "Model assignment for the spec-writer role."
+          "description": "Model assignment for the spec-author role."
+        },
+        "conductor.models.specReviewer": {
+          "type": "object",
+          "default": {
+            "vendor": "",
+            "family": ""
+          },
+          "description": "Model assignment for the spec-reviewer role."
+        },
+        "conductor.models.specProofreader": {
+          "type": "object",
+          "default": {
+            "vendor": "",
+            "family": ""
+          },
+          "description": "Model assignment for the spec-proofreader role."
+        },
+        "conductor.models.phaseCreator": {
+          "type": "object",
+          "default": {
+            "vendor": "",
+            "family": ""
+          },
+          "description": "Model assignment for the phase-creator role."
+        },
+        "conductor.models.phaseReviewer": {
+          "type": "object",
+          "default": {
+            "vendor": "",
+            "family": ""
+          },
+          "description": "Model assignment for the phase-reviewer role."
         },
         "conductor.server.port": {
           "type": "number",

@@ -25,8 +25,8 @@ update all test files referencing `"spec-writer"`. Must
 come first so subsequent items build on clean types.
 Covering all 6 acceptance tests from J1.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 4.2: I1 - Skill Loading for Spec-Writing Roles
 
@@ -42,8 +42,8 @@ prefix. Ensure conventions skill is loaded only for
 file: `src/test/llm/prompts.test.ts`. Depends on item 4.1
 (J1). Covering all 5 acceptance tests from I1.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 4.3: I2 - Spec-Writing State Machine
 
@@ -63,8 +63,8 @@ state persistence. Test file:
 `src/test/orchestrator/machine.test.ts`. Depends on
 item 4.2 (I1). Covering all 21 acceptance tests from I2.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 4.4: I4 - Requirements Clarification Loop
 
@@ -84,8 +84,8 @@ label using `specAuthor` model config. Test file:
 `src/test/orchestrator/machine.test.ts`. Depends on
 item 4.3 (I2). Covering all 13 acceptance tests from I4.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 4.5: I3 - Extension Command Auto-Detection
 
@@ -99,8 +99,8 @@ exists, begin spec-writing (set `specStep` to
 file: `src/test/extension.test.ts`. Depends on item 4.4
 (I4). Covering all 3 acceptance tests from I3.
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed
 
 ### Item 4.6: G1/H2 - Dashboard and Team Server Updates
 
@@ -120,5 +120,5 @@ filters, render clarification Q&A form when
 G1/H2 tests cover rendering paths. Depends on item 4.4
 (I4).
 
-- [ ] implemented
-- [ ] reviewed
+- [x] implemented
+- [x] reviewed

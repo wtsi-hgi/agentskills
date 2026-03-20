@@ -9,13 +9,16 @@ import type {
   ConfigurationLike,
   DisposableLike,
   ExtensionContextLike,
+  ModelAssignment,
   OrchestratorState,
   VscodeApiLike,
 } from "../types";
 
 class FakeConfiguration implements ConfigurationLike {
-  public get<T>(_section: string, defaultValue: T): T {
-    return defaultValue;
+  public constructor(private readonly values: Record<string, unknown> = {}) {}
+
+  public get<T>(section: string, defaultValue: T): T {
+    return (this.values[section] as T | undefined) ?? defaultValue;
   }
 }
 
@@ -25,11 +28,13 @@ function createDisposable(onDispose: () => void): DisposableLike {
   };
 }
 
-function createFakeVscode(workspaceDir: string) {
+function createFakeVscode(workspaceDir: string, configurationValues: Record<string, unknown> = {}) {
   const commands = new Map<string, (...args: unknown[]) => unknown>();
   const infoMessages: Array<{ message: string; options: string[] }> = [];
+  const errorMessages: Array<{ message: string; options: string[] }> = [];
   const responses: Array<string | undefined> = [];
   const treeRegistrations: Array<{ viewId: string; provider: unknown }> = [];
+  const configuration = new FakeConfiguration(configurationValues);
 
   const api: VscodeApiLike = {
     commands: {
@@ -43,6 +48,10 @@ function createFakeVscode(workspaceDir: string) {
     window: {
       async showInformationMessage(message: string, ...items: string[]) {
         infoMessages.push({ message, options: items });
+        return responses.shift();
+      },
+      async showErrorMessage(message: string, ...items: string[]) {
+        errorMessages.push({ message, options: items });
         return responses.shift();
       },
       registerTreeDataProvider(viewId, treeDataProvider) {
@@ -59,7 +68,7 @@ function createFakeVscode(workspaceDir: string) {
     workspace: {
       workspaceFolders: [{ uri: { fsPath: workspaceDir } }],
       getConfiguration() {
-        return new FakeConfiguration();
+        return configuration;
       },
     },
   };
@@ -68,6 +77,7 @@ function createFakeVscode(workspaceDir: string) {
     api,
     commands,
     infoMessages,
+    errorMessages,
     treeRegistrations,
     enqueueInfoResponse(response: string | undefined) {
       responses.push(response);
@@ -87,6 +97,10 @@ function createStubOrchestrator(initialState?: Partial<OrchestratorState>): Orch
     currentPhase: 1,
     currentItemIndex: 0,
     consecutivePasses: {},
+    specStep: "done",
+    specConsecutivePasses: 0,
+    specPhaseFileIndex: 0,
+    clarificationQuestions: [],
     status: "idle",
     modelAssignments: [],
     itemStatuses: {},
@@ -102,6 +116,7 @@ function createStubOrchestrator(initialState?: Partial<OrchestratorState>): Orch
     changeModel() {},
     approve() {},
     reject() {},
+    submitClarification() {},
     addNote() {},
     getState() {
       return state;
@@ -147,15 +162,19 @@ function createStubOrchestrator(initialState?: Partial<OrchestratorState>): Orch
 function createTrackedStubOrchestrator(initialState?: Partial<OrchestratorState>): {
   orchestrator: Orchestrator;
   calls: {
+    run: number;
     resume: number;
   };
 } {
-  const calls = { resume: 0 };
+  const calls = { run: 0, resume: 0 };
   const orchestrator = createStubOrchestrator(initialState);
 
   return {
     orchestrator: {
       ...orchestrator,
+      async run() {
+        calls.run += 1;
+      },
       resume() {
         calls.resume += 1;
       },
@@ -187,6 +206,21 @@ async function writeDefaultSpecFixtures(workspaceDir: string): Promise<void> {
       "spec.md section: A1",
       "- [ ] implemented",
       "- [ ] reviewed",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+}
+
+async function writePromptFixture(workspaceDir: string): Promise<void> {
+  const specDir = path.join(workspaceDir, ".docs", "conductor");
+  await mkdir(specDir, { recursive: true });
+  await writeFile(
+    path.join(specDir, "prompt.md"),
+    [
+      "# Prompt",
+      "",
+      "Describe the feature to implement.",
       "",
     ].join("\n"),
     "utf8",
@@ -253,6 +287,72 @@ describe("Conductor extension A1", () => {
     expect(state.status).toBe("running");
   });
 
+  it("starts spec-writing in clarifying mode when prompt.md exists without spec.md", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    await writePromptFixture(workspaceDir);
+    const fakeVscode = createFakeVscode(workspaceDir);
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      createOrchestrator() {
+        return createStubOrchestrator();
+      },
+    });
+
+    await controller.activate(createContext());
+    await fakeVscode.commands.get("conductor.start")?.();
+
+    const state = await readState(workspaceDir);
+    expect(state.status).toBe("running");
+    expect(state.specStep).toBe("clarifying");
+  });
+
+  it("starts implementation mode when spec.md exists", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    await writeDefaultSpecFixtures(workspaceDir);
+    await writePromptFixture(workspaceDir);
+    const fakeVscode = createFakeVscode(workspaceDir);
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      createOrchestrator() {
+        return createStubOrchestrator();
+      },
+    });
+
+    await controller.activate(createContext());
+    await fakeVscode.commands.get("conductor.start")?.();
+
+    const state = await readState(workspaceDir);
+    expect(state.status).toBe("running");
+    expect(state.specStep).toBe("done");
+  });
+
+  it("shows an error and does not start when specDir has neither spec.md nor prompt.md", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    const fakeVscode = createFakeVscode(workspaceDir);
+    const harness = createTrackedStubOrchestrator();
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      createOrchestrator() {
+        return harness.orchestrator;
+      },
+    });
+
+    await controller.activate(createContext());
+    await fakeVscode.commands.get("conductor.start")?.();
+
+    expect(fakeVscode.errorMessages).toEqual([
+      {
+        message: "No spec.md or prompt.md found in specDir.",
+        options: [],
+      },
+    ]);
+    expect(harness.calls.run).toBe(0);
+    await expect(readState(workspaceDir)).rejects.toThrow();
+  });
+
   it("writes paused status on Pause", async () => {
     const workspaceDir = await createWorkspace();
     workspacesToCleanup.push(workspaceDir);
@@ -294,6 +394,42 @@ describe("Conductor extension A1", () => {
 
     const state = await readState(workspaceDir);
     expect(state.status).toBe("running");
+  });
+
+  it("writes model assignments for the five spec-writing roles on Start", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    await writeDefaultSpecFixtures(workspaceDir);
+    const fakeVscode = createFakeVscode(workspaceDir, {
+      "models.implementor": { vendor: "copilot", family: "gpt-5.4" },
+      "models.reviewer": { vendor: "copilot", family: "o3" },
+      "models.specAuthor": { vendor: "copilot", family: "gpt-4.1" },
+      "models.specReviewer": { vendor: "copilot", family: "gpt-4.1-mini" },
+      "models.specProofreader": { vendor: "copilot", family: "o3-mini" },
+      "models.phaseCreator": { vendor: "copilot", family: "gpt-4.1" },
+      "models.phaseReviewer": { vendor: "copilot", family: "o3" },
+    });
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      createOrchestrator() {
+        return createStubOrchestrator();
+      },
+    });
+
+    await controller.activate(createContext());
+    await fakeVscode.commands.get("conductor.start")?.();
+
+    const state = await readState(workspaceDir);
+
+    expect(state.modelAssignments).toEqual<ModelAssignment[]>([
+      { role: "implementor", vendor: "copilot", family: "gpt-5.4" },
+      { role: "reviewer", vendor: "copilot", family: "o3" },
+      { role: "spec-author", vendor: "copilot", family: "gpt-4.1" },
+      { role: "spec-reviewer", vendor: "copilot", family: "gpt-4.1-mini" },
+      { role: "spec-proofreader", vendor: "copilot", family: "o3-mini" },
+      { role: "phase-creator", vendor: "copilot", family: "gpt-4.1" },
+      { role: "phase-reviewer", vendor: "copilot", family: "o3" },
+    ]);
   });
 
   it("does not show a resume prompt on activation when no state exists", async () => {
