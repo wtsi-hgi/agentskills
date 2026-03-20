@@ -37,14 +37,14 @@ Key test areas:
 
 | Test file | What it covers |
 |---|---|
-| `extension.test.ts` | Command handlers, activation, state persistence, crash recovery |
-| `orchestrator/machine.test.ts` | State machine transitions, spec-writing pipeline, 2-consecutive-PASS gate, parallel batches |
+| `extension.test.ts` | Command handlers, activation, state persistence, crash recovery, inline prompts, conventions auto-detection, bugfix/abandon commands |
+| `orchestrator/machine.test.ts` | State machine transitions, spec-writing pipeline, 2-consecutive-PASS gate, parallel batches, branch safety, lint integration, command extraction, PR review, bugfix cycle, git commit/push, Copilot re-review |
 | `orchestrator/parser.test.ts` | Phase file parsing |
 | `llm/invoke.test.ts` | Tool-loop invocation, turn limits, cancellation |
 | `llm/prompts.test.ts` | Prompt assembly, skill loading, conventions derivation |
 | `llm/select.test.ts` | Model selection per role |
-| `tools/bash.test.ts` | Bash execution, security validation, rejected patterns |
-| `tools/dispatch.test.ts` | Tool dispatch (Read, Edit, Write, Grep, Glob) |
+| `tools/bash.test.ts` | Bash execution, security validation, rejected patterns, trusted execution |
+| `tools/dispatch.test.ts` | Tool dispatch (Read, Edit, Write, Grep, Glob), file trash safety |
 | `state/*.test.ts` | Persistence, audit log, addendum, transcript storage |
 | `server/*.test.ts` | HTTP serving, WebSocket handlers, auth |
 | `views/treeProvider.test.ts` | Sidebar tree rendering and status display |
@@ -57,9 +57,11 @@ To test the extension inside a running VS Code instance:
 1. Open this repository in VS Code.
 2. Press `F5` (or **Run → Start Debugging**).
 3. A new **Extension Development Host** window opens with the extension loaded.
-4. In that window, open a project that has `.docs/conductor/spec.md` and phase
-   files.
-5. Run **Conductor: Start** from the Command Palette.
+4. In that window, open a project that has a feature directory under
+   `conductor.docsDir` (e.g. `.docs/conductor/spec.md` and phase files), or
+   just run **Conductor: Start** and type a feature description inline.
+5. Make sure you are on a feature branch (not `main` or `master`).
+6. Run **Conductor: Start** from the Command Palette.
 
 The Extension Development Host uses the TypeScript source via VS Code's built-in
 extension debugging — no manual build step is needed for this workflow.
@@ -142,12 +144,12 @@ or distribute via your artifact repository.
 
 ```text
 src/
-  extension.ts             entry point (activate/deactivate)
+  extension.ts             entry point (activate/deactivate, command registration, crash recovery)
   types.ts                 shared TypeScript interfaces
   tools/
     schema.ts              tool definitions (Read, Edit, Write, Bash, Grep, Glob)
     dispatch.ts            executes tool calls against the filesystem/shell
-    bash.ts                Bash execution with security validation
+    bash.ts                Bash execution with security validation + trusted execution path
   llm/
     select.ts              picks Copilot model per role from config
     prompts.ts             loads skills, assembles system prompts
@@ -156,7 +158,7 @@ src/
     loader.ts              reads SKILL.md files from skillsDir
   orchestrator/
     parser.ts              parses phase markdown files into structured data
-    machine.ts             state machine: spec-writing pipeline + implement → test → review, 2-PASS gate
+    machine.ts             state machine: spec-writing pipeline + implement → test → lint → review, 2-PASS gate, PR review, bugfix cycle, git operations, Copilot re-review
   state/
     persistence.ts         reads/writes .conductor/state.json
     audit.ts               appends to .conductor/audit.md

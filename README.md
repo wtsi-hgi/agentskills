@@ -8,8 +8,10 @@ This repository contains two related but distinct things:
    across multiple tech stacks.
 
 2. **Copilot Conductor** — a VS Code extension that automates the
-   implement → test → review cycle by driving those skills with a deterministic
-   state machine, replacing manual prompt-based orchestration.
+   implement → test → lint → review → PR review cycle by driving those skills
+   with a deterministic state machine, replacing manual prompt-based
+   orchestration. It also handles bugfix workflows, branch safety checks,
+   per-phase git commits, and crash recovery.
 
 You can use the skills without the extension (they work with any agentskills.io
 compatible tool), and you can use the extension to automate the skills instead
@@ -31,11 +33,11 @@ full inventory and usage guide.
 
 ### Copilot Conductor extension
 
-Install the `.vsix` in VS Code, place a `prompt.md` (to generate the spec and
-phases) or an existing `spec.md` + phase files in `.docs/conductor/` under your
-configured `conductor.docsDir`, then run **Conductor: Start**. Conductor stores
-the selected conventions skill and quality commands per feature in
-`.conductor/state.json` instead of global settings. See the
+Install the `.vsix` in VS Code and run **Conductor: Start** — type your feature
+description inline or point it at an existing `spec.md` + phase files. Conductor
+auto-detects your conventions skill, extracts test/lint commands, and stores
+everything per feature in `.conductor/state.json`. Use **Conductor: Fix Bugs**
+for targeted bugfix workflows. See the
 [extension guide](docs/extension-guide.md) for setup and usage.
 
 ## Documentation

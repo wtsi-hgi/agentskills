@@ -123,14 +123,17 @@ machine. It uses skills differently from the manual workflow:
 
 | Skill category | Manual workflow | Conductor |
 |---|---|---|
-| Conventions (`*-conventions`) | Loaded by agents | Loaded by extension into system prompt |
+| Conventions (`*-conventions`) | Loaded by agents | Auto-detected at run start; loaded by extension into system prompt |
 | Implementor/reviewer (`*-implementor`, `*-reviewer`) | Loaded by agents | Loaded by extension into system prompt |
-| Orchestrator, pr-reviewer, spec-writer | Agent reads and follows | Replaced by extension code |
+| PR reviewer (`pr-reviewer`) | Agent reads and follows | Loaded by extension for built-in PR review cycle |
+| Orchestrator, spec-writer | Agent reads and follows | Replaced by extension code |
+| Bugfix | Agent reads and follows | Replaced by extension's built-in bugfix workflow |
 | Agent-conduct | Agent reads and follows | Redundant — safety enforced by extension's bash tool |
 
-The orchestrator, pr-reviewer, and spec-writer skills are all orchestrating
+The orchestrator, spec-writer, and bugfix skills are all orchestrating
 workflows that coordinate subagents. Conductor replaces all three with its own
-state machine.
+state machine. The pr-reviewer skill is loaded directly by the extension for its
+built-in PR review steps.
 
 **Note on agent-conduct:** All skills begin with "Read and follow
 **agent-conduct**\u2026". When Conductor loads skills into the LLM's system
