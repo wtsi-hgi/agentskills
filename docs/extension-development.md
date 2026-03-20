@@ -38,7 +38,7 @@ Key test areas:
 | Test file | What it covers |
 |---|---|
 | `extension.test.ts` | Command handlers, activation, state persistence, crash recovery |
-| `orchestrator/machine.test.ts` | State machine transitions, 2-consecutive-PASS gate, parallel batches |
+| `orchestrator/machine.test.ts` | State machine transitions, spec-writing pipeline, 2-consecutive-PASS gate, parallel batches |
 | `orchestrator/parser.test.ts` | Phase file parsing |
 | `llm/invoke.test.ts` | Tool-loop invocation, turn limits, cancellation |
 | `llm/prompts.test.ts` | Prompt assembly, skill loading, conventions derivation |
@@ -156,7 +156,7 @@ src/
     loader.ts              reads SKILL.md files from skillsDir
   orchestrator/
     parser.ts              parses phase markdown files into structured data
-    machine.ts             state machine: implement → test → review, 2-PASS gate
+    machine.ts             state machine: spec-writing pipeline + implement → test → review, 2-PASS gate
   state/
     persistence.ts         reads/writes .conductor/state.json
     audit.ts               appends to .conductor/audit.md

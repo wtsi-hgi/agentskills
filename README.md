@@ -32,7 +32,9 @@ full inventory and usage guide.
 ### Copilot Conductor extension
 
 Install the `.vsix` in VS Code, configure `conductor.conventionsSkill` for your
-tech stack, and run **Conductor: Start**. See the
+tech stack, place a `prompt.md` (to generate the spec and phases) or an
+existing `spec.md` + phase files in `.docs/conductor/`, then run
+**Conductor: Start**. See the
 [extension guide](docs/extension-guide.md) for setup and usage.
 
 ## Documentation

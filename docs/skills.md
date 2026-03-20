@@ -117,9 +117,9 @@ Next.js+FastAPI project without modification.
 
 ### Skills used by Copilot Conductor
 
-The [Copilot Conductor extension](extension-guide.md) automates the orchestrator
-and pr-reviewer workflow with a deterministic state machine. It uses skills
-differently from the manual workflow:
+The [Copilot Conductor extension](extension-guide.md) automates the
+orchestrator, spec-writer, and pr-reviewer workflows with a deterministic state
+machine. It uses skills differently from the manual workflow:
 
 | Skill category | Manual workflow | Conductor |
 |---|---|---|
@@ -130,16 +130,14 @@ differently from the manual workflow:
 
 The orchestrator, pr-reviewer, and spec-writer skills are all orchestrating
 workflows that coordinate subagents. Conductor replaces all three with its own
-state machine. Use the manual spec-writer skill to create your spec and phase
-files *before* starting a Conductor run.
+state machine.
 
-**Note on agent-conduct:** The implementor, reviewer, and spec-writer skills all
-begin with "Read and follow **agent-conduct**…". When Conductor loads these
-skills into the LLM's system prompt, the model may waste a tool turn attempting
-to read the agent-conduct file, even though the extension already enforces those
-safety rules in code (bash command validation, file path restrictions). To avoid
-this, Conductor strips agent-conduct references from skill text before prompt
-assembly.
+**Note on agent-conduct:** All skills begin with "Read and follow
+**agent-conduct**\u2026". When Conductor loads skills into the LLM's system
+prompt, the model may waste a tool turn attempting to read the agent-conduct
+file, even though the extension already enforces those safety rules in code
+(bash command validation, file path restrictions). To avoid this, Conductor
+strips agent-conduct references from skill text before prompt assembly.
 
 ## Adding New Tech Stacks
 
