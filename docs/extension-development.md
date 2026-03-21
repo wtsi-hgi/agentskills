@@ -55,13 +55,17 @@ Key test areas:
 To test the extension inside a running VS Code instance:
 
 1. Open this repository in VS Code.
-2. Press `F5` (or **Run → Start Debugging**).
-3. A new **Extension Development Host** window opens with the extension loaded.
-4. In that window, open a project that has a feature directory under
+2. Open **Run and Debug** (`Ctrl+Shift+D`) and select the **Run Extension** configuration.
+3. Press `F5` (or **Run → Start Debugging**) to launch that configuration.
+4. A new **Extension Development Host** window opens with the extension loaded.
+5. In that window, open a project that has a feature directory under
    `conductor.docsDir` (e.g. `.docs/conductor/spec.md` and phase files), or
    just run **Conductor: Start** and type a feature description inline.
-5. Make sure you are on a feature branch (not `main` or `master`).
-6. Run **Conductor: Start** from the Command Palette.
+6. Make sure you are on a feature branch (not `main` or `master`).
+7. Run **Conductor: Start** from the Command Palette.
+
+If `F5` tries to debug the active file (for example, a Markdown file), use
+**Debug: Select and Start Debugging** and choose **Run Extension**.
 
 The Extension Development Host uses the TypeScript source via VS Code's built-in
 extension debugging — no manual build step is needed for this workflow.
