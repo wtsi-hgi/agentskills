@@ -401,10 +401,10 @@
             <option value="phase-creator">Phase creator</option>
             <option value="phase-reviewer">Phase reviewer</option>
           </select>
-          <label for="vendor-input">Vendor</label>
-          <input id="vendor-input" type="text" value="copilot" />
-          <label for="family-input">Family</label>
-          <input id="family-input" type="text" value="o3" />
+          <label for="model-select">Model</label>
+          <select id="model-select">
+            <option value='{"vendor":"","family":""}'>Auto</option>
+          </select>
           <button id="change-model-button" type="button">Change model</button>
         </div>
       </div>
@@ -549,9 +549,10 @@
       function createStore() {
         return {
           orchestratorState: undefined,
+          lastSyncedConventionsSkill: undefined,
           bugfixStatus: undefined,
           prReviewStatus: { step: "done", consecutivePasses: 0 },
-          controlOptions: { conventionsSkills: [] },
+          controlOptions: { conventionsSkills: [], chatModels: [] },
           phase: undefined,
           auditEntries: [],
           transcripts: [],
@@ -607,9 +608,77 @@
         }
       }
 
+      function encodeModelValue(vendor, family) {
+        return JSON.stringify({
+          vendor: String(vendor || ""),
+          family: String(family || ""),
+        });
+      }
+
+      function decodeModelValue(value) {
+        try {
+          const parsed = JSON.parse(String(value || ""));
+          return {
+            vendor: typeof parsed.vendor === "string" ? parsed.vendor : "",
+            family: typeof parsed.family === "string" ? parsed.family : "",
+          };
+        } catch {
+          return { vendor: "", family: "" };
+        }
+      }
+
+      function normalizeRole(value) {
+        return value && value !== "all" ? value : "implementor";
+      }
+
+      function getSelectedAssignment(state, role) {
+        const assignments = state && Array.isArray(state.modelAssignments)
+          ? state.modelAssignments
+          : [];
+
+        return assignments.find(function (assignment) {
+          return assignment.role === role;
+        }) || { vendor: "", family: "" };
+      }
+
+      function getChatModels(controlOptions) {
+        return Array.isArray(controlOptions && controlOptions.chatModels)
+          ? controlOptions.chatModels.filter(function (model) {
+            return model
+              && typeof model.vendor === "string"
+              && typeof model.family === "string"
+              && typeof model.label === "string";
+          })
+          : [];
+      }
+
+      function getModelDisplayLabel(controlOptions, vendor, family) {
+        if (!vendor && !family) {
+          return "Auto";
+        }
+
+        const match = getChatModels(controlOptions).find(function (model) {
+          return model.vendor === vendor && model.family === family;
+        });
+        if (match) {
+          return match.label;
+        }
+
+        if (vendor && family) {
+          return vendor + "/" + family;
+        }
+
+        return vendor || family || "Auto";
+      }
+
       function populateConventionsSelect(elements, store) {
         const state = store.orchestratorState || {};
-        const selected = typeof state.conventionsSkill === "string" ? state.conventionsSkill : "";
+        const persisted = typeof state.conventionsSkill === "string" ? state.conventionsSkill : "";
+        const current = typeof elements.conventionsSkillSelect.value === "string"
+          ? elements.conventionsSkillSelect.value
+          : "";
+        const persistedChanged = persisted !== store.lastSyncedConventionsSkill;
+        const selected = persistedChanged ? persisted : current;
         const available = Array.isArray(store.controlOptions && store.controlOptions.conventionsSkills)
           ? store.controlOptions.conventionsSkills.slice()
           : [];
@@ -623,20 +692,57 @@
           return '<option value="' + escapeHtml(skill) + '"' + isSelected + '>' + escapeHtml(skill) + '</option>';
         }));
         elements.conventionsSkillSelect.innerHTML = options.join("");
-        if (selected || elements.conventionsSkillSelect.value === "") {
-          elements.conventionsSkillSelect.value = selected;
+        elements.conventionsSkillSelect.value = selected;
+        store.lastSyncedConventionsSkill = persisted;
+      }
+
+      function populateModelSelect(elements, store) {
+        const role = normalizeRole(elements.roleSelect.value);
+        if (elements.roleSelect.value !== role) {
+          elements.roleSelect.value = role;
         }
+
+        const assignment = getSelectedAssignment(store.orchestratorState, role);
+        const selectedValue = encodeModelValue(assignment.vendor, assignment.family);
+        const chatModels = getChatModels(store.controlOptions);
+        const seen = new Set();
+        const options = [
+          '<option value="' + escapeHtml(encodeModelValue("", "")) + '">Auto</option>',
+        ];
+
+        for (const model of chatModels) {
+          const value = encodeModelValue(model.vendor, model.family);
+          if (seen.has(value)) {
+            continue;
+          }
+
+          seen.add(value);
+          options.push(
+            '<option value="' + escapeHtml(value) + '">' + escapeHtml(model.label) + '</option>',
+          );
+        }
+
+        if ((assignment.vendor || assignment.family) && !seen.has(selectedValue)) {
+          options.push(
+            '<option value="' + escapeHtml(selectedValue) + '">' + escapeHtml(getModelDisplayLabel(store.controlOptions, assignment.vendor, assignment.family) + ' (unavailable)') + '</option>',
+          );
+        }
+
+        elements.modelSelect.innerHTML = options.join("");
+        elements.modelSelect.value = selectedValue;
       }
 
       function syncControlInputs(store, elements) {
         const state = store.orchestratorState;
         if (!state) {
+          populateModelSelect(elements, store);
           return;
         }
 
         elements.testCommandInput.value = state.testCommand || "npm test";
         elements.lintCommandInput.value = typeof state.lintCommand === "string" ? state.lintCommand : "";
         populateConventionsSelect(elements, store);
+        populateModelSelect(elements, store);
       }
 
       function totalTokensForItem(entries, itemId) {
@@ -649,7 +755,7 @@
           }, 0);
       }
 
-      function renderModels(state, elements) {
+      function renderModels(state, elements, controlOptions) {
         const assignments = state && Array.isArray(state.modelAssignments)
           ? state.modelAssignments
           : [];
@@ -660,14 +766,16 @@
         }
 
         elements.modelsList.innerHTML = assignments.map(function (assignment) {
-          const vendor = assignment.vendor || "unassigned";
-          const family = assignment.family || "unassigned";
+          const label = getModelDisplayLabel(controlOptions, assignment.vendor, assignment.family);
+          const detail = assignment.vendor && assignment.family
+            ? assignment.vendor + "/" + assignment.family
+            : "Auto";
           return '<li class="audit-entry"><div class="audit-meta"><span>'
             + escapeHtml(assignment.role)
             + '</span><span>'
-            + escapeHtml(vendor)
+            + escapeHtml(label)
             + '</span><span>'
-            + escapeHtml(family)
+            + escapeHtml(detail)
             + '</span></div></li>';
         }).join("");
       }
@@ -843,7 +951,7 @@
           elements.stepValue.textContent = "Phase 1 / Item 1";
         }
 
-        renderModels(state, elements);
+        renderModels(state, elements, store.controlOptions);
         renderPhaseItems(state, store.phase, elements);
         renderSpecStatus(state, elements);
         renderClarificationForm(state, elements);
@@ -882,7 +990,7 @@
         }
 
         if (message.type === "control-options") {
-          store.controlOptions = message.data || { conventionsSkills: [] };
+          store.controlOptions = message.data || { conventionsSkills: [], chatModels: [] };
           render(store, elements);
           return;
         }
@@ -916,8 +1024,7 @@
           itemIdInput: documentObject.getElementById("item-id-input"),
           rejectFeedbackInput: documentObject.getElementById("reject-feedback-input"),
           roleSelect: documentObject.getElementById("role-select"),
-          vendorInput: documentObject.getElementById("vendor-input"),
-          familyInput: documentObject.getElementById("family-input"),
+          modelSelect: documentObject.getElementById("model-select"),
           pauseButton: documentObject.getElementById("pause-button"),
           resumeButton: documentObject.getElementById("resume-button"),
           copilotRereviewButton: documentObject.getElementById("copilot-rereview-button"),
@@ -970,6 +1077,9 @@
         elements.auditStatusFilter.addEventListener("change", function () {
           store.filterStatus = elements.auditStatusFilter.value;
           render(store, elements);
+        });
+        elements.roleSelect.addEventListener("change", function () {
+          populateModelSelect(elements, store);
         });
         elements.pauseButton.addEventListener("click", function () {
           sendMessage({ type: "pause" });
@@ -1035,11 +1145,12 @@
           sendMessage({ type: "retry", itemId: elements.itemIdInput.value || "A1" });
         });
         elements.changeModelButton.addEventListener("click", function () {
+          const selection = decodeModelValue(elements.modelSelect.value);
           sendMessage({
             type: "changeModel",
-            role: elements.roleSelect.value,
-            vendor: elements.vendorInput.value || "copilot",
-            family: elements.familyInput.value || "o3",
+            role: normalizeRole(elements.roleSelect.value),
+            vendor: selection.vendor,
+            family: selection.family,
           });
         });
         elements.clarificationForm.addEventListener("submit", function (event) {

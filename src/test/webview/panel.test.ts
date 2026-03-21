@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
+import { JSDOM } from "jsdom";
 
 import { createDashboardPanel, dashboardPanelConstants } from "../../webview/panel";
 import type { Orchestrator } from "../../orchestrator/machine";
@@ -228,7 +229,13 @@ function createOrchestratorSpy(initialState: OrchestratorState = createState()) 
 
   const controlBridge: DashboardControlBridge = {
     getControlOptions() {
-      return { conventionsSkills: ["python-conventions", "nextjs-fastapi-conventions"] };
+      return {
+        conventionsSkills: ["python-conventions", "nextjs-fastapi-conventions"],
+        chatModels: [
+          { vendor: "copilot", family: "gpt-5.4", name: "GPT-5.4", label: "GPT-5.4" },
+          { vendor: "copilot", family: "o3", name: "o3", label: "o3" },
+        ],
+      };
     },
     startRun(request) {
       calls.startRun.push(request);
@@ -388,6 +395,38 @@ function createDashboardDomHarness(html: string) {
   };
 }
 
+function createDashboardBrowserHarness(html: string) {
+  const vscodeMessages: unknown[] = [];
+  const dom = new JSDOM(html, {
+    runScripts: "dangerously",
+    url: "https://example.test/",
+    beforeParse(window) {
+      Object.assign(window, {
+        acquireVsCodeApi() {
+          return {
+            postMessage(message: unknown) {
+              vscodeMessages.push(message);
+            },
+            getState() {
+              return undefined;
+            },
+            setState() {},
+          };
+        },
+      });
+    },
+  });
+
+  return {
+    dom,
+    document: dom.window.document,
+    vscodeMessages,
+    dispatchMessage(message: unknown) {
+      dom.window.dispatchEvent(new dom.window.MessageEvent("message", { data: message }));
+    },
+  };
+}
+
 describe("dashboard panel G1", () => {
   it("creates a webview panel with the conductor.dashboard view type", () => {
     const harness = createPanelHarness();
@@ -513,7 +552,13 @@ describe("dashboard panel G1", () => {
 
     expect(harness.receivedMessages).toContainEqual({
       type: "control-options",
-      data: { conventionsSkills: ["python-conventions", "nextjs-fastapi-conventions"] },
+      data: {
+        conventionsSkills: ["python-conventions", "nextjs-fastapi-conventions"],
+        chatModels: [
+          { vendor: "copilot", family: "gpt-5.4", name: "GPT-5.4", label: "GPT-5.4" },
+          { vendor: "copilot", family: "o3", name: "o3", label: "o3" },
+        ],
+      },
     });
   });
 
@@ -770,13 +815,18 @@ describe("dashboard panel G1", () => {
 
     dom.window.dispatchMessage({
       type: "control-options",
-      data: { conventionsSkills: ["python-conventions"] },
+      data: {
+        conventionsSkills: ["python-conventions"],
+        chatModels: [
+          { vendor: "copilot", family: "gpt-5.4", name: "GPT-5.4", label: "GPT-5.4" },
+          { vendor: "copilot", family: "o3", name: "o3", label: "o3" },
+        ],
+      },
     });
     dom.document.getElementById("item-id-input").value = "A1";
     dom.document.getElementById("reject-feedback-input").value = "fix X";
     dom.document.getElementById("role-select").value = "reviewer";
-    dom.document.getElementById("vendor-input").value = "copilot";
-    dom.document.getElementById("family-input").value = "o3";
+    dom.document.getElementById("model-select").value = JSON.stringify({ vendor: "copilot", family: "o3" });
     dom.document.getElementById("inline-prompt-input").value = "Add inline dashboard controls";
     dom.document.getElementById("conventions-skill-select").value = "python-conventions";
     dom.document.getElementById("test-command-input").value = "pytest";
@@ -823,6 +873,69 @@ describe("dashboard panel G1", () => {
     ]);
   });
 
+  it("preserves a locally selected conventions skill after Apply commands rerenders the controls with unchanged persisted state", () => {
+    const harness = createPanelHarness(createState({ conventionsSkill: "python-conventions" }));
+    const dom = createDashboardBrowserHarness(harness.panelState.webview.html);
+
+    try {
+      dom.dispatchMessage({
+        type: "control-options",
+        data: {
+          conventionsSkills: ["python-conventions", "nextjs-fastapi-conventions"],
+          chatModels: [
+            { vendor: "copilot", family: "gpt-5.4", name: "GPT-5.4", label: "GPT-5.4" },
+          ],
+        },
+      });
+      dom.dispatchMessage({
+        type: "state",
+        data: createState({ conventionsSkill: "python-conventions", testCommand: "npm test", lintCommand: "" }),
+      });
+
+      const inlinePromptInput = dom.document.getElementById("inline-prompt-input") as HTMLTextAreaElement;
+      const conventionsSkillSelect = dom.document.getElementById("conventions-skill-select") as HTMLSelectElement;
+      const testCommandInput = dom.document.getElementById("test-command-input") as HTMLInputElement;
+      const lintCommandInput = dom.document.getElementById("lint-command-input") as HTMLInputElement;
+
+      inlinePromptInput.value = "Fix the dashboard controls";
+      conventionsSkillSelect.value = "nextjs-fastapi-conventions";
+      testCommandInput.value = "pnpm test";
+      lintCommandInput.value = "pnpm lint";
+
+      (dom.document.getElementById("override-commands-button") as HTMLButtonElement).click();
+
+      dom.dispatchMessage({
+        type: "state",
+        data: createState({ conventionsSkill: "python-conventions", testCommand: "pnpm test", lintCommand: "pnpm lint" }),
+      });
+
+      expect(conventionsSkillSelect.value).toBe("nextjs-fastapi-conventions");
+
+      (dom.document.getElementById("start-run-button") as HTMLButtonElement).click();
+      (dom.document.getElementById("fix-bugs-button") as HTMLButtonElement).click();
+
+      expect(dom.vscodeMessages).toEqual([
+        { type: "override-commands", testCommand: "pnpm test", lintCommand: "pnpm lint" },
+        {
+          type: "start-feature",
+          prompt: "Fix the dashboard controls",
+          conventionsSkill: "nextjs-fastapi-conventions",
+          testCommand: "pnpm test",
+          lintCommand: "pnpm lint",
+        },
+        {
+          type: "start-bugfix",
+          prompt: "Fix the dashboard controls",
+          conventionsSkill: "nextjs-fastapi-conventions",
+          testCommand: "pnpm test",
+          lintCommand: "pnpm lint",
+        },
+      ]);
+    } finally {
+      dom.dom.window.close();
+    }
+  });
+
   it("renders spec-writing roles in the dashboard model selector", () => {
     const harness = createPanelHarness();
     const html = harness.panelState.webview.html;
@@ -834,6 +947,76 @@ describe("dashboard panel G1", () => {
     expect(html).toContain('<option value="spec-proofreader">Spec proofreader</option>');
     expect(html).toContain('<option value="phase-creator">Phase creator</option>');
     expect(html).toContain('<option value="phase-reviewer">Phase reviewer</option>');
+  });
+
+  it("renders runtime chat models plus Auto in the dashboard model dropdown and refreshes when options change", () => {
+    const harness = createPanelHarness(createState({
+      modelAssignments: [
+        { role: "implementor", vendor: "copilot", family: "gpt-5.4" },
+        { role: "reviewer", vendor: "copilot", family: "o3" },
+      ],
+    }));
+    const dom = createDashboardDomHarness(harness.panelState.webview.html);
+
+    dom.window.dispatchMessage({
+      type: "state",
+      data: createState({
+        modelAssignments: [
+          { role: "implementor", vendor: "copilot", family: "gpt-5.4" },
+          { role: "reviewer", vendor: "copilot", family: "o3" },
+        ],
+      }),
+    });
+    dom.window.dispatchMessage({
+      type: "control-options",
+      data: {
+        conventionsSkills: [],
+        chatModels: [
+          { vendor: "copilot", family: "gpt-5.4", name: "GPT-5.4", label: "GPT-5.4" },
+          { vendor: "copilot", family: "o3", name: "o3", label: "o3" },
+        ],
+      },
+    });
+
+    const modelSelect = dom.document.getElementById("model-select");
+    expect(modelSelect.innerHTML).toContain(">Auto<");
+    expect(modelSelect.innerHTML).toContain(">o3<");
+    expect(modelSelect.value).toBe(JSON.stringify({ vendor: "copilot", family: "gpt-5.4" }));
+
+    dom.window.dispatchMessage({
+      type: "control-options",
+      data: {
+        conventionsSkills: [],
+        chatModels: [
+          { vendor: "copilot", family: "gpt-5.4", name: "GPT-5.4", label: "GPT-5.4" },
+        ],
+      },
+    });
+
+    expect(modelSelect.innerHTML).not.toContain(">o3<");
+  });
+
+  it("maps Auto model selection back to empty vendor and family values", () => {
+    const harness = createPanelHarness();
+    const dom = createDashboardDomHarness(harness.panelState.webview.html);
+
+    dom.window.dispatchMessage({
+      type: "control-options",
+      data: {
+        conventionsSkills: [],
+        chatModels: [
+          { vendor: "copilot", family: "o3", name: "o3", label: "o3" },
+        ],
+      },
+    });
+    dom.document.getElementById("role-select").value = "reviewer";
+    dom.document.getElementById("model-select").value = JSON.stringify({ vendor: "", family: "" });
+
+    dom.document.getElementById("change-model-button").click();
+
+    expect(dom.vscodeMessages).toEqual([
+      { type: "changeModel", role: "reviewer", vendor: "", family: "" },
+    ]);
   });
 
   it("filters audit entries by reviewer role", () => {

@@ -314,7 +314,10 @@ describe("team dashboard SPA", () => {
 
     socket?.emitMessage({
       type: "control-options",
-      data: { conventionsSkills: ["python-conventions"] },
+      data: {
+        conventionsSkills: ["python-conventions"],
+        chatModels: [],
+      },
     });
     socket?.emitMessage({
       type: "state",
@@ -356,6 +359,77 @@ describe("team dashboard SPA", () => {
       conventionsSkill: "python-conventions",
       testCommand: "pytest",
       lintCommand: "ruff check .",
+    });
+  });
+
+  it("preserves a local conventions selection across Apply Commands rerenders when persisted state is unchanged", async () => {
+    const dashboard = await loadDashboard();
+    const socket = dashboard.sockets[0];
+    socket?.open();
+
+    socket?.emitMessage({
+      type: "control-options",
+      data: {
+        conventionsSkills: ["python-conventions", "nextjs-fastapi-conventions"],
+        chatModels: [],
+      },
+    });
+    socket?.emitMessage({
+      type: "state",
+      data: {
+        status: "running",
+        currentPhase: 1,
+        currentItemIndex: 0,
+        itemStatuses: {},
+        conventionsSkill: "python-conventions",
+        testCommand: "npm test",
+        lintCommand: "",
+      },
+    });
+
+    ((dashboard.window.document.getElementById("inline-prompt-input") as unknown) as { value: string }).value = "Keep my local override";
+    ((dashboard.window.document.getElementById("conventions-skill-select") as unknown) as { value: string }).value = "nextjs-fastapi-conventions";
+    ((dashboard.window.document.getElementById("test-command-input") as unknown) as { value: string }).value = "pnpm test";
+    ((dashboard.window.document.getElementById("lint-command-input") as unknown) as { value: string }).value = "pnpm lint";
+
+    (dashboard.window.document.getElementById("override-commands-button") as { click(): void }).click();
+
+    socket?.emitMessage({
+      type: "state",
+      data: {
+        status: "running",
+        currentPhase: 1,
+        currentItemIndex: 0,
+        itemStatuses: {},
+        conventionsSkill: "python-conventions",
+        testCommand: "pnpm test",
+        lintCommand: "pnpm lint",
+      },
+    });
+
+    expect(((dashboard.window.document.getElementById("conventions-skill-select") as unknown) as { value: string }).value).toBe("nextjs-fastapi-conventions");
+
+    (dashboard.window.document.getElementById("start-run-button") as { click(): void }).click();
+    (dashboard.window.document.getElementById("fix-bugs-button") as { click(): void }).click();
+
+    expect(socket?.sent).toContainEqual({
+      type: "override-commands",
+      testCommand: "pnpm test",
+      lintCommand: "pnpm lint",
+    });
+    expect(socket?.sent).toContainEqual({
+      type: "start-feature",
+      prompt: "Keep my local override",
+      conventionsSkill: "nextjs-fastapi-conventions",
+      testCommand: "pnpm test",
+      lintCommand: "pnpm lint",
+    });
+    expect(socket?.sent).toContainEqual({
+      type: "start-bugfix",
+      prompt: "Keep my local override",
+      conventionsSkill: "nextjs-fastapi-conventions",
+      testCommand: "pnpm test",
+      lintCommand: "pnpm lint",
     });
   });
 

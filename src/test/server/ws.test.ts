@@ -157,7 +157,10 @@ function createHarness(initialState = createState()): OrchestratorHarness {
 
   const controlBridge: DashboardControlBridge = {
     getControlOptions() {
-      return { conventionsSkills: ["python-conventions", "nextjs-fastapi-conventions"] };
+      return {
+        conventionsSkills: ["python-conventions", "nextjs-fastapi-conventions"],
+        chatModels: [],
+      };
     },
     startRun(request) {
       calls.startRun.push(request);
@@ -281,7 +284,10 @@ describe("handleWebSocket", () => {
 
     expect(controlOptionsMessage).toEqual({
       type: "control-options",
-      data: { conventionsSkills: ["python-conventions", "nextjs-fastapi-conventions"] },
+      data: {
+        conventionsSkills: ["python-conventions", "nextjs-fastapi-conventions"],
+        chatModels: [],
+      },
     });
   });
 

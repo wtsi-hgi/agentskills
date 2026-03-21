@@ -1,3 +1,5 @@
+import type * as vscode from "vscode";
+
 export type Role =
   | "implementor"
   | "reviewer"
@@ -194,8 +196,16 @@ export interface PrReviewStatus {
   consecutivePasses: number;
 }
 
+export interface ChatModelOption {
+  vendor: string;
+  family: string;
+  name: string;
+  label: string;
+}
+
 export interface DashboardControlOptions {
   conventionsSkills: string[];
+  chatModels: ChatModelOption[];
 }
 
 export interface InlineRunRequest {
@@ -312,6 +322,9 @@ export interface VscodeApiLike {
   commands: CommandRegistry;
   window: WindowLike;
   workspace: WorkspaceLike;
+  lm?: {
+    selectChatModels(selector?: Pick<vscode.LanguageModelChat, "vendor" | "family">): Promise<vscode.LanguageModelChat[]>;
+  };
 }
 
 export interface ExtensionDependencies {

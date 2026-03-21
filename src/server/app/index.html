@@ -616,9 +616,10 @@
         reconnectAttempt: 0,
         filterRole: "all",
         filterStatus: "all",
+        lastSyncedConventionsSkill: undefined,
         bugfixStatus: null,
         prReviewStatus: { step: "done", consecutivePasses: 0 },
-        controlOptions: { conventionsSkills: [] },
+        controlOptions: { conventionsSkills: [], chatModels: [] },
         state: {
           currentPhase: 1,
           currentItemIndex: 0,
@@ -735,7 +736,12 @@
       }
 
       function populateConventionsSelect() {
-        const selected = typeof store.state.conventionsSkill === "string" ? store.state.conventionsSkill : "";
+        const persisted = typeof store.state.conventionsSkill === "string" ? store.state.conventionsSkill : "";
+        const current = typeof elements.conventionsSkillSelect.value === "string"
+          ? elements.conventionsSkillSelect.value
+          : "";
+        const persistedChanged = persisted !== store.lastSyncedConventionsSkill;
+        const selected = persistedChanged ? persisted : current;
         const available = Array.isArray(store.controlOptions && store.controlOptions.conventionsSkills)
           ? store.controlOptions.conventionsSkills.slice()
           : [];
@@ -749,6 +755,7 @@
           return '<option value="' + escapeHtml(skill) + '"' + isSelected + '>' + escapeHtml(skill) + '</option>';
         })).join("");
         elements.conventionsSkillSelect.value = selected;
+        store.lastSyncedConventionsSkill = persisted;
       }
 
       function syncControlInputs() {
@@ -1042,7 +1049,7 @@
         }
 
         if (message.type === "control-options") {
-          store.controlOptions = message.data || { conventionsSkills: [] };
+          store.controlOptions = message.data || { conventionsSkills: [], chatModels: [] };
           syncControlInputs();
           return;
         }

@@ -16,6 +16,7 @@ import type {
   TextDocumentLike,
   VscodeApiLike,
 } from "./types";
+import { listAvailableChatModels } from "./llm/select";
 import { discoverSkills } from "./skills/loader";
 import { createOrchestrator, deriveFeatureSlug, guessConventionsSkill, type Orchestrator } from "./orchestrator/machine";
 import { startServer } from "./server/http";
@@ -1052,8 +1053,14 @@ export function createExtensionController(
 
       const controlBridge: DashboardControlBridge = {
         async getControlOptions() {
+          const [conventionsSkills, chatModels] = await Promise.all([
+            workspaceDir ? getAvailableConventionsSkills(deps, workspaceDir) : Promise.resolve([]),
+            listAvailableChatModels(deps.vscode),
+          ]);
+
           return {
-            conventionsSkills: workspaceDir ? await getAvailableConventionsSkills(deps, workspaceDir) : [],
+            conventionsSkills,
+            chatModels,
           };
         },
         async startRun(request) {

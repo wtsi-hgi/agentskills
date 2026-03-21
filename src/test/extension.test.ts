@@ -1,12 +1,14 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import type * as vscode from "vscode";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createExtensionController } from "../extension";
 import type { Orchestrator } from "../orchestrator/machine";
 import type {
   ConfigurationLike,
+  DashboardControlBridge,
   DisposableLike,
   ExtensionContextLike,
   ModelAssignment,
@@ -44,7 +46,11 @@ function createDisposable(onDispose: () => void): DisposableLike {
   };
 }
 
-function createFakeVscode(workspaceDir: string, configurationValues: Record<string, unknown> = {}) {
+function createFakeVscode(
+  workspaceDir: string,
+  configurationValues: Record<string, unknown> = {},
+  languageModels: Array<{ name: string; id: string; vendor: string; family: string; version: string; maxInputTokens: number }> = [],
+) {
   const commands = new Map<string, (...args: unknown[]) => unknown>();
   const infoMessages: Array<{ message: string; options: string[] }> = [];
   const errorMessages: Array<{ message: string; options: string[] }> = [];
@@ -64,7 +70,11 @@ function createFakeVscode(workspaceDir: string, configurationValues: Record<stri
     ...configurationValues,
   });
 
-  const api: VscodeApiLike = {
+  const api: VscodeApiLike & {
+    lm: {
+      selectChatModels(selector?: { vendor?: string; family?: string }): Promise<vscode.LanguageModelChat[]>;
+    };
+  } = {
     commands: {
       registerCommand(command, callback) {
         commands.set(command, callback);
@@ -143,6 +153,15 @@ function createFakeVscode(workspaceDir: string, configurationValues: Record<stri
         return createDisposable(() => {
           saveDocumentListeners.delete(listener);
         });
+      },
+    },
+    lm: {
+      async selectChatModels(selector?: { vendor?: string; family?: string }) {
+        return languageModels.filter((model) => {
+          const matchesVendor = !selector?.vendor || model.vendor === selector.vendor;
+          const matchesFamily = !selector?.family || model.family === selector.family;
+          return matchesVendor && matchesFamily;
+        }) as unknown as vscode.LanguageModelChat[];
       },
     },
   };
@@ -1502,6 +1521,34 @@ describe("Conductor extension A1", () => {
     expect(state.testCommand).toBe("pytest");
     expect(state.lintCommand).toBe("ruff check .");
     expect(harness.calls.run).toBe(1);
+  });
+
+  it("exposes runtime chat models through the dashboard control bridge", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    const fakeVscode = createFakeVscode(workspaceDir, {}, [
+      { name: "GPT-5.4", id: "gpt-5.4", vendor: "copilot", family: "gpt-5.4", version: "1", maxInputTokens: 128_000 },
+      { name: "o3", id: "o3", vendor: "copilot", family: "o3", version: "1", maxInputTokens: 128_000 },
+    ]);
+    let capturedBridge: DashboardControlBridge | undefined;
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      createDashboardPanel(_context, _orchestrator, controlBridge) {
+        capturedBridge = controlBridge;
+        return { dispose() {} } as never;
+      },
+    });
+
+    await controller.activate(createContext());
+    await fakeVscode.commands.get("conductor.dashboard")?.();
+
+    await expect(Promise.resolve(capturedBridge?.getControlOptions())).resolves.toEqual({
+      conventionsSkills: [],
+      chatModels: [
+        { vendor: "copilot", family: "gpt-5.4", name: "GPT-5.4", label: "GPT-5.4" },
+        { vendor: "copilot", family: "o3", name: "o3", label: "o3" },
+      ],
+    });
   });
 
   it("creates a slugged feature directory and prompt.md from an inline prompt", async () => {
