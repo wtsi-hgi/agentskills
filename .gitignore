@@ -1,0 +1,11 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Packaged extension artifacts
+*.vsix
+
+# Temp files
+.tmp/
