@@ -146,6 +146,31 @@ afterEach(() => {
 });
 
 describe("team dashboard SPA", () => {
+  it("shows that a prompt is needed before any runnable feature exists", async () => {
+    const dashboard = await loadDashboard();
+
+    expect(dashboard.window.document.getElementById("current-step")?.textContent).toBe("Prompt needed");
+  });
+
+  it("keeps showing that a prompt is needed after a state update arrives before phase data", async () => {
+    const dashboard = await loadDashboard();
+    const socket = dashboard.sockets[0];
+    socket?.open();
+
+    socket?.emitMessage({
+      type: "state",
+      data: {
+        status: "running",
+        startedBy: "alice",
+        currentPhase: 1,
+        currentItemIndex: 0,
+        itemStatuses: {},
+      },
+    });
+
+    expect(dashboard.window.document.getElementById("current-step")?.textContent).toBe("Prompt needed");
+  });
+
   it("renders the spec-writing audit role filter options", async () => {
     const dashboard = await loadDashboard();
 

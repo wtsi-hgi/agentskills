@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -6,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createExtensionController } from "../extension";
 import type { Orchestrator } from "../orchestrator/machine";
+import type { Phase } from "../types";
 import type {
   ConfigurationLike,
   DashboardControlBridge,
@@ -397,6 +399,61 @@ async function readNestedState(specDir: string): Promise<OrchestratorState> {
   return JSON.parse(await readFile(statePath, "utf8")) as OrchestratorState;
 }
 
+function createPersistedModelAssignments(): ModelAssignment[] {
+  return [
+    { role: "implementor", vendor: "copilot", family: "gpt-5.4" },
+    { role: "reviewer", vendor: "copilot", family: "o3" },
+    { role: "pr-reviewer", vendor: "copilot", family: "o3-mini" },
+    { role: "spec-author", vendor: "copilot", family: "gpt-4.1" },
+    { role: "spec-reviewer", vendor: "copilot", family: "gpt-4.1-mini" },
+    { role: "spec-proofreader", vendor: "copilot", family: "o3-mini" },
+    { role: "phase-creator", vendor: "copilot", family: "gpt-4.1" },
+    { role: "phase-reviewer", vendor: "copilot", family: "o3" },
+  ];
+}
+
+async function writePersistedIdleState(
+  workspaceDir: string,
+  overrides: Partial<OrchestratorState> = {},
+): Promise<OrchestratorState> {
+  const state: OrchestratorState = {
+    specDir: path.join(workspaceDir, ".docs", "conductor"),
+    conventionsSkill: "python-conventions",
+    testCommand: "pnpm test",
+    lintCommand: "pnpm lint",
+    currentPhase: 1,
+    currentItemIndex: 0,
+    consecutivePasses: {},
+    specStep: "done",
+    specConsecutivePasses: 0,
+    specPhaseFileIndex: 0,
+    clarificationQuestions: [],
+    status: "idle",
+    modelAssignments: createPersistedModelAssignments(),
+    itemStatuses: {},
+    startedBy: "tester",
+    ...overrides,
+  };
+
+  await mkdir(path.join(workspaceDir, ".conductor"), { recursive: true });
+  await writeFile(
+    path.join(workspaceDir, ".conductor", "state.json"),
+    JSON.stringify(state),
+    "utf8",
+  );
+
+  return state;
+}
+
+async function writeLegacyIdleStateWithoutModelAssignments(workspaceDir: string): Promise<void> {
+  const { modelAssignments: _modelAssignments, ...legacyState } = await writePersistedIdleState(workspaceDir);
+  await writeFile(
+    path.join(workspaceDir, ".conductor", "state.json"),
+    JSON.stringify(legacyState),
+    "utf8",
+  );
+}
+
 const workspacesToCleanup: string[] = [];
 
 afterEach(async () => {
@@ -717,6 +774,74 @@ describe("Conductor extension A1", () => {
       { role: "phase-creator", vendor: "copilot", family: "gpt-4.1" },
       { role: "phase-reviewer", vendor: "copilot", family: "o3" },
     ]);
+  });
+
+  it("preserves persisted model assignments and run configuration when a slugged feature is started from the command path", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    const persistedState = await writePersistedIdleState(workspaceDir);
+    const fakeVscode = createFakeVscode(workspaceDir);
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      async deriveFeatureSlug() {
+        return "carry-forward-feature";
+      },
+      createOrchestrator() {
+        return createStubOrchestrator();
+      },
+    });
+
+    await controller.activate(createContext());
+    await fakeVscode.commands.get("conductor.start")?.({ prompt: "Carry forward idle dashboard settings" });
+
+    const specDir = path.join(workspaceDir, ".docs", "carry-forward-feature");
+    const state = await readState(workspaceDir);
+    const nestedState = await readNestedState(specDir);
+
+    expect(state.specDir).toBe(specDir);
+    expect(state.modelAssignments).toEqual(persistedState.modelAssignments);
+    expect(state.conventionsSkill).toBe("python-conventions");
+    expect(state.testCommand).toBe("pnpm test");
+    expect(state.lintCommand).toBe("pnpm lint");
+    expect(nestedState.modelAssignments).toEqual(persistedState.modelAssignments);
+    expect(nestedState.conventionsSkill).toBe("python-conventions");
+    expect(nestedState.testCommand).toBe("pnpm test");
+    expect(nestedState.lintCommand).toBe("pnpm lint");
+  });
+
+  it("defaults missing legacy model assignments when a slugged feature is started", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    await writeLegacyIdleStateWithoutModelAssignments(workspaceDir);
+    const fakeVscode = createFakeVscode(workspaceDir, {
+      "models.implementor": { vendor: "copilot", family: "gpt-5.4" },
+      "models.reviewer": { vendor: "copilot", family: "o3" },
+      "models.prReviewer": { vendor: "copilot", family: "o3-mini" },
+      "models.specAuthor": { vendor: "copilot", family: "gpt-4.1" },
+      "models.specReviewer": { vendor: "copilot", family: "gpt-4.1-mini" },
+      "models.specProofreader": { vendor: "copilot", family: "o3-mini" },
+      "models.phaseCreator": { vendor: "copilot", family: "gpt-4.1" },
+      "models.phaseReviewer": { vendor: "copilot", family: "o3" },
+    });
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      async deriveFeatureSlug() {
+        return "legacy-carry-forward-feature";
+      },
+      createOrchestrator() {
+        return createStubOrchestrator();
+      },
+    });
+
+    await controller.activate(createContext());
+    await fakeVscode.commands.get("conductor.start")?.({ prompt: "Carry forward a legacy state file" });
+
+    const specDir = path.join(workspaceDir, ".docs", "legacy-carry-forward-feature");
+    const state = await readState(workspaceDir);
+    const nestedState = await readNestedState(specDir);
+
+    expect(state.modelAssignments).toEqual(createPersistedModelAssignments());
+    expect(nestedState.modelAssignments).toEqual(createPersistedModelAssignments());
   });
 
   it("does not show a resume prompt on activation when no state exists", async () => {
@@ -1523,6 +1648,135 @@ describe("Conductor extension A1", () => {
     expect(harness.calls.run).toBe(1);
   });
 
+  it("preserves persisted model assignments when the dashboard starts a slugged feature", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    const persistedState = await writePersistedIdleState(workspaceDir);
+    const fakeVscode = createFakeVscode(workspaceDir);
+    let capturedBridge: DashboardControlBridge | undefined;
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      async deriveFeatureSlug() {
+        return "dashboard-carry-forward";
+      },
+      createOrchestrator() {
+        return createStubOrchestrator();
+      },
+      createDashboardPanel(_context, _orchestrator, controlBridge) {
+        capturedBridge = controlBridge;
+        return { dispose() {} } as never;
+      },
+    });
+
+    await controller.activate(createContext());
+    await fakeVscode.commands.get("conductor.dashboard")?.();
+    await capturedBridge?.startRun({
+      prompt: "Start from the dashboard without losing model picks",
+      conventionsSkill: persistedState.conventionsSkill,
+      testCommand: persistedState.testCommand,
+      lintCommand: persistedState.lintCommand,
+    });
+
+    const specDir = path.join(workspaceDir, ".docs", "dashboard-carry-forward");
+    const state = await readState(workspaceDir);
+    const nestedState = await readNestedState(specDir);
+
+    expect(state.modelAssignments).toEqual(persistedState.modelAssignments);
+    expect(nestedState.modelAssignments).toEqual(persistedState.modelAssignments);
+  });
+
+  it("recreates the orchestrator for dashboard inline starts so run uses the new slugged specDir", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    const fakeVscode = createFakeVscode(workspaceDir);
+    const runSpecDirs: string[] = [];
+    const createdSpecDirs: string[] = [];
+    let capturedBridge: DashboardControlBridge | undefined;
+
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      async deriveFeatureSlug() {
+        return "dashboard-inline-feature";
+      },
+      createOrchestrator(config) {
+        const defaultSpecDir = path.join(config.docsDir, "conductor");
+        const statePath = path.join(workspaceDir, ".conductor", "state.json");
+        let specDir = existsSync(statePath)
+          ? (JSON.parse(readFileSync(statePath, "utf8")) as OrchestratorState).specDir
+          : defaultSpecDir;
+
+        createdSpecDirs.push(specDir);
+
+        return {
+          async run() {
+            runSpecDirs.push(specDir);
+          },
+          startCopilotReReview() {},
+          abandon() {},
+          pause() {},
+          resume() {},
+          skip() {},
+          retry() {},
+          changeModel() {},
+          overrideCommands() {},
+          approve() {},
+          reject() {},
+          submitClarification() {},
+          addNote() {},
+          getState() {
+            return createStubOrchestrator({ specDir }).getState();
+          },
+          async getPhase(): Promise<Phase> {
+            return {
+              number: 1,
+              title: "Phase 1: Kickoff",
+              items: [],
+              batches: [],
+            };
+          },
+          async getPhases() {
+            return [];
+          },
+          async getAuditEntries() {
+            return [];
+          },
+          async getAddendumEntries() {
+            return [];
+          },
+          async getTranscripts() {
+            return [];
+          },
+          onStateChange: (() => ({ dispose() {} })) as never,
+          onAuditEntry: (() => ({ dispose() {} })) as never,
+          onAddendum: (() => ({ dispose() {} })) as never,
+          onTranscript: (() => ({ dispose() {} })) as never,
+        } satisfies Orchestrator;
+      },
+      createDashboardPanel(_context, orchestrator, controlBridge) {
+        capturedBridge = controlBridge;
+        void orchestrator.getPhase();
+        return { dispose() {} } as never;
+      },
+    });
+
+    await controller.activate(createContext());
+    await fakeVscode.commands.get("conductor.dashboard")?.();
+    await capturedBridge?.startRun({
+      prompt: "Add dashboard inline start coverage",
+      conventionsSkill: "",
+      testCommand: "npm test",
+      lintCommand: "",
+    });
+
+    expect(createdSpecDirs).toEqual([
+      path.join(workspaceDir, ".docs", "conductor"),
+      path.join(workspaceDir, ".docs", "dashboard-inline-feature"),
+    ]);
+    expect(runSpecDirs).toEqual([
+      path.join(workspaceDir, ".docs", "dashboard-inline-feature"),
+    ]);
+  });
+
   it("exposes runtime chat models through the dashboard control bridge", async () => {
     const workspaceDir = await createWorkspace();
     workspacesToCleanup.push(workspaceDir);
@@ -1642,6 +1896,62 @@ describe("Conductor extension A1", () => {
     const state = await readState(workspaceDir);
     expect(state.specDir).toBe(path.join(workspaceDir, ".docs", "my-feature"));
     expect(fakeVscode.inputBoxCalls[0]?.value).toBe("batch-retry");
+  });
+
+  it("preserves persisted model assignments when Fix Bugs starts a new nested bug directory", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    const persistedState = await writePersistedIdleState(workspaceDir);
+    const fakeVscode = createFakeVscode(workspaceDir);
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      createOrchestrator() {
+        return createStubOrchestrator();
+      },
+    });
+
+    await controller.activate(createContext());
+    await fakeVscode.commands.get("conductor.fixBugs")?.({ prompt: "Fix the clarifier startup regression" });
+
+    const specDir = path.join(workspaceDir, ".docs", "bugs1");
+    const state = await readState(workspaceDir);
+    const nestedState = await readNestedState(specDir);
+
+    expect(state.specDir).toBe(specDir);
+    expect(state.modelAssignments).toEqual(persistedState.modelAssignments);
+    expect(nestedState.modelAssignments).toEqual(persistedState.modelAssignments);
+  });
+
+  it("defaults missing legacy model assignments when Fix Bugs starts a new nested bug directory", async () => {
+    const workspaceDir = await createWorkspace();
+    workspacesToCleanup.push(workspaceDir);
+    await writeLegacyIdleStateWithoutModelAssignments(workspaceDir);
+    const fakeVscode = createFakeVscode(workspaceDir, {
+      "models.implementor": { vendor: "copilot", family: "gpt-5.4" },
+      "models.reviewer": { vendor: "copilot", family: "o3" },
+      "models.prReviewer": { vendor: "copilot", family: "o3-mini" },
+      "models.specAuthor": { vendor: "copilot", family: "gpt-4.1" },
+      "models.specReviewer": { vendor: "copilot", family: "gpt-4.1-mini" },
+      "models.specProofreader": { vendor: "copilot", family: "o3-mini" },
+      "models.phaseCreator": { vendor: "copilot", family: "gpt-4.1" },
+      "models.phaseReviewer": { vendor: "copilot", family: "o3" },
+    });
+    const controller = createExtensionController({
+      vscode: fakeVscode.api,
+      createOrchestrator() {
+        return createStubOrchestrator();
+      },
+    });
+
+    await controller.activate(createContext());
+    await fakeVscode.commands.get("conductor.fixBugs")?.({ prompt: "Fix legacy state carry forward" });
+
+    const specDir = path.join(workspaceDir, ".docs", "bugs1");
+    const state = await readState(workspaceDir);
+    const nestedState = await readNestedState(specDir);
+
+    expect(state.modelAssignments).toEqual(createPersistedModelAssignments());
+    expect(nestedState.modelAssignments).toEqual(createPersistedModelAssignments());
   });
 
   it("starts from an existing selected directory with prompt.md without deriving a slug", async () => {

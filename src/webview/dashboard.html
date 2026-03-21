@@ -343,8 +343,8 @@
         </div>
         <div class="metric">
           <span class="metric-label">Current step</span>
-          <strong class="metric-value step-indicator"><span class="pulse-dot"></span><span id="step-value">Phase 1 /
-              Item 1</span></strong>
+          <strong class="metric-value step-indicator"><span class="pulse-dot"></span><span id="step-value">Prompt
+              needed</span></strong>
         </div>
       </div>
     </section>
@@ -395,6 +395,7 @@
           <select id="role-select">
             <option value="implementor">Implementor</option>
             <option value="reviewer">Reviewer</option>
+            <option value="pr-reviewer">PR reviewer</option>
             <option value="spec-author">Spec author</option>
             <option value="spec-reviewer">Spec reviewer</option>
             <option value="spec-proofreader">Spec proofreader</option>
@@ -550,6 +551,7 @@
         return {
           orchestratorState: undefined,
           lastSyncedConventionsSkill: undefined,
+          roleSelectionMode: "auto",
           bugfixStatus: undefined,
           prReviewStatus: { step: "done", consecutivePasses: 0 },
           controlOptions: { conventionsSkills: [], chatModels: [] },
@@ -581,6 +583,26 @@
         }
 
         return (phase.items[state.currentItemIndex] || phase.items[0] || {}).id || "";
+      }
+
+      function hasCurrentItem(state, phase) {
+        return Boolean(
+          state
+          && phase
+          && Array.isArray(phase.items)
+          && phase.items[state.currentItemIndex],
+        );
+      }
+
+      function formatCurrentStep(state, phase) {
+        if (!hasCurrentItem(state, phase)) {
+          return "Prompt needed";
+        }
+
+        return "Phase "
+          + String(state.currentPhase)
+          + " / Item "
+          + String(Number(state.currentItemIndex || 0) + 1);
       }
 
       function formatSpecStep(step) {
@@ -629,6 +651,45 @@
 
       function normalizeRole(value) {
         return value && value !== "all" ? value : "implementor";
+      }
+
+      function deriveRoleFromState(state, phase) {
+        const specStep = String(state && state.specStep || "done");
+        switch (specStep) {
+          case "clarifying":
+          case "authoring":
+            return "spec-author";
+          case "reviewing":
+            return "spec-reviewer";
+          case "proofreading":
+            return "spec-proofreader";
+          case "creating-phases":
+            return "phase-creator";
+          case "reviewing-phases":
+            return "phase-reviewer";
+          default:
+            break;
+        }
+
+        const itemStatuses = state && state.itemStatuses ? state.itemStatuses : {};
+        const currentItemId = getCurrentItemId(state, phase);
+        const currentItemStatus = currentItemId ? itemStatuses[currentItemId] : "";
+        const bugStep = String(state && state.bugStep || "");
+        const prReviewStep = String(state && state.prReviewStep || "done");
+
+        if (prReviewStep !== "done") {
+          return "pr-reviewer";
+        }
+
+        if (
+          currentItemStatus === "pending-approval"
+          || bugStep === "reviewing"
+          || bugStep === "approving"
+        ) {
+          return "reviewer";
+        }
+
+        return "implementor";
       }
 
       function getSelectedAssignment(state, role) {
@@ -696,8 +757,21 @@
         store.lastSyncedConventionsSkill = persisted;
       }
 
+      function syncRoleSelect(elements, store) {
+        const derivedRole = deriveRoleFromState(store.orchestratorState, store.phase);
+        const selectedRole = store.roleSelectionMode === "manual"
+          ? normalizeRole(elements.roleSelect.value)
+          : derivedRole;
+
+        if (elements.roleSelect.value !== selectedRole) {
+          elements.roleSelect.value = selectedRole;
+        }
+
+        return selectedRole;
+      }
+
       function populateModelSelect(elements, store) {
-        const role = normalizeRole(elements.roleSelect.value);
+        const role = syncRoleSelect(elements, store);
         if (elements.roleSelect.value !== role) {
           elements.roleSelect.value = role;
         }
@@ -938,17 +1012,13 @@
         const state = store.orchestratorState;
         elements.statusValue.textContent = state && state.status ? state.status : "idle";
 
+        elements.stepValue.textContent = formatCurrentStep(state, store.phase);
+
         if (state) {
-          elements.stepValue.textContent = "Phase "
-            + String(state.currentPhase)
-            + " / Item "
-            + String(Number(state.currentItemIndex || 0) + 1);
           const currentItemId = getCurrentItemId(state, store.phase);
           if (currentItemId && !elements.itemIdInput.value) {
             elements.itemIdInput.value = currentItemId;
           }
-        } else {
-          elements.stepValue.textContent = "Phase 1 / Item 1";
         }
 
         renderModels(state, elements, store.controlOptions);
@@ -1079,6 +1149,7 @@
           render(store, elements);
         });
         elements.roleSelect.addEventListener("change", function () {
+          store.roleSelectionMode = "manual";
           populateModelSelect(elements, store);
         });
         elements.pauseButton.addEventListener("click", function () {

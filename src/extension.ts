@@ -84,6 +84,32 @@ interface ExtensionController {
   dispose(): void;
 }
 
+class SimpleEventEmitter<T> {
+  private readonly listeners = new Set<(value: T) => void>();
+
+  public readonly event = (listener: (value: T) => void): { dispose(): void } => {
+    this.listeners.add(listener);
+    return {
+      dispose: () => {
+        this.listeners.delete(listener);
+      },
+    };
+  };
+
+  public fire(value: T): void {
+    for (const listener of [...this.listeners]) {
+      listener(value);
+    }
+  }
+}
+
+type OrchestratorProxyController = {
+  proxy: Orchestrator;
+  setOrchestrator(orchestrator: Orchestrator | undefined): void;
+  setState(state: OrchestratorState): void;
+  dispose(): void;
+};
+
 let activeController: ExtensionController | undefined;
 
 function loadVscodeApi(): VscodeApiLike {
@@ -174,6 +200,9 @@ function normalizeState(deps: ExtensionDependencies, workspaceDir: string, state
     specConsecutivePasses: state.specConsecutivePasses ?? 0,
     specPhaseFileIndex: state.specPhaseFileIndex ?? 0,
     clarificationQuestions: state.clarificationQuestions ?? [],
+    modelAssignments: Array.isArray(state.modelAssignments)
+      ? cloneModelAssignments(state.modelAssignments)
+      : getModelAssignments(deps.vscode),
   };
 }
 
@@ -258,6 +287,161 @@ function createInitialState(
   };
 }
 
+function cloneModelAssignments(modelAssignments: ModelAssignment[]): ModelAssignment[] {
+  return modelAssignments.map((assignment) => ({ ...assignment }));
+}
+
+function createRunStateFromCurrentConfig(
+  deps: ExtensionDependencies,
+  workspaceDir: string,
+  status: RunStatus,
+  specStep: SpecStep = "done",
+  currentState?: OrchestratorState,
+): OrchestratorState {
+  const nextState = createInitialState(deps, workspaceDir, status, specStep);
+
+  if (!currentState) {
+    return nextState;
+  }
+
+  return {
+    ...nextState,
+    conventionsSkill: currentState.conventionsSkill ?? nextState.conventionsSkill,
+    testCommand: currentState.testCommand ?? nextState.testCommand,
+    lintCommand: currentState.lintCommand ?? nextState.lintCommand,
+    modelAssignments: currentState.modelAssignments.length > 0
+      ? cloneModelAssignments(currentState.modelAssignments)
+      : nextState.modelAssignments,
+  };
+}
+
+
+function createOrchestratorProxy(initialState: OrchestratorState): OrchestratorProxyController {
+  let currentState = initialState;
+  let currentOrchestrator: Orchestrator | undefined;
+  let stateSubscription: { dispose(): void } | undefined;
+  let auditSubscription: { dispose(): void } | undefined;
+  let addendumSubscription: { dispose(): void } | undefined;
+  let transcriptSubscription: { dispose(): void } | undefined;
+
+  const stateEmitter = new SimpleEventEmitter<OrchestratorState>();
+  const auditEmitter = new SimpleEventEmitter<Awaited<ReturnType<Orchestrator["getAuditEntries"]>>[number]>();
+  const addendumEmitter = new SimpleEventEmitter<Awaited<ReturnType<Orchestrator["getAddendumEntries"]>>[number]>();
+  const transcriptEmitter = new SimpleEventEmitter<Awaited<ReturnType<Orchestrator["getTranscripts"]>>[number]>();
+
+  const disposeSubscriptions = () => {
+    stateSubscription?.dispose();
+    auditSubscription?.dispose();
+    addendumSubscription?.dispose();
+    transcriptSubscription?.dispose();
+    stateSubscription = undefined;
+    auditSubscription = undefined;
+    addendumSubscription = undefined;
+    transcriptSubscription = undefined;
+  };
+
+  const setState = (state: OrchestratorState) => {
+    currentState = state;
+    stateEmitter.fire(state);
+  };
+
+  return {
+    proxy: {
+      async run(token: vscode.CancellationToken): Promise<void> {
+        await currentOrchestrator?.run(token);
+      },
+      startCopilotReReview(): void {
+        currentOrchestrator?.startCopilotReReview();
+      },
+      abandon(): void {
+        currentOrchestrator?.abandon();
+      },
+      pause(): void {
+        currentOrchestrator?.pause();
+      },
+      resume(): void {
+        currentOrchestrator?.resume();
+      },
+      skip(itemId: string): void {
+        currentOrchestrator?.skip(itemId);
+      },
+      retry(itemId: string): void {
+        currentOrchestrator?.retry(itemId);
+      },
+      changeModel(role, vendor, family): void {
+        currentOrchestrator?.changeModel(role, vendor, family);
+      },
+      overrideCommands(testCommand: string, lintCommand: string): void {
+        currentOrchestrator?.overrideCommands(testCommand, lintCommand);
+      },
+      approve(itemId: string): void {
+        currentOrchestrator?.approve(itemId);
+      },
+      reject(itemId: string, feedback: string): void {
+        currentOrchestrator?.reject(itemId, feedback);
+      },
+      submitClarification(answers): void {
+        currentOrchestrator?.submitClarification(answers);
+      },
+      addNote(itemId: string, text: string, author?: string): void {
+        currentOrchestrator?.addNote(itemId, text, author);
+      },
+      getState(): OrchestratorState {
+        return currentOrchestrator?.getState() ?? currentState;
+      },
+      async getPhase() {
+        return await currentOrchestrator?.getPhase() ?? {
+          number: currentState.currentPhase,
+          title: "",
+          items: [],
+          batches: [],
+        };
+      },
+      async getPhases() {
+        return await currentOrchestrator?.getPhases() ?? [];
+      },
+      async getAuditEntries() {
+        return await currentOrchestrator?.getAuditEntries() ?? [];
+      },
+      async getAddendumEntries() {
+        return await currentOrchestrator?.getAddendumEntries() ?? [];
+      },
+      async getTranscripts() {
+        return await currentOrchestrator?.getTranscripts() ?? [];
+      },
+      onStateChange: stateEmitter.event,
+      onAuditEntry: auditEmitter.event,
+      onAddendum: addendumEmitter.event,
+      onTranscript: transcriptEmitter.event,
+    },
+    setOrchestrator(orchestrator: Orchestrator | undefined): void {
+      disposeSubscriptions();
+      currentOrchestrator = orchestrator;
+
+      if (!currentOrchestrator) {
+        return;
+      }
+
+      stateSubscription = currentOrchestrator.onStateChange((state) => {
+        setState(state);
+      });
+      auditSubscription = currentOrchestrator.onAuditEntry((entry) => {
+        auditEmitter.fire(entry);
+      });
+      addendumSubscription = currentOrchestrator.onAddendum((entry) => {
+        addendumEmitter.fire(entry);
+      });
+      transcriptSubscription = currentOrchestrator.onTranscript((entry) => {
+        transcriptEmitter.fire(entry);
+      });
+    },
+    setState,
+    dispose(): void {
+      disposeSubscriptions();
+      currentOrchestrator = undefined;
+    },
+  };
+}
 function createOrchestratorConfig(
   deps: ExtensionDependencies,
   workspaceDir: string,
@@ -829,7 +1013,8 @@ async function handleStart(deps: ControllerDependencies, args?: StartCommandArgs
     return false;
   }
 
-  const initialState = createInitialState(deps, workspaceDir, "running");
+  const currentState = await readState(deps, workspaceDir);
+  const initialState = createRunStateFromCurrentConfig(deps, workspaceDir, "running", "done", currentState);
   const selectedSpecDir = await getSelectedSpecDir(deps, workspaceDir, args?.targetPath);
   const inlinePrompt = args?.prompt?.trim();
   const resolvedSpecDir = selectedSpecDir
@@ -851,7 +1036,9 @@ async function handleStart(deps: ControllerDependencies, args?: StartCommandArgs
   const requestedConventionsSkill = args?.conventionsSkill?.trim();
   const selectedConventionsSkill = requestedConventionsSkill !== undefined
     ? requestedConventionsSkill
-    : await selectConventionsSkill(deps, workspaceDir, initialState.modelAssignments);
+    : initialState.conventionsSkill.length > 0
+      ? initialState.conventionsSkill
+      : await selectConventionsSkill(deps, workspaceDir, initialState.modelAssignments);
   if (selectedConventionsSkill === undefined) {
     return false;
   }
@@ -870,8 +1057,8 @@ async function handleFixBugs(deps: ControllerDependencies, args?: StartCommandAr
     return false;
   }
 
-  const existingState = await readState(deps, workspaceDir);
-  if (hasActiveOrPausedRun(existingState)) {
+  const currentState = await readState(deps, workspaceDir);
+  if (hasActiveOrPausedRun(currentState)) {
     await showStartErrorMessage(deps.vscode, ACTIVE_BUGFIX_MESSAGE);
     return false;
   }
@@ -885,7 +1072,7 @@ async function handleFixBugs(deps: ControllerDependencies, args?: StartCommandAr
     return false;
   }
 
-  const initialState = createInitialState(deps, workspaceDir, "running", "clarifying");
+  const initialState = createRunStateFromCurrentConfig(deps, workspaceDir, "running", "clarifying", currentState);
   initialState.specDir = resolvedSpecDir;
   initialState.bugStep = "fixing";
   initialState.bugIndex = 0;
@@ -978,6 +1165,7 @@ export function createExtensionController(
   const registrations = new Set<{ dispose(): void }>();
   let serverHandle: { close(): void } | undefined;
   let serverStartPromise: Promise<void> | undefined;
+  let orchestratorProxy: OrchestratorProxyController | undefined;
 
   const stopServer = () => {
     serverHandle?.close();
@@ -993,9 +1181,27 @@ export function createExtensionController(
       let currentState = workspaceDir
         ? recoveredFeatureState.state ?? (await readState(deps, workspaceDir)) ?? createInitialState(deps, workspaceDir, "idle")
         : undefined;
-      const orchestrator = workspaceDir && currentState
-        ? deps.createOrchestrator(createOrchestratorConfig(deps, workspaceDir, currentState), context as vscode.ExtensionContext)
+      orchestratorProxy = workspaceDir && currentState
+        ? createOrchestratorProxy(currentState)
         : undefined;
+      const orchestrator = orchestratorProxy?.proxy;
+      const refreshOrchestrator = (state: OrchestratorState | undefined): Orchestrator | undefined => {
+        if (!workspaceDir || !state || !orchestratorProxy) {
+          return undefined;
+        }
+
+        const nextOrchestrator = deps.createOrchestrator(
+          createOrchestratorConfig(deps, workspaceDir, state),
+          context as vscode.ExtensionContext,
+        );
+        orchestratorProxy.setOrchestrator(nextOrchestrator);
+        return nextOrchestrator;
+      };
+
+      if (currentState) {
+        refreshOrchestrator(currentState);
+      }
+
       const runToken = createFallbackCancellationToken();
       const treeProvider = workspaceDir && orchestrator
         ? new ConductorTreeProvider(() => orchestrator.getState(), {
@@ -1026,6 +1232,7 @@ export function createExtensionController(
         }
 
         currentState = state;
+        orchestratorProxy?.setState(state);
         treeProvider?.refresh();
       };
 
@@ -1043,10 +1250,11 @@ export function createExtensionController(
           return;
         }
 
-        void orchestrator?.run(runToken);
         if (workspaceDir) {
           const nextState = await readState(deps, workspaceDir);
+          refreshOrchestrator(nextState);
           updateTreeState(nextState);
+          void orchestrator?.run(runToken);
           await syncServer(nextState);
         }
       };
@@ -1129,7 +1337,7 @@ export function createExtensionController(
 
       if (orchestrator) {
         const disposable = orchestrator.onStateChange((state) => {
-          updateTreeState(state);
+          currentState = state;
           void syncServer(state);
         });
         registrations.add(disposable);
@@ -1157,10 +1365,11 @@ export function createExtensionController(
           return;
         }
 
-        void orchestrator?.run(runToken);
         if (workspaceDir) {
           const nextState = await readState(deps, workspaceDir);
+          refreshOrchestrator(nextState);
           updateTreeState(nextState);
+          void orchestrator?.run(runToken);
           await syncServer(nextState);
         }
       });
@@ -1182,10 +1391,11 @@ export function createExtensionController(
           return;
         }
 
-        void orchestrator?.run(runToken);
         if (workspaceDir) {
           const nextState = await readState(deps, workspaceDir);
+          refreshOrchestrator(nextState);
           updateTreeState(nextState);
+          void orchestrator?.run(runToken);
           await syncServer(nextState);
         }
       });
@@ -1236,6 +1446,7 @@ export function createExtensionController(
     },
 
     dispose(): void {
+      orchestratorProxy?.dispose();
       stopServer();
       for (const registration of registrations) {
         registration.dispose();

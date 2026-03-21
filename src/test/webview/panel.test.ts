@@ -428,6 +428,36 @@ function createDashboardBrowserHarness(html: string) {
 }
 
 describe("dashboard panel G1", () => {
+  it("shows that a prompt is needed before any runnable feature exists", () => {
+    const harness = createPanelHarness();
+    const dom = createDashboardBrowserHarness(harness.panelState.webview.html);
+    const initialStateMessage = harness.receivedMessages.find((message) => {
+      return typeof message === "object"
+        && message !== null
+        && (message as { type?: string }).type === "state"
+        ? message
+        : undefined;
+    });
+
+    try {
+      expect(initialStateMessage).toEqual({
+        type: "state",
+        data: createState(),
+      });
+      expect(harness.receivedMessages.some((message) => {
+        return typeof message === "object"
+          && message !== null
+          && (message as { type?: string }).type === "phase";
+      })).toBe(false);
+
+      dom.dispatchMessage(initialStateMessage);
+
+      expect(dom.document.getElementById("step-value")?.textContent).toBe("Prompt needed");
+    } finally {
+      dom.dom.window.close();
+    }
+  });
+
   it("creates a webview panel with the conductor.dashboard view type", () => {
     const harness = createPanelHarness();
 
@@ -942,6 +972,7 @@ describe("dashboard panel G1", () => {
 
     expect(html).toContain('<option value="implementor">Implementor</option>');
     expect(html).toContain('<option value="reviewer">Reviewer</option>');
+    expect(html).toContain('<option value="pr-reviewer">PR reviewer</option>');
     expect(html).toContain('<option value="spec-author">Spec author</option>');
     expect(html).toContain('<option value="spec-reviewer">Spec reviewer</option>');
     expect(html).toContain('<option value="spec-proofreader">Spec proofreader</option>');
@@ -994,6 +1025,224 @@ describe("dashboard panel G1", () => {
     });
 
     expect(modelSelect.innerHTML).not.toContain(">o3<");
+  });
+
+  it("defaults the dashboard role selector based on the current spec-writing step", () => {
+    const harness = createPanelHarness();
+    const dom = createDashboardBrowserHarness(harness.panelState.webview.html);
+
+    try {
+      const roleSelect = dom.document.getElementById("role-select") as HTMLSelectElement;
+      const modelSelect = dom.document.getElementById("model-select") as HTMLSelectElement;
+
+      dom.dispatchMessage({
+        type: "control-options",
+        data: {
+          conventionsSkills: [],
+          chatModels: [
+            { vendor: "copilot", family: "gpt-5.4", name: "GPT-5.4", label: "GPT-5.4" },
+            { vendor: "copilot", family: "o3", name: "o3", label: "o3" },
+          ],
+        },
+      });
+
+      const cases = [
+        {
+          specStep: "clarifying",
+          expectedRole: "spec-author",
+          expectedModel: JSON.stringify({ vendor: "copilot", family: "gpt-5.4" }),
+        },
+        {
+          specStep: "authoring",
+          expectedRole: "spec-author",
+          expectedModel: JSON.stringify({ vendor: "copilot", family: "gpt-5.4" }),
+        },
+        {
+          specStep: "reviewing",
+          expectedRole: "spec-reviewer",
+          expectedModel: JSON.stringify({ vendor: "copilot", family: "o3" }),
+        },
+        {
+          specStep: "proofreading",
+          expectedRole: "spec-proofreader",
+          expectedModel: JSON.stringify({ vendor: "copilot", family: "gpt-5.4" }),
+        },
+        {
+          specStep: "creating-phases",
+          expectedRole: "phase-creator",
+          expectedModel: JSON.stringify({ vendor: "copilot", family: "o3" }),
+        },
+        {
+          specStep: "reviewing-phases",
+          expectedRole: "phase-reviewer",
+          expectedModel: JSON.stringify({ vendor: "copilot", family: "gpt-5.4" }),
+        },
+      ] as const;
+
+      for (const testCase of cases) {
+        dom.dispatchMessage({
+          type: "state",
+          data: createState({
+            specStep: testCase.specStep,
+            modelAssignments: [
+              { role: "spec-author", vendor: "copilot", family: "gpt-5.4" },
+              { role: "spec-reviewer", vendor: "copilot", family: "o3" },
+              { role: "spec-proofreader", vendor: "copilot", family: "gpt-5.4" },
+              { role: "phase-creator", vendor: "copilot", family: "o3" },
+              { role: "phase-reviewer", vendor: "copilot", family: "gpt-5.4" },
+            ],
+          }),
+        });
+
+        expect(roleSelect.value).toBe(testCase.expectedRole);
+        expect(modelSelect.value).toBe(testCase.expectedModel);
+      }
+    } finally {
+      dom.dom.window.close();
+    }
+  });
+
+  it("defaults the dashboard role selector to pr-reviewer during PR review", () => {
+    const harness = createPanelHarness();
+    const dom = createDashboardBrowserHarness(harness.panelState.webview.html);
+
+    try {
+      const roleSelect = dom.document.getElementById("role-select") as HTMLSelectElement;
+      const modelSelect = dom.document.getElementById("model-select") as HTMLSelectElement;
+
+      dom.dispatchMessage({
+        type: "control-options",
+        data: {
+          conventionsSkills: [],
+          chatModels: [
+            { vendor: "copilot", family: "gpt-5.4", name: "GPT-5.4", label: "GPT-5.4" },
+            { vendor: "copilot", family: "o3", name: "o3", label: "o3" },
+          ],
+        },
+      });
+
+      dom.dispatchMessage({
+        type: "state",
+        data: createState({
+          prReviewStep: "spec-aware",
+          modelAssignments: [
+            { role: "implementor", vendor: "copilot", family: "gpt-5.4" },
+            { role: "reviewer", vendor: "copilot", family: "o3" },
+            { role: "pr-reviewer", vendor: "copilot", family: "o3" },
+          ],
+        }),
+      });
+
+      expect(roleSelect.value).toBe("pr-reviewer");
+      expect(modelSelect.value).toBe(JSON.stringify({ vendor: "copilot", family: "o3" }));
+    } finally {
+      dom.dom.window.close();
+    }
+  });
+
+  it("falls back to implementor when the current state is not review-oriented", () => {
+    const harness = createPanelHarness();
+    const dom = createDashboardBrowserHarness(harness.panelState.webview.html);
+
+    try {
+      const roleSelect = dom.document.getElementById("role-select") as HTMLSelectElement;
+      const modelSelect = dom.document.getElementById("model-select") as HTMLSelectElement;
+
+      dom.dispatchMessage({
+        type: "control-options",
+        data: {
+          conventionsSkills: [],
+          chatModels: [
+            { vendor: "copilot", family: "gpt-5.4", name: "GPT-5.4", label: "GPT-5.4" },
+            { vendor: "copilot", family: "o3", name: "o3", label: "o3" },
+          ],
+        },
+      });
+
+      dom.dispatchMessage({
+        type: "state",
+        data: createState({
+          currentItemIndex: 1,
+          itemStatuses: { A1: "pass", B1: "in-progress" },
+          prReviewStep: "done",
+          bugStep: undefined,
+          modelAssignments: [
+            { role: "implementor", vendor: "copilot", family: "gpt-5.4" },
+            { role: "reviewer", vendor: "copilot", family: "o3" },
+            { role: "pr-reviewer", vendor: "copilot", family: "o3" },
+          ],
+        }),
+      });
+
+      expect(roleSelect.value).toBe("implementor");
+      expect(modelSelect.value).toBe(JSON.stringify({ vendor: "copilot", family: "gpt-5.4" }));
+    } finally {
+      dom.dom.window.close();
+    }
+  });
+
+  it("preserves a user-chosen role across later state-driven rerenders", () => {
+    const harness = createPanelHarness();
+    const dom = createDashboardBrowserHarness(harness.panelState.webview.html);
+
+    try {
+      dom.dispatchMessage({
+        type: "control-options",
+        data: {
+          conventionsSkills: [],
+          chatModels: [
+            { vendor: "copilot", family: "gpt-5.4", name: "GPT-5.4", label: "GPT-5.4" },
+            { vendor: "copilot", family: "o3", name: "o3", label: "o3" },
+          ],
+        },
+      });
+
+      dom.dispatchMessage({
+        type: "state",
+        data: createState({
+          specStep: "reviewing",
+          modelAssignments: [
+            { role: "reviewer", vendor: "copilot", family: "o3" },
+            { role: "spec-reviewer", vendor: "copilot", family: "gpt-5.4" },
+            { role: "spec-proofreader", vendor: "copilot", family: "gpt-5.4" },
+          ],
+        }),
+      });
+
+      const roleSelect = dom.document.getElementById("role-select") as HTMLSelectElement;
+      const modelSelect = dom.document.getElementById("model-select") as HTMLSelectElement;
+
+      expect(roleSelect.value).toBe("spec-reviewer");
+      expect(modelSelect.value).toBe(JSON.stringify({ vendor: "copilot", family: "gpt-5.4" }));
+
+      roleSelect.value = "reviewer";
+      roleSelect.dispatchEvent(new dom.dom.window.Event("change", { bubbles: true }));
+
+      expect(modelSelect.value).toBe(JSON.stringify({ vendor: "copilot", family: "o3" }));
+
+      dom.dispatchMessage({
+        type: "state",
+        data: createState({
+          specStep: "proofreading",
+          modelAssignments: [
+            { role: "reviewer", vendor: "copilot", family: "o3" },
+            { role: "spec-reviewer", vendor: "copilot", family: "gpt-5.4" },
+            { role: "spec-proofreader", vendor: "copilot", family: "gpt-5.4" },
+          ],
+        }),
+      });
+
+      expect(roleSelect.value).toBe("reviewer");
+      expect(modelSelect.value).toBe(JSON.stringify({ vendor: "copilot", family: "o3" }));
+
+      (dom.document.getElementById("change-model-button") as HTMLButtonElement).click();
+
+      expect(dom.vscodeMessages).toEqual([
+        { type: "changeModel", role: "reviewer", vendor: "copilot", family: "o3" },
+      ]);
+    } finally {
+      dom.dom.window.close();
+    }
   });
 
   it("maps Auto model selection back to empty vendor and family values", () => {

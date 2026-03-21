@@ -438,7 +438,7 @@
         <div class="status-strip">
           <div class="status-card">
             <span>Current step</span>
-            <strong id="current-step">Phase 1 / Item 1</strong>
+            <strong id="current-step">Prompt needed</strong>
           </div>
           <div class="status-card">
             <span>Current item</span>
@@ -800,6 +800,14 @@
         return phase.items[store.state.currentItemIndex] || null;
       }
 
+      function formatCurrentStep(currentItem) {
+        if (!currentItem) {
+          return 'Prompt needed';
+        }
+
+        return 'Phase ' + String(store.state.currentPhase || 1) + ' / Item ' + String((store.state.currentItemIndex || 0) + 1);
+      }
+
       function getItemStatus(item) {
         const explicit = store.state.itemStatuses && store.state.itemStatuses[item.id];
         if (explicit) {
@@ -985,7 +993,7 @@
         elements.startedBy.textContent = String(store.state.startedBy || "unknown");
         elements.connectionStatus.dataset.connected = String(store.connected);
         elements.connectionStatus.textContent = store.connected ? "connected" : "reconnecting";
-        elements.currentStep.textContent = 'Phase ' + String(store.state.currentPhase || 1) + ' / Item ' + String((store.state.currentItemIndex || 0) + 1);
+        elements.currentStep.textContent = formatCurrentStep(currentItem);
         elements.currentItem.textContent = currentItem ? currentItem.id + ' - ' + currentItem.title : 'None selected';
         elements.specStepCard.hidden = !specActive;
         elements.specPassCard.hidden = !specActive;
