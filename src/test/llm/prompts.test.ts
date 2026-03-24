@@ -336,4 +336,22 @@ describe("assembleSystemPrompt", () => {
     expect(prompt).toContain("If prompt.md already addresses everything, return NONE.");
     expect(prompt).not.toContain("agent-conduct");
   });
+
+  it("tells the clarifier to inspect referenced repo files before asking for them", async () => {
+    const skillsDir = await createSkillsDir();
+    await writeSkill(
+      skillsDir,
+      "go-conventions",
+      "# Go Conventions\n\nUse the existing architecture.\n",
+    );
+
+    const prompt = await buildClarificationSystemPrompt(
+      skillsDir,
+      "go-conventions",
+      [{ name: "Read", description: "Read files", parameters: {} }],
+    );
+
+    expect(prompt).toContain("If prompt.md references repository files or paths, inspect them with the available tools before asking the user to provide them.");
+    expect(prompt).toContain("Do not claim a file or path is missing unless you have actually checked for it with tools.");
+  });
 });

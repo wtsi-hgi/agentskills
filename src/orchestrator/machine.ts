@@ -3,7 +3,7 @@ import * as path from "node:path";
 import type * as vscode from "vscode";
 
 import { assembleSystemPrompt, buildClarificationSystemPrompt } from "../llm/prompts";
-import { invokeWithToolLoop } from "../llm/invoke";
+import { buildLanguageModelChatMessages, invokeWithToolLoop, readResponseText } from "../llm/invoke";
 import { selectModelForRole } from "../llm/select";
 import { parsePhaseFile } from "./parser";
 import { appendAddendum, readAddenda } from "../state/addendum";
@@ -87,6 +87,13 @@ const LOCK_FILE_NAMES = new Set([
   "uv.lock",
   "yarn.lock",
 ]);
+const PROMPT_REFERENCED_FILES_SECTION_TITLE = "Referenced repository files mentioned in prompt.md:";
+const MAX_REFERENCED_FILE_CONTENT_CHARS = 12_000;
+const SPEC_AUTHOR_COMPLETION_CONTRACT = [
+  "Use tools to write or update the spec at the target spec path.",
+  "Do not report success until the file changes are complete.",
+  "When finished, return exactly <done>PASS</done>.",
+].join("\n");
 
 type ApprovalAction =
   | { type: "approve" }
@@ -314,6 +321,20 @@ function parseSpecStepResult(response: string): "PASS" | "FAIL" | "FIXED" | "NON
   return "error";
 }
 
+function getInvocationFailureDetail(result: InvocationResult): string {
+  const response = result.response.trim();
+  if (response.length > 0) {
+    return response;
+  }
+
+  const error = result.error?.trim();
+  if (error && error.length > 0) {
+    return error;
+  }
+
+  return "Invocation returned no response.";
+}
+
 function extractClarificationQuestions(response: string): ClarificationQuestion[] | null {
   const trimmed = response.trim();
   if (trimmed.length === 0 || parseSpecStepResult(trimmed) === "NONE") {
@@ -451,7 +472,7 @@ async function splitBugPromptIntoIssues(
   try {
     const model = await selectModel("spec-author", modelAssignments);
     const response = await model.sendRequest(
-      [
+      buildLanguageModelChatMessages([
         {
           role: "system",
           content: [
@@ -465,7 +486,7 @@ async function splitBugPromptIntoIssues(
           role: "user",
           content: text,
         },
-      ] as unknown as vscode.LanguageModelChatMessage[],
+      ]) as unknown as vscode.LanguageModelChatMessage[],
       undefined,
       token,
     );
@@ -497,6 +518,27 @@ function extractCommandStdout(output: string): string {
 function extractCommandFailure(result: { output: string; error?: string }): string {
   const message = [result.error, result.output.trim()].filter(Boolean).join("\n");
   return message.length > 0 ? message : "Unknown command failure.";
+}
+
+function isMissingUpstreamPushFailure(result: { output: string; error?: string }): boolean {
+  return /\bhas no upstream branch\b/u.test(extractCommandFailure(result));
+}
+
+async function pushWithOptionalUpstream(
+  projectDir: string,
+  trustedExecution: TrustedExecutor,
+  failurePrefix: string,
+): Promise<boolean> {
+  const result = await trustedExecution("git push", projectDir);
+  if (result.success) {
+    return true;
+  }
+
+  if (isMissingUpstreamPushFailure(result)) {
+    return false;
+  }
+
+  throw new Error(`${failurePrefix}: ${extractCommandFailure(result)}`);
 }
 
 function listChangedPathsFromStatus(output: string): string[] {
@@ -740,8 +782,8 @@ function parseCopilotComments(response: string, review: CopilotReviewRecord): Co
       line: typeof entry.line === "number"
         ? entry.line
         : typeof entry.original_line === "number"
-        ? entry.original_line
-        : 1,
+          ? entry.original_line
+          : 1,
       body: typeof entry.body === "string" ? entry.body : "",
       url: typeof entry.html_url === "string" ? entry.html_url : undefined,
     }))
@@ -784,13 +826,7 @@ function summarizeProjectRootForConventions(fileNames: string[], availableSkills
 }
 
 async function readSingleResponseText(response: vscode.LanguageModelChatResponse): Promise<string> {
-  let text = "";
-
-  for await (const chunk of response.text) {
-    text += chunk;
-  }
-
-  return text;
+  return readResponseText(response);
 }
 
 function parseFeatureSlugResponse(response: string): string | undefined {
@@ -826,7 +862,7 @@ export async function deriveFeatureSlug(
   try {
     const model = await selectModel("spec-author", modelAssignments);
     const response = await model.sendRequest(
-      [
+      buildLanguageModelChatMessages([
         {
           role: "system",
           content: [
@@ -840,7 +876,7 @@ export async function deriveFeatureSlug(
           role: "user",
           content: text,
         },
-      ] as unknown as vscode.LanguageModelChatMessage[],
+      ]) as unknown as vscode.LanguageModelChatMessage[],
       undefined,
       token,
     );
@@ -909,7 +945,7 @@ export async function guessConventionsSkill(
     const prompt = summarizeProjectRootForConventions(rootFiles, availableSkills);
     const model = await selectModelForRole("spec-author", modelAssignments);
     const response = await model.sendRequest(
-      [
+      buildLanguageModelChatMessages([
         {
           role: "system",
           content: [
@@ -923,7 +959,7 @@ export async function guessConventionsSkill(
           role: "user",
           content: prompt,
         },
-      ] as unknown as vscode.LanguageModelChatMessage[],
+      ]) as unknown as vscode.LanguageModelChatMessage[],
       undefined,
       token,
     );
@@ -979,7 +1015,6 @@ export async function commitAndPushConductorState(
       command: `git commit -m '${STATE_CHECKPOINT_COMMIT_MESSAGE}'`,
       failurePrefix: "Failed to commit Conductor state",
     },
-    { command: "git push", failurePrefix: "Failed to push Conductor state" },
   ];
 
   for (const { command, failurePrefix } of commands) {
@@ -988,6 +1023,8 @@ export async function commitAndPushConductorState(
       throw new Error(`${failurePrefix}: ${extractCommandFailure(result)}`);
     }
   }
+
+  await pushWithOptionalUpstream(projectDir, trustedExecution, "Failed to push Conductor state");
 }
 
 function formatClarificationNote(answer: ClarificationAnswer): string {
@@ -1019,6 +1056,48 @@ function appendNotesSection(promptContent: string, noteLines: string[]): string 
   const beforeNextHeading = remainder.slice(0, nextHeadingOffset).replace(/\s*$/u, "");
   const afterNextHeading = remainder.slice(nextHeadingOffset).replace(/^\n*/u, "");
   return `${normalizedPrompt.slice(0, insertStart)}\n\n${beforeNextHeading}${beforeNextHeading.length > 0 ? "\n" : ""}${notesBlock}\n\n${afterNextHeading}`;
+}
+
+function extractRepoRelativePromptPaths(promptContent: string): string[] {
+  const references = new Set<string>();
+  const pathPattern = /(^|[\s`"'([{<])(\.(?:[A-Za-z0-9._-]*\/[A-Za-z0-9._-]+)+)(?=$|[\s`"'.,:;!?()[\]{}<>])/gu;
+
+  for (const match of promptContent.matchAll(pathPattern)) {
+    const candidate = match[2]?.trim().replace(/[.,:;!?]+$/u, "");
+    if (!candidate || candidate === "." || candidate === "..") {
+      continue;
+    }
+
+    references.add(candidate);
+  }
+
+  return [...references];
+}
+
+function truncateReferencedFileContent(content: string): { content: string; truncated: boolean } {
+  if (content.length <= MAX_REFERENCED_FILE_CONTENT_CHARS) {
+    return { content, truncated: false };
+  }
+
+  return {
+    content: `${content.slice(0, MAX_REFERENCED_FILE_CONTENT_CHARS)}\n[truncated]`,
+    truncated: true,
+  };
+}
+
+function formatReferencedFilesSection(files: Array<{ path: string; content: string; truncated: boolean }>): string {
+  if (files.length === 0) {
+    return "";
+  }
+
+  return [
+    PROMPT_REFERENCED_FILES_SECTION_TITLE,
+    ...files.flatMap((file) => [
+      `Path: ${file.path}`,
+      "Contents:",
+      file.content.length > 0 ? file.content : "[empty file]",
+    ]),
+  ].join("\n\n").trimEnd();
 }
 
 function buildTranscript(
@@ -1267,6 +1346,37 @@ export function createOrchestrator(
     }
   };
 
+  const buildPromptWithReferencedFiles = async (promptContent: string): Promise<string> => {
+    const referencedFiles: Array<{ path: string; content: string; truncated: boolean }> = [];
+
+    for (const referencedPath of extractRepoRelativePromptPaths(promptContent)) {
+      const resolvedPath = path.resolve(config.projectDir, referencedPath);
+      const relativeToProject = path.relative(config.projectDir, resolvedPath);
+
+      if (relativeToProject.length === 0 || relativeToProject.startsWith("..") || path.isAbsolute(relativeToProject)) {
+        continue;
+      }
+
+      const fileContent = await readOptionalFile(resolvedPath);
+      if (fileContent === undefined) {
+        continue;
+      }
+
+      const truncated = truncateReferencedFileContent(fileContent);
+      referencedFiles.push({
+        path: toGitRelativePath(config.projectDir, resolvedPath),
+        content: truncated.content,
+        truncated: truncated.truncated,
+      });
+    }
+
+    if (referencedFiles.length === 0) {
+      return promptContent;
+    }
+
+    return `${promptContent}\n\n${formatReferencedFilesSection(referencedFiles)}`;
+  };
+
   const invalidatePhaseCache = () => {
     cachedPhase = undefined;
     cachedPhaseNumber = undefined;
@@ -1363,18 +1473,18 @@ export function createOrchestrator(
       modelAssignments: (currentHasAssignmentOverrides
         ? state.modelAssignments
         : persistedState.modelAssignments.length > 0
-        ? persistedState.modelAssignments
-        : defaultState.modelAssignments).map((assignment) => ({ ...assignment })),
+          ? persistedState.modelAssignments
+          : defaultState.modelAssignments).map((assignment) => ({ ...assignment })),
       consecutivePasses: currentHasConsecutivePasses
         ? { ...state.consecutivePasses }
         : { ...(persistedState.consecutivePasses ?? {}) },
       specStep: hasPersistedSpecStep
         ? normalizeSpecStep(persistedState.specStep)
         : specExists
-        ? "done"
-        : promptExists
-        ? "clarifying"
-        : defaultState.specStep,
+          ? "done"
+          : promptExists
+            ? "clarifying"
+            : defaultState.specStep,
       specConsecutivePasses: typeof persistedState.specConsecutivePasses === "number"
         ? persistedState.specConsecutivePasses
         : defaultState.specConsecutivePasses,
@@ -1629,6 +1739,8 @@ export function createOrchestrator(
       return "completed";
     }
 
+    const promptWithReferencedFiles = await buildPromptWithReferencedFiles(promptContent);
+
     let retriesUsed = 0;
 
     while (retriesUsed < config.maxRetries) {
@@ -1638,7 +1750,7 @@ export function createOrchestrator(
           "clarifier",
           "phase0:clarifying",
           await buildClarificationSystemPrompt(config.skillsDir, getConventionsSkill(), getToolDefinitions()),
-          promptContent,
+          promptWithReferencedFiles,
           token,
         );
 
@@ -1719,6 +1831,8 @@ export function createOrchestrator(
       return "completed";
     }
 
+    const promptWithReferencedFiles = await buildPromptWithReferencedFiles(promptContent);
+
     let retriesUsed = 0;
 
     while (retriesUsed < config.maxRetries) {
@@ -1733,10 +1847,11 @@ export function createOrchestrator(
         "Spec writing phase 0 authoring.",
         [
           "Write the requested spec file.",
+          SPEC_AUTHOR_COMPLETION_CONTRACT,
           `Target spec path: ${getSpecPath()}`,
           `Conventions skill: ${getConventionsSkill()}`,
           "Requirements from prompt.md:",
-          promptContent,
+          promptWithReferencedFiles,
           feedback ? `Feedback:\n${feedback}` : "",
         ].filter(Boolean).join("\n\n"),
         token,
@@ -1755,7 +1870,7 @@ export function createOrchestrator(
 
       retriesUsed += 1;
       if (retriesUsed >= config.maxRetries) {
-        await failSpecStep("authoring", "spec-author", `Spec authoring failed: ${result.response}`);
+        await failSpecStep("authoring", "spec-author", `Spec authoring failed: ${getInvocationFailureDetail(result)}`);
         return "completed";
       }
     }
@@ -1765,6 +1880,9 @@ export function createOrchestrator(
 
   const runReviewingStep = async (token: vscode.CancellationToken): Promise<ProcessingOutcome> => {
     const promptContent = (await readOptionalFile(getPromptPath())) ?? "";
+    const promptWithReferencedFiles = promptContent.length > 0
+      ? await buildPromptWithReferencedFiles(promptContent)
+      : "";
     let retriesUsed = 0;
 
     while (retriesUsed < config.maxRetries) {
@@ -1780,10 +1898,11 @@ export function createOrchestrator(
           "Spec writing phase 0 authoring.",
           [
             "Update the spec in response to reviewer feedback.",
+            SPEC_AUTHOR_COMPLETION_CONTRACT,
             `Target spec path: ${getSpecPath()}`,
             `Conventions skill: ${getConventionsSkill()}`,
             "Requirements from prompt.md:",
-            promptContent,
+            promptWithReferencedFiles,
             `Feedback:\n${authorFeedback}`,
           ].join("\n\n"),
           token,
@@ -1792,7 +1911,7 @@ export function createOrchestrator(
         if (parseSpecStepResult(authorResult.response) !== "PASS") {
           retriesUsed += 1;
           if (retriesUsed >= config.maxRetries) {
-            await failSpecStep("reviewing", "spec-author", `Spec rewrite failed: ${authorResult.response}`);
+            await failSpecStep("reviewing", "spec-author", `Spec rewrite failed: ${getInvocationFailureDetail(authorResult)}`);
             return "completed";
           }
 
@@ -1904,13 +2023,13 @@ export function createOrchestrator(
       if (verdict !== "FIXED") {
         retriesUsed += 1;
         if (retriesUsed >= config.maxRetries) {
-          await failSpecStep("proofreading", "spec-proofreader", `Spec proofreading failed: ${proofreaderResult.response}`);
+          await failSpecStep("proofreading", "spec-proofreader", `Spec proofreading failed: ${getInvocationFailureDetail(proofreaderResult)}`);
           return "completed";
         }
       } else {
         retriesUsed += 1;
         if (retriesUsed >= config.maxRetries) {
-          await failSpecStep("proofreading", "spec-proofreader", `Spec proofreading exhausted retries: ${proofreaderResult.response}`);
+          await failSpecStep("proofreading", "spec-proofreader", `Spec proofreading exhausted retries: ${getInvocationFailureDetail(proofreaderResult)}`);
           return "completed";
         }
       }
@@ -1959,7 +2078,7 @@ export function createOrchestrator(
 
       retriesUsed += 1;
       if (retriesUsed >= config.maxRetries) {
-        await failSpecStep("creating-phases", "phase-creator", `Phase creation failed: ${result.response}`);
+        await failSpecStep("creating-phases", "phase-creator", `Phase creation failed: ${getInvocationFailureDetail(result)}`);
         return "completed";
       }
     }
@@ -2000,7 +2119,7 @@ export function createOrchestrator(
 
       retriesUsed += 1;
       if (retriesUsed >= config.maxRetries) {
-        await failSpecStep("reviewing-phases", "phase-reviewer", `Phase review failed: ${result.response}`);
+        await failSpecStep("reviewing-phases", "phase-reviewer", `Phase review failed: ${getInvocationFailureDetail(result)}`);
         return "completed";
       }
 
@@ -2516,7 +2635,7 @@ export function createOrchestrator(
       `git commit -m ${quoteShellArgument(buildBugfixCommitMessage(issue))}`,
       "Failed to commit bugfix changes",
     );
-    await runTrustedCommand("git push", "Failed to push bugfix changes");
+    await pushCurrentBranchIfUpstreamExists("Failed to push bugfix changes");
   };
 
   const runBugfixLoop = async (token: vscode.CancellationToken): Promise<ProcessingOutcome> => {
@@ -2744,6 +2863,10 @@ export function createOrchestrator(
     return extractCommandStdout(result.output);
   };
 
+  const pushCurrentBranchIfUpstreamExists = async (failurePrefix: string): Promise<boolean> => {
+    return pushWithOptionalUpstream(config.projectDir, deps.executeTrusted, failurePrefix);
+  };
+
   const pollWithTimeout = async <T>(
     timeoutMs: number,
     intervalMs: number,
@@ -2783,7 +2906,7 @@ export function createOrchestrator(
       `git commit -m '${SPEC_WRITING_COMMIT_MESSAGE}'`,
       "Failed to commit spec-writing artifacts",
     );
-    await runTrustedCommand("git push", "Failed to push spec-writing artifacts");
+    await pushCurrentBranchIfUpstreamExists("Failed to push spec-writing artifacts");
   };
 
   const persistSpecCheckpoint = async (step: SpecStep, role: Role): Promise<boolean> => {
@@ -2906,11 +3029,12 @@ export function createOrchestrator(
       `Failed to commit phase ${phaseNumber}`,
     );
 
-    const pushResult = await deps.executeTrusted("git push", config.projectDir);
-    if (!pushResult.success) {
+    try {
+      await pushCurrentBranchIfUpstreamExists(`Failed to push phase ${phaseNumber}`);
+    } catch (error) {
       await logPhaseCommitAudit(
         phaseNumber,
-        `Failed to push phase ${phaseNumber}: ${extractCommandFailure(pushResult)}`,
+        error instanceof Error ? error.message : String(error),
         "error",
       );
     }
@@ -3620,7 +3744,7 @@ export function createOrchestrator(
       if (!branchSafety.safe) {
         await failRunStart(
           branchSafety.reason
-            ?? `Cannot run Conductor on protected branch '${branchSafety.branch}'. Switch to a feature branch first.`,
+          ?? `Cannot run Conductor on protected branch '${branchSafety.branch}'. Switch to a feature branch first.`,
         );
         return;
       }

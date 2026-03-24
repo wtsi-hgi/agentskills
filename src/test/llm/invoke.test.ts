@@ -7,13 +7,21 @@ import { afterEach, describe, expect, it } from "vitest";
 import { invokeWithToolLoop, parseAddendum, parseDoneSignal, parseToolCalls } from "../../llm/invoke";
 
 type MockResponse = {
-  text: string;
+  text?: string;
+  stream?: Array<string | { value: string } | { name: string; input: Record<string, unknown> }>;
 };
 
 type MockModel = {
   calls: string[][];
   requestCount: number;
-  sendRequest: (messages: unknown[], options?: unknown, token?: unknown) => Promise<{ text: AsyncIterable<string> }>;
+  sendRequest: (
+    messages: unknown[],
+    options?: unknown,
+    token?: unknown,
+  ) => Promise<{
+    text: AsyncIterable<string>;
+    stream: AsyncIterable<string | { value: string } | { name: string; input: Record<string, unknown> }>;
+  }>;
   countTokens: (value: string | { content?: unknown }) => Promise<number>;
 };
 
@@ -42,7 +50,7 @@ function createToken() {
   };
 }
 
-async function* toAsyncIterable(chunks: string[]): AsyncIterable<string> {
+async function* toAsyncIterable<T>(chunks: T[]): AsyncIterable<T> {
   for (const chunk of chunks) {
     yield chunk;
   }
@@ -74,7 +82,8 @@ function createMockModel(
       }
 
       return {
-        text: toAsyncIterable([next.text]),
+        text: toAsyncIterable(next.text === undefined ? [] : [next.text]),
+        stream: toAsyncIterable(next.stream ?? []),
       };
     },
     async countTokens(value) {
@@ -155,12 +164,12 @@ describe("invokeWithToolLoop", () => {
 
     expect(result.done).toBe(true);
     expect(model.calls).toHaveLength(2);
-    expect(model.calls[1]).toHaveLength(4);
-    expect(model.calls[1][3]).toContain("Tool results:");
-    expect(model.calls[1][3]).toContain('"tool":"Read"');
-    expect(model.calls[1][3]).toContain('"tool":"Glob"');
-    expect(model.calls[1][3]).toContain('"output":"alpha\\n"');
-    expect(model.calls[1][3]).toContain('"output":"alpha.ts"');
+    expect(model.calls[1]).toHaveLength(3);
+    expect(model.calls[1][2]).toContain("Tool results:");
+    expect(model.calls[1][2]).toContain('"tool":"Read"');
+    expect(model.calls[1][2]).toContain('"tool":"Glob"');
+    expect(model.calls[1][2]).toContain('"output":"alpha\\n"');
+    expect(model.calls[1][2]).toContain('"output":"alpha.ts"');
   });
 
   it("stops with an error when maxTurns is exceeded without a done signal", async () => {
@@ -233,9 +242,14 @@ describe("invokeWithToolLoop", () => {
       { maxTurns: 3, token: token as never },
     );
 
-    const expectedInputTokens = model.calls
-      .flat()
-      .reduce((total, message) => total + message.length, 0);
+    const expectedInputTokens = [
+      "system prompt",
+      "user prompt",
+      "system prompt",
+      "user prompt",
+      firstResponse,
+      model.calls[1][2],
+    ].reduce((total, message) => total + message.length, 0);
     const expectedOutputTokens = firstResponse.length + "<done>PASS</done>".length;
 
     expect(result.totalTokensIn).toBe(expectedInputTokens);
@@ -288,6 +302,86 @@ describe("invokeWithToolLoop", () => {
     expect(result.done).toBe(false);
     expect(result.error).toMatch(/llm api error/i);
     expect(model.requestCount).toBe(3);
+  });
+
+  it("falls back to response.stream text parts when response.text is empty", async () => {
+    const model = createMockModel([
+      {
+        text: "",
+        stream: [{ value: "<done>PASS" }, { value: "</done>" }],
+      },
+    ]);
+    const token = createToken();
+
+    const result = await invokeWithToolLoop(
+      model as never,
+      "system prompt",
+      "user prompt",
+      "/project",
+      { maxTurns: 3, token: token as never },
+    );
+
+    expect(result.done).toBe(true);
+    expect(result.response).toBe("PASS");
+    expect(result.messages[2]).toEqual({ role: "assistant", content: "<done>PASS</done>" });
+  });
+
+  it("serializes tool call parts from response.stream into the existing tool-loop protocol", async () => {
+    const workspaceDir = await createWorkspace();
+    await writeFile(path.join(workspaceDir, "alpha.ts"), "alpha\n", "utf8");
+    const model = createMockModel([
+      {
+        text: "",
+        stream: [{ name: "Read", input: { path: "alpha.ts" } }],
+      },
+      { text: "<done>PASS</done>" },
+    ]);
+    const token = createToken();
+
+    const result = await invokeWithToolLoop(
+      model as never,
+      "system prompt",
+      "user prompt",
+      workspaceDir,
+      { maxTurns: 3, token: token as never },
+    );
+
+    expect(result.done).toBe(true);
+    expect(result.messages[2]).toEqual({
+      role: "assistant",
+      content: '<tool_call>{"name":"Read","arguments":{"path":"alpha.ts"}}</tool_call>',
+    });
+    expect(model.calls[1][2]).toContain('"tool":"Read"');
+    expect(model.calls[1][2]).toContain('"output":"alpha\\n"');
+  });
+
+  it("prefers response.stream over response.text so mixed text and tool-call parts are not truncated", async () => {
+    const workspaceDir = await createWorkspace();
+    await writeFile(path.join(workspaceDir, "alpha.ts"), "alpha\n", "utf8");
+    const model = createMockModel([
+      {
+        text: "I will inspect the file first.",
+        stream: [
+          { value: "I will inspect the file first.\n" },
+          { name: "Read", input: { path: "alpha.ts" } },
+        ],
+      },
+      { text: "<done>PASS</done>" },
+    ]);
+    const token = createToken();
+
+    const result = await invokeWithToolLoop(
+      model as never,
+      "system prompt",
+      "user prompt",
+      workspaceDir,
+      { maxTurns: 3, token: token as never },
+    );
+
+    expect(result.done).toBe(true);
+    expect(result.messages[2]?.content).toContain("I will inspect the file first.");
+    expect(result.messages[2]?.content).toContain('<tool_call>{"name":"Read","arguments":{"path":"alpha.ts"}}</tool_call>');
+    expect(model.calls[1][2]).toContain('"tool":"Read"');
   });
 });
 

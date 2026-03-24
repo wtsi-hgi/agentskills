@@ -31,6 +31,8 @@ const CLARIFICATION_TOOL_CALL_INSTRUCTIONS = [
 
 const CLARIFICATION_TEMPLATE = [
   "Read prompt.md. Research the codebase to understand what exists.",
+  "If prompt.md references repository files or paths, inspect them with the available tools before asking the user to provide them.",
+  "Do not claim a file or path is missing unless you have actually checked for it with tools.",
   "Produce 3-5 clarifying questions with suggested answer options that must be answered before a spec can be written.",
   "Return ONLY the questions as a JSON array of objects with question and suggestedOptions fields.",
   "If prompt.md already addresses everything, return NONE.",

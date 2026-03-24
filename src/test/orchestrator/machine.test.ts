@@ -6,7 +6,9 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   checkBranchSafety,
+  commitAndPushConductorState,
   createOrchestrator,
+  deriveFeatureSlug,
   parseBugDescription,
   parseCommandExtraction,
 } from "../../orchestrator/machine";
@@ -28,6 +30,7 @@ type ScriptedInvocation = {
   addendum?: string | null;
   messages?: TranscriptMessage[];
   waitFor?: Promise<void>;
+  invocationError?: string;
   error?: Error;
 };
 
@@ -49,6 +52,30 @@ type DirectRequestRecord = {
   modelFamily: string;
   messages: Array<{ role: string; content: string }>;
 };
+
+function stringifyRequestContent(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") {
+          return part;
+        }
+
+        if (typeof part === "object" && part !== null && "value" in part && typeof (part as { value: unknown }).value === "string") {
+          return (part as { value: string }).value;
+        }
+
+        return "";
+      })
+      .join("");
+  }
+
+  return "";
+}
 
 type AddendumRecord = {
   itemId: string;
@@ -97,11 +124,27 @@ const DEFAULT_ASSIGNMENTS: ModelAssignment[] = [
   { role: "phase-reviewer", vendor: "copilot", family: "o3-mini" },
 ];
 
+function createNoUpstreamPushFailure(branch = "seqmeta"): TestCommandResult {
+  return {
+    success: false,
+    output: [
+      "stdout:",
+      "stderr:",
+      `fatal: The current branch ${branch} has no upstream branch.`,
+      "To push the current branch and set the remote as upstream, use",
+      "",
+      `    git push --set-upstream origin ${branch}`,
+      "",
+      "exit code: 128",
+    ].join("\n"),
+  };
+}
+
 function createToken() {
   return {
     isCancellationRequested: false,
     onCancellationRequested() {
-      return { dispose() {} };
+      return { dispose() { } };
     },
   };
 }
@@ -112,8 +155,9 @@ function createInvocationResult(script: ScriptedInvocation): InvocationResult {
     totalTokensIn: 10,
     totalTokensOut: 5,
     turns: 1,
-    done: true,
+    done: script.invocationError === undefined,
     addendum: script.addendum ?? null,
+    error: script.invocationError,
     messages: script.messages ?? [
       { role: "assistant", content: `<done>${script.response}</done>` },
     ],
@@ -165,6 +209,7 @@ async function writeFixtureFiles(
     createPrompt?: boolean;
     promptContent?: string;
     conventionsSkillContent?: string;
+    repoFiles?: Record<string, string>;
   },
 ): Promise<void> {
   const specDir = path.join(workspaceDir, ".docs", options?.specDirName ?? "conductor");
@@ -232,6 +277,12 @@ async function writeFixtureFiles(
   );
   await writeFile(path.join(skillsDir, "test-implementor", "SKILL.md"), "# implementor skill\n", "utf8");
   await writeFile(path.join(skillsDir, "test-reviewer", "SKILL.md"), "# reviewer skill\n", "utf8");
+
+  await Promise.all(Object.entries(options?.repoFiles ?? {}).map(async ([relativePath, content]) => {
+    const filePath = path.join(workspaceDir, relativePath);
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, content, "utf8");
+  }));
 }
 
 function createHarnessRuntime(): HarnessRuntime {
@@ -296,9 +347,9 @@ function createOrchestratorOverrides(
           runtime.directRequestRecords.push({
             role,
             modelFamily: family,
-            messages: (messages as Array<{ role: string; content: string }>).map((message) => ({
-              role: message.role,
-              content: message.content,
+            messages: (messages as Array<{ role?: unknown; content?: unknown }>).map((message) => ({
+              role: String(message.role ?? ""),
+              content: stringifyRequestContent(message.content),
             })),
           });
 
@@ -449,6 +500,7 @@ async function createHarness(options?: {
   createPrompt?: boolean;
   promptContent?: string;
   conventionsSkillContent?: string;
+  repoFiles?: Record<string, string>;
   invocationScripts?: Partial<Record<Role, ScriptedInvocation[]>>;
   directRequestResponses?: Partial<Record<Role, string[]>>;
   executeResults?: TestCommandResult[];
@@ -469,6 +521,7 @@ async function createHarness(options?: {
     createPrompt: options?.createPrompt,
     promptContent: options?.promptContent,
     conventionsSkillContent: options?.conventionsSkillContent,
+    repoFiles: options?.repoFiles,
   });
 
   const config: OrchestratorConfig = {
@@ -533,6 +586,39 @@ afterEach(async () => {
   await Promise.all(dirsToCleanup.splice(0).map(async (dirPath) => rm(dirPath, { recursive: true, force: true })));
 });
 
+describe("deriveFeatureSlug", () => {
+  it("falls back to response.stream text parts when response.text is empty", async () => {
+    const token = createToken();
+    const selectedModels: Array<{ role: Role; family: string }> = [];
+
+    const slug = await deriveFeatureSlug(
+      "Write a spec for blank assistant handling.",
+      [{ role: "spec-author", vendor: "copilot", family: "gpt-4.1" }],
+      token as never,
+      async (role, assignments) => {
+        const family = assignments.find((assignment) => assignment.role === role)?.family ?? "unknown";
+        selectedModels.push({ role, family });
+
+        return {
+          family,
+          role,
+          async sendRequest() {
+            return {
+              text: (async function* () { })(),
+              stream: (async function* () {
+                yield { value: "blank-assistant-fix" };
+              })(),
+            };
+          },
+        } as never;
+      },
+    );
+
+    expect(slug).toBe("blank-assistant-fix");
+    expect(selectedModels).toEqual([{ role: "spec-author", family: "gpt-4.1" }]);
+  });
+});
+
 function captureStateSnapshots(harness: MachineHarness): OrchestratorState[] {
   const snapshots: OrchestratorState[] = [];
   harness.orchestrator.onStateChange((state) => {
@@ -542,6 +628,33 @@ function captureStateSnapshots(harness: MachineHarness): OrchestratorState[] {
 }
 
 describe("createOrchestrator", () => {
+  it("still surfaces non-upstream checkpoint push failures", async () => {
+    const commands: string[] = [];
+
+    await expect(commitAndPushConductorState("/tmp/project", async (command) => {
+      commands.push(command);
+      if (command === "git push") {
+        return {
+          success: false,
+          output: [
+            "stdout:",
+            "stderr:",
+            "fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+            "exit code: 128",
+          ].join("\n"),
+        };
+      }
+
+      return { success: true, output: "stdout:\nok\nexit code: 0" };
+    })).rejects.toThrow("Failed to push Conductor state");
+
+    expect(commands).toEqual([
+      "git add .conductor/",
+      "git commit -m 'conductor: update state'",
+      "git push",
+    ]);
+  });
+
   it("returns safe true for a feature branch", async () => {
     const result = await checkBranchSafety("/repo", async (command) => {
       if (command === "git rev-parse --abbrev-ref HEAD") {
@@ -735,7 +848,7 @@ describe("createOrchestrator", () => {
       modelFamily: "gpt-4.1",
     });
     expect(harness.directRequestRecords[0]?.messages[0]?.content).toContain("Do not call tools.");
-    expect(harness.directRequestRecords[0]?.messages[1]?.content).toContain("parser crashes on empty input");
+    expect(harness.directRequestRecords[0]?.messages[0]?.content).toContain("parser crashes on empty input");
     expect(harness.invocationRecords.map((record) => record.role)).toEqual(["implementor", "reviewer"]);
     expect(harness.invocationRecords[0]?.userPrompt).toContain("failing regression test");
     expect(harness.invocationRecords[0]?.userPrompt).toContain("Issue title: Parser crash");
@@ -1174,6 +1287,47 @@ describe("createOrchestrator", () => {
     expect(harness.orchestrator.getState().specStep).toBe("done");
   });
 
+  it("appends referenced repo file contents from prompt.md to clarification and authoring prompts", async () => {
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      promptContent: [
+        "# Prompt",
+        "",
+        "Write a spec for seqmeta, described in .docs/proposal.md.",
+        "",
+      ].join("\n"),
+      repoFiles: {
+        ".docs/proposal.md": [
+          "# Proposal",
+          "",
+          "Seqmeta must support ingest and reconciliation.",
+          "",
+        ].join("\n"),
+      },
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [{ response: "NONE" }, { response: "PASS" }],
+        "spec-reviewer": [{ response: "PASS" }, { response: "PASS" }],
+        "spec-proofreader": [{ response: "PASS" }, { response: "PASS" }],
+        "phase-creator": [{ response: "PASS" }],
+        "phase-reviewer": [{ response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    const specAuthorCalls = harness.invocationRecords.filter((record) => record.role === "spec-author");
+
+    expect(specAuthorCalls).toHaveLength(2);
+    expect(specAuthorCalls[0]?.userPrompt).toContain("Referenced repository files mentioned in prompt.md:");
+    expect(specAuthorCalls[0]?.userPrompt).toContain("Path: .docs/proposal.md");
+    expect(specAuthorCalls[0]?.userPrompt).toContain("Seqmeta must support ingest and reconciliation.");
+    expect(specAuthorCalls[1]?.userPrompt).toContain("Referenced repository files mentioned in prompt.md:");
+    expect(specAuthorCalls[1]?.userPrompt).toContain("Path: .docs/proposal.md");
+    expect(specAuthorCalls[1]?.userPrompt).toContain("Seqmeta must support ingest and reconciliation.");
+  });
+
   it("commits and pushes .conductor when spec authoring completes", async () => {
     let releaseReviewer!: () => void;
     const waitForReviewer = new Promise<void>((resolve) => {
@@ -1204,6 +1358,43 @@ describe("createOrchestrator", () => {
     expect(stateCommitIndex).toBeGreaterThan(stateAddIndex);
     expect(statePushIndex).toBeGreaterThan(stateCommitIndex);
     expect(harness.trustedCommandCalls.filter((command) => command === "git commit -m 'conductor: update state'")).toHaveLength(1);
+
+    harness.orchestrator.pause();
+    releaseReviewer();
+    await runPromise;
+  });
+
+  it("continues spec authoring checkpoint when git push reports no upstream branch", async () => {
+    let releaseReviewer!: () => void;
+    const waitForReviewer = new Promise<void>((resolve) => {
+      releaseReviewer = resolve;
+    });
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      initialState: {
+        conventionsSkill: "",
+        specStep: "authoring",
+      },
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [{ response: "PASS" }],
+        "spec-reviewer": [{ response: "PASS", waitFor: waitForReviewer }],
+      },
+      trustedCommandResponses: {
+        "git push": [createNoUpstreamPushFailure()],
+      },
+    });
+
+    const runPromise = harness.run();
+    await waitFor(() => harness.invocationRecords.filter((record) => record.role === "spec-reviewer").length === 1);
+
+    const stateCommitIndex = harness.trustedCommandCalls.indexOf("git commit -m 'conductor: update state'");
+    const pushIndex = harness.trustedCommandCalls.findIndex((command, index) => command === "git push" && index > stateCommitIndex);
+
+    expect(stateCommitIndex).toBeGreaterThanOrEqual(0);
+    expect(pushIndex).toBeGreaterThan(stateCommitIndex);
+    expect(harness.orchestrator.getState().status).toBe("running");
 
     harness.orchestrator.pause();
     releaseReviewer();
@@ -1261,6 +1452,43 @@ describe("createOrchestrator", () => {
     expect(pushIndex).toBeGreaterThan(commitIndex);
   });
 
+  it("continues after spec-writing push reports no upstream branch", async () => {
+    let releaseImplementor!: () => void;
+    const waitForImplementor = new Promise<void>((resolve) => {
+      releaseImplementor = resolve;
+    });
+    const harness = await createHarness({
+      initialState: {
+        conventionsSkill: "",
+        specStep: "reviewing-phases",
+        specPhaseFileIndex: 0,
+      },
+      invocationScripts: {
+        "phase-reviewer": [{ response: "PASS" }],
+        implementor: [{ response: "implemented", waitFor: waitForImplementor }],
+        reviewer: [{ response: "PASS" }, { response: "PASS" }],
+        "pr-reviewer": [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
+      },
+      trustedCommandResponses: {
+        "git push": [createNoUpstreamPushFailure()],
+      },
+    });
+
+    const runPromise = harness.run();
+    await waitFor(() => harness.invocationRecords.filter((record) => record.role === "implementor").length === 1);
+
+    const commitIndex = harness.trustedCommandCalls.indexOf("git commit -m 'conductor: write spec'");
+    const pushIndex = harness.trustedCommandCalls.findIndex((command, index) => command === "git push" && index > commitIndex);
+
+    expect(commitIndex).toBeGreaterThanOrEqual(0);
+    expect(pushIndex).toBeGreaterThan(commitIndex);
+    expect(harness.orchestrator.getState().status).toBe("running");
+
+    harness.orchestrator.pause();
+    releaseImplementor();
+    await runPromise;
+  });
+
   it("uses the spec-author model for clarification while auditing the invocation as clarifier", async () => {
     const harness = await createHarness({
       createSpec: false,
@@ -1302,11 +1530,13 @@ describe("createOrchestrator", () => {
       createPrompt: true,
       phaseContent: ["# Phase 1: Empty", ""].join("\n"),
       invocationScripts: {
-        "spec-author": [{ response: JSON.stringify([
-          { question: "Which API should this extend?", suggestedOptions: ["REST", "GraphQL"] },
-          { question: "Should this include UI work?", suggestedOptions: ["yes", "no"] },
-          { question: "What is out of scope?", suggestedOptions: ["migration", "none"] },
-        ]) }],
+        "spec-author": [{
+          response: JSON.stringify([
+            { question: "Which API should this extend?", suggestedOptions: ["REST", "GraphQL"] },
+            { question: "Should this include UI work?", suggestedOptions: ["yes", "no"] },
+            { question: "What is out of scope?", suggestedOptions: ["migration", "none"] },
+          ])
+        }],
       },
     });
 
@@ -1338,10 +1568,12 @@ describe("createOrchestrator", () => {
       phaseContent: ["# Phase 1: Empty", ""].join("\n"),
       invocationScripts: {
         "spec-author": [
-          { response: JSON.stringify([
-            { question: "Which transport should be supported?", suggestedOptions: ["webview", "server"] },
-            { question: "Should this include UI work?", suggestedOptions: ["yes", "no"] },
-          ]) },
+          {
+            response: JSON.stringify([
+              { question: "Which transport should be supported?", suggestedOptions: ["webview", "server"] },
+              { question: "Should this include UI work?", suggestedOptions: ["yes", "no"] },
+            ])
+          },
           { response: "NONE" },
           { response: "PASS" },
         ],
@@ -1439,9 +1671,11 @@ describe("createOrchestrator", () => {
       createPrompt: true,
       phaseContent: ["# Phase 1: Empty", ""].join("\n"),
       invocationScripts: {
-        "spec-author": [{ response: JSON.stringify([
-          { question: "Which runtime should own this?", suggestedOptions: ["extension", "server"] },
-        ]) }],
+        "spec-author": [{
+          response: JSON.stringify([
+            { question: "Which runtime should own this?", suggestedOptions: ["extension", "server"] },
+          ])
+        }],
       },
     });
 
@@ -1492,6 +1726,63 @@ describe("createOrchestrator", () => {
 
     expect(harness.orchestrator.getState().status).toBe("error");
     expect(harness.orchestrator.getState().specStep).toBe("clarifying");
+  });
+
+  it("surfaces InvocationResult.error when spec authoring returns an empty response", async () => {
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      initialState: {
+        conventionsSkill: "",
+        specStep: "authoring",
+      },
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [
+          { response: "", invocationError: "Exceeded max turns (5) without receiving <done>" },
+          { response: "", invocationError: "Exceeded max turns (5) without receiving <done>" },
+        ],
+      },
+    });
+
+    await harness.run();
+
+    const auditEntries = await readAudit(path.join(harness.workspaceDir, ".conductor"));
+    const errorEntry = auditEntries.find((entry) => entry.role === "spec-author" && entry.result === "error" && entry.model === "system");
+
+    expect(harness.orchestrator.getState().status).toBe("error");
+    expect(harness.orchestrator.getState().specStep).toBe("authoring");
+    expect(errorEntry?.promptSummary).toContain("Spec authoring failed: Exceeded max turns (5) without receiving <done>");
+  });
+
+  it("tells spec-author to finish with <done>PASS</done> after writing or updating the spec", async () => {
+    const harness = await createHarness({
+      createSpec: false,
+      createPrompt: true,
+      initialState: {
+        specStep: "authoring",
+      },
+      phaseContent: ["# Phase 1: Empty", ""].join("\n"),
+      invocationScripts: {
+        "spec-author": [{ response: "PASS" }, { response: "PASS" }, { response: "PASS" }],
+        "spec-reviewer": [{ response: "FAIL tighten acceptance criteria" }, { response: "PASS" }, { response: "PASS" }],
+        "spec-proofreader": [{ response: "PASS" }, { response: "PASS" }],
+        "phase-creator": [{ response: "PASS" }],
+        "phase-reviewer": [{ response: "PASS" }],
+      },
+    });
+
+    await harness.run();
+
+    const specAuthorCalls = harness.invocationRecords.filter(
+      (record) => record.role === "spec-author" && record.systemPrompt === "spec-author::Spec writing phase 0 authoring.",
+    );
+
+    expect(specAuthorCalls.length).toBeGreaterThanOrEqual(2);
+    expect(specAuthorCalls[0]?.userPrompt).toContain("Use tools to write or update the spec at the target spec path.");
+    expect(specAuthorCalls[0]?.userPrompt).toContain("When finished, return exactly <done>PASS</done>.");
+    expect(specAuthorCalls[1]?.userPrompt).toContain("Use tools to write or update the spec at the target spec path.");
+    expect(specAuthorCalls[1]?.userPrompt).toContain("When finished, return exactly <done>PASS</done>.");
   });
 
   it("skips phase 0 when spec.md already exists and proceeds directly to implementation", async () => {

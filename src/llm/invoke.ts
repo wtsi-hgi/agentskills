@@ -13,6 +13,20 @@ type RequestMessage = {
   content: string;
 };
 
+type RuntimeLanguageModelMessage = {
+  role: number;
+  content: string;
+  name?: string;
+};
+
+function getVscodeModule(): typeof import("vscode") | undefined {
+  try {
+    return require("vscode") as typeof import("vscode");
+  } catch {
+    return undefined;
+  }
+}
+
 function createResult(messages: TranscriptMessage[]): InvocationResult {
   return {
     response: "",
@@ -25,10 +39,94 @@ function createResult(messages: TranscriptMessage[]): InvocationResult {
   };
 }
 
+export function buildLanguageModelChatMessages(messages: TranscriptMessage[]): Array<vscode.LanguageModelChatMessage | RuntimeLanguageModelMessage> {
+  const vscodeModule = getVscodeModule();
+  const requestMessages: Array<vscode.LanguageModelChatMessage | RuntimeLanguageModelMessage> = [];
+  const pendingSystemInstructions: string[] = [];
+
+  const pushUserMessage = (content: string) => {
+    const normalizedContent = pendingSystemInstructions.length > 0
+      ? `${pendingSystemInstructions.join("\n\n")}\n\n${content}`
+      : content;
+    pendingSystemInstructions.length = 0;
+
+    if (vscodeModule) {
+      requestMessages.push(vscodeModule.LanguageModelChatMessage.User(normalizedContent));
+      return;
+    }
+
+    requestMessages.push({ role: 1, content: normalizedContent });
+  };
+
+  const pushAssistantMessage = (content: string) => {
+    if (vscodeModule) {
+      requestMessages.push(vscodeModule.LanguageModelChatMessage.Assistant(content));
+      return;
+    }
+
+    requestMessages.push({ role: 2, content });
+  };
+
+  for (const message of messages) {
+    if (message.role === "system") {
+      pendingSystemInstructions.push(message.content);
+      continue;
+    }
+
+    if (message.role === "assistant") {
+      if (pendingSystemInstructions.length > 0) {
+        pushUserMessage("");
+      }
+      pushAssistantMessage(message.content);
+      continue;
+    }
+
+    pushUserMessage(message.content);
+  }
+
+  if (pendingSystemInstructions.length > 0) {
+    pushUserMessage("");
+  }
+
+  return requestMessages;
+}
+
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, milliseconds);
   });
+}
+
+function getResponseChunkText(chunk: unknown): string {
+  if (typeof chunk === "string") {
+    return chunk;
+  }
+
+  if (
+    typeof chunk === "object"
+    && chunk !== null
+    && "name" in chunk
+    && typeof (chunk as { name: unknown }).name === "string"
+    && "input" in chunk
+    && typeof (chunk as { input: unknown }).input === "object"
+    && (chunk as { input: unknown }).input !== null
+  ) {
+    return `<tool_call>${JSON.stringify({
+      name: (chunk as { name: string }).name,
+      arguments: (chunk as { input: Record<string, unknown> }).input,
+    })}</tool_call>`;
+  }
+
+  if (
+    typeof chunk === "object"
+    && chunk !== null
+    && "value" in chunk
+    && typeof (chunk as { value: unknown }).value === "string"
+  ) {
+    return (chunk as { value: string }).value;
+  }
+
+  return "";
 }
 
 function stripTags(text: string): string {
@@ -69,11 +167,27 @@ async function countMessageTokens(
   return total;
 }
 
-async function readResponseText(response: vscode.LanguageModelChatResponse): Promise<string> {
+export async function readResponseText(response: vscode.LanguageModelChatResponse): Promise<string> {
+
   let text = "";
 
-  for await (const chunk of response.text) {
-    text += chunk;
+  const responseStream = (response as { stream?: AsyncIterable<unknown> }).stream;
+  if (responseStream) {
+    for await (const chunk of responseStream) {
+      text += getResponseChunkText(chunk);
+    }
+
+    if (text.length > 0) {
+      return text;
+    }
+  }
+
+  const textStream = (response as { text?: AsyncIterable<unknown> }).text;
+
+  if (textStream) {
+    for await (const chunk of textStream) {
+      text += getResponseChunkText(chunk);
+    }
   }
 
   return text;
@@ -95,7 +209,11 @@ async function sendRequestWithRetry(
     attempt += 1;
 
     try {
-      const response = await model.sendRequest(messages as unknown as vscode.LanguageModelChatMessage[], undefined, token);
+      const response = await model.sendRequest(
+        buildLanguageModelChatMessages(messages) as vscode.LanguageModelChatMessage[],
+        undefined,
+        token,
+      );
       return await readResponseText(response);
     } catch (error) {
       lastError = error;
