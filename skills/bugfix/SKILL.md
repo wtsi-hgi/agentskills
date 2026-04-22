@@ -1,6 +1,6 @@
 ---
 name: bugfix
-description: Orchestrates bug fixes via implementor and reviewer subagents using TDD. Handles one or many bugs sequentially with human verification between each.
+description: Orchestrates bug fixes via implementor and reviewer subagents using TDD. Handles one or many bugs sequentially, tracks them in a dated checklist, and auto-commits each fix.
 ---
 
 # Bugfix Skill
@@ -13,12 +13,31 @@ bugfix-specific procedure.
 ## Input
 
 One or more bug descriptions (from the user, an issue tracker, or a paste).
-Parse them into a numbered list of discrete issues.
+Parse them into a numbered list of discrete issues. Apply the same procedure
+whether there is one bug or many.
+
+## Checklist File
+
+At the start of every invocation, create a checklist file at
+`.docs/bugfixes/<YYMMDD>-<N>.md`, where `<YYMMDD>` is today's date and `<N>`
+is the smallest positive integer that yields a path not already present.
+Create the `.docs/bugfixes/` directory if missing.
+
+Write the bugs verbatim as a GitHub-style checklist:
+
+```
+- [ ] <bug 1 description, verbatim>
+- [ ] <bug 2 description, verbatim>
+```
+
+As each bug is completed (after commit), update its entry to `- [x]` and add
+indented bullets summarising the fix (files touched, approach). Commit the
+checklist update together with the fix.
 
 ## Procedure
 
 Process each bug **sequentially**. Complete the full cycle (fix → review →
-verify → commit) for one bug before starting the next.
+commit) for one bug before starting the next.
 
 ### For each bug:
 
@@ -31,8 +50,9 @@ Launch an implementor subagent with:
   **regression test that fails** demonstrating the bug, then fix the code so
   the test passes. Follow the TDD cycle. Run tests and linters."
 
-If the subagent reports it cannot reproduce or fix the bug, report this to the
-user immediately and ask how to proceed before moving on.
+If the subagent reports it cannot reproduce or fix the bug, note the details of
+this as indented bullets under the checklist item, do not check the item, and
+move on to the next bug after reverting any other changes.
 
 #### 2. Review (reviewer subagent)
 
@@ -40,50 +60,35 @@ Launch a reviewer subagent with:
 - Conventions and reviewer skill paths (to read).
 - The bug description and list of changed files.
 - Instruction: "You have clean context. Read all changed source and test
-  files. Verify: (a) a regression test exists that would fail without the fix,
-  (b) the fix is correct and minimal, (c) all tests pass, (d) linter is clean.
-  Return PASS or FAIL with specific feedback."
+  files. Verify: (a) a regression test exists that would fail without the
+  fix, (b) the fix is correct and minimal, (c) all tests pass, (d) linter is
+  clean. Return PASS or FAIL with specific feedback."
 
 **PASS →** proceed to step 3.
 **FAIL →** launch a new implementor subagent with the reviewer feedback, then
-a fresh reviewer. Repeat until PASS (max 5 cycles; if still failing, report to
-user and ask how to proceed).
+a fresh reviewer. Repeat until PASS (max 5 cycles; if still failing, note the
+problem under the checklist item, do not check the item, and move on to the
+next bug after reverting any other changes).
 
-#### 3. Human verification
+#### 3. Commit and update checklist
 
-Present to the user:
-- Bug description (as you understood it).
-- Summary of the fix (files changed, approach).
-- Confirmation that tests and linter pass.
-
-Ask: "Happy with this fix, or would you like changes?"
-
-- **Changes requested →** return to step 1 with the user's feedback appended
-  to the bug description.
-- **Approved →** proceed to step 4.
-
-#### 4. Commit
-
-Stage only the files changed for this bug with `git add <file>`. Commit with a
-short imperative message describing the bug fixed (max 72 chars), e.g.
+Update the checklist: change the bug's `- [ ]` to `- [x]` and append indented
+bullets summarising the fix. Stage the files changed for this bug plus the
+checklist file with `git add <files>`. Commit with a short imperative message
+(max 72 chars) describing the bug fixed, e.g.
 `Fix off-by-one in batch size calculation`.
 
-Do NOT run `git push`.
+Do NOT run `git push`. Do NOT ask the user for confirmation — proceed
+straight to the next bug.
 
 ### After all bugs
 
-Report completion with a summary of commits made.
-
-## Error Handling
-
-- **Transient subagent failures:** see **subagents**.
-- **Unresolvable bug:** report to user, skip to next bug if multiple remain.
+Report completion with the checklist path and a summary of commits made.
 
 ## Rules
 
 - Follow the rules in **subagents** (no direct implementation, no read-only
   agents for writing work, etc.).
-- NEVER commit before the user approves the fix.
+- Always create the dated checklist file, even for a single bug.
 - NEVER run `git push`.
-- NEVER skip human verification.
-- Process bugs sequentially — one fix-review-verify-commit cycle at a time.
+- Process bugs sequentially — one fix-review-commit cycle at a time.
