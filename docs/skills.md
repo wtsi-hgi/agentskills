@@ -45,6 +45,7 @@ These skills are tech-stack-agnostic and used across all projects:
 | Skill | Purpose |
 |---|---|
 | **agent-conduct** | Universal safety rules: workspace boundaries, scratch work, terminal safety, git safety. Referenced by every other skill. |
+| **subagents** | Shared rules for orchestrating skills that delegate work via `runSubagent`: agent-type selection (writable vs read-only), briefing, skill discovery, error handling. Referenced by orchestrator, bugfix, spec-writer, and pr-reviewer. |
 | **bugfix** | Orchestrates bug fixes via implementor and reviewer subagents using TDD. Handles one or many bugs sequentially with human verification between each. |
 | **frontend-design** | Guidelines for creating distinctive, production-grade frontend interfaces with high design quality. |
 | **orchestrator** | Coordinates implementation and review of phase plans by launching implementor and reviewer subagents. |

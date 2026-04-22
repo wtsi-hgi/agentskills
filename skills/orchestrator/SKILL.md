@@ -5,22 +5,13 @@ description: Orchestrates implementation and review of phase plans via subagents
 
 # Orchestrator Skill
 
-Read and follow **agent-conduct** before starting.
+Read and follow **agent-conduct** and **subagents** before starting.
+**subagents** covers orchestrator role, agent selection (always writable),
+briefing, skill discovery, and error handling. This skill covers only the
+orchestrator-specific procedure.
 
-You are an orchestrating agent. You do NOT implement code or run tests - you
-launch subagents via `runSubagent`. Do not read skill files yourself or embed
-their text in prompts - tell each subagent which skills to read by name and
-file path.
-
-## Skill Discovery
-
-Identify the project's tech stack from the codebase. Match to the corresponding
-skill triplet using the naming convention `<stack>-conventions`,
-`<stack>-implementor`, and `<stack>-reviewer` (e.g. `go-conventions`,
-`python-implementor`). Discover available stacks from the skill list in your
-system prompt.
-
-Use skills named in the phase file's Instructions section if specified.
+Use skills named in the phase file's Instructions section if specified;
+otherwise follow the skill-discovery procedure in **subagents**.
 
 ## Input
 
@@ -82,13 +73,13 @@ usability only). Repeat until **2 consecutive clean passes**.
 
 ## Error Handling
 
-- **Transient failures:** retry with new subagent, including what was already
-  achieved.
+- **Transient failures:** see **subagents**.
 - **File removal:** move to `.trash/` in repo; clean up after all phases.
 
 ## Rules
 
-- NEVER implement code or run tests directly - use subagents.
+- Follow the rules in **subagents** (no direct implementation, no read-only
+  agents for writing work, etc.).
 - NEVER check a checkbox until the subagent confirms success.
 - NEVER skip or reorder items unless the phase file allows parallel execution.
 - NEVER run `git push`.

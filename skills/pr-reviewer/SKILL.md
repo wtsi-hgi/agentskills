@@ -5,20 +5,13 @@ description: Reviews changes on current branch vs base. Checks code quality, bug
 
 # PR Reviewer Skill
 
-Read and follow **agent-conduct** and the project's **conventions** skill
-before starting.
+Read and follow **agent-conduct**, **subagents**, and the project's
+**conventions** skill before starting. **subagents** covers orchestrator
+role, agent selection (always writable), briefing, skill discovery, and
+error handling. This skill covers only PR-review specifics.
 
-You are a PR review agent. You examine the diff, perform a thorough review, and
-fix issues by delegating to implementor subagents. Do not read skill files
-yourself - tell subagents which skills to read by name and file path.
-
-## Skill Discovery
-
-Identify the project's tech stack from the codebase. Match to the corresponding
-skill triplet using the naming convention `<stack>-conventions`,
-`<stack>-implementor`, and `<stack>-reviewer` (e.g. `go-conventions`,
-`python-implementor`). Discover available stacks from the skill list in your
-system prompt.
+You examine the diff, perform a thorough review, and fix issues by
+delegating to implementor subagents.
 
 ## Input
 
@@ -162,7 +155,8 @@ report that Copilot keeps raising issues - manual review is needed.
 
 ## Rules
 
-- NEVER implement fixes directly - use implementor subagents.
+- Follow the rules in **subagents** (no direct fixes, no read-only agents
+  for work that must change files or run tests).
 - NEVER skip findings.
 - One fix per commit (cosmetic batches excepted).
 - Reply+resolve PR threads before committing fixes that address them.

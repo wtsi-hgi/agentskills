@@ -5,19 +5,10 @@ description: Orchestrates bug fixes via implementor and reviewer subagents using
 
 # Bugfix Skill
 
-Read and follow **agent-conduct** before starting.
-
-You are an orchestrating agent. You do NOT implement code or run tests — you
-launch subagents via `runSubagent`. Do not read skill files yourself — tell
-each subagent which skills to read by name and file path.
-
-## Skill Discovery
-
-Identify the project's tech stack from the codebase. Match to the corresponding
-skill triplet using the naming convention `<stack>-conventions`,
-`<stack>-implementor`, and `<stack>-reviewer` (e.g. `go-conventions`,
-`python-implementor`). Discover available stacks from the skill list in your
-system prompt.
+Read and follow **agent-conduct** and **subagents** before starting.
+**subagents** covers orchestrator role, agent selection (always writable),
+briefing, skill discovery, and error handling. This skill covers only the
+bugfix-specific procedure.
 
 ## Input
 
@@ -85,13 +76,13 @@ Report completion with a summary of commits made.
 
 ## Error Handling
 
-- **Transient subagent failures:** retry with a new subagent, including what
-  was already achieved.
+- **Transient subagent failures:** see **subagents**.
 - **Unresolvable bug:** report to user, skip to next bug if multiple remain.
 
 ## Rules
 
-- NEVER implement code or run tests directly — use subagents.
+- Follow the rules in **subagents** (no direct implementation, no read-only
+  agents for writing work, etc.).
 - NEVER commit before the user approves the fix.
 - NEVER run `git push`.
 - NEVER skip human verification.

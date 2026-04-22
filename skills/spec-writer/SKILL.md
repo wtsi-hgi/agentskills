@@ -5,19 +5,10 @@ description: Orchestrates spec creation and review via subagents. Use when desig
 
 # Spec Writer Skill
 
-Read and follow **agent-conduct** before starting.
-
-You are an orchestrating agent. You do NOT write or review specs directly - you
-launch subagents via `runSubagent`. Do not read skill files yourself - tell
-subagents which skills to read by name and file path.
-
-## Skill Discovery
-
-Identify the project's tech stack from the codebase. Match to the corresponding
-skill triplet using the naming convention `<stack>-conventions`,
-`<stack>-implementor`, and `<stack>-reviewer` (e.g. `go-conventions`,
-`python-implementor`). Discover available stacks from the skill list in your
-system prompt.
+Read and follow **agent-conduct** and **subagents** before starting.
+**subagents** covers orchestrator role, agent selection (always writable),
+briefing, skill discovery, and error handling. This skill covers only the
+spec-writing procedure.
 
 ## Input
 
@@ -98,12 +89,12 @@ Report completion when all phases pass.
 
 ## Error Handling
 
-Transient subagent failures: retry with new subagent, including what was already
-achieved.
+Transient subagent failures: see **subagents**.
 
 ## Rules
 
-- NEVER write specs or review them directly - use subagents.
+- Follow the rules in **subagents** (no direct spec writing/reviewing, no
+  read-only agents for writing work, etc.).
 - NEVER pass feature description to spec-proofreader.
 - NEVER skip review cycles. Feature review and proofreading each need 2
   consecutive passes. Phase reviews need 1 clean pass each.
