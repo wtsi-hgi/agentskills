@@ -23,11 +23,13 @@ starting.
 ### Frontend (TypeScript)
 
 1. Write failing test in `frontend/tests/` (Vitest).
-2. Run: `cd frontend && pnpm test`
-3. Minimal implementation to pass.
-4. Refactor.
-5. Lint: `cd frontend && pnpm lint && pnpm format`
-6. Re-run test.
+2. For visual styling changes, write a failing Playwright/perceptual test when
+   jsdom cannot prove the user-visible result.
+3. Run: `cd frontend && pnpm test`
+4. Minimal implementation to pass.
+5. Refactor.
+6. Lint: `cd frontend && pnpm lint && pnpm format`
+7. Re-run test.
 
 ### Contract Tests
 
@@ -38,6 +40,8 @@ Ensure both schemas agree on field names, types, and constraints.
 ### Frontend Design
 
 For UI tasks, also read and follow the **frontend-design** skill.
+For Tailwind v4 theming and perceptual UI tests, follow the styling/testing
+rules in **nextjs-fastapi-conventions** before changing selectors or tokens.
 
 ## Workflow
 

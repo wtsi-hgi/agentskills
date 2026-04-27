@@ -38,7 +38,12 @@ Check against nextjs-fastapi-conventions architecture:
 - **Backend:** `async def` endpoints, `response_model` declared, lifespan
   pattern (not `@app.on_event`).
 - **Frontend:** `useActionState` (not `useFormState`). Tailwind v4 semantic
-  tokens.
+  tokens. Runtime theme handling matches the project's Tailwind v4 setup
+  (`@theme`, `@theme inline`, `@custom-variant dark`, and next-themes).
+- **Visual regressions:** reject tests that only read source CSS, class names,
+  or isolated computed properties when the requirement is perceptual. Require a
+  browser-rendered assertion such as screenshot or pixel/contrast sampling
+  against the real app stylesheet and the production dark-mode mechanism.
 
 ### 5. Verify code quality
 

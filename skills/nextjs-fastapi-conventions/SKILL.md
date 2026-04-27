@@ -83,6 +83,27 @@ Every FastAPI response is validated on the frontend with Zod:
 - Mobile-first responsive (`sm:`, `md:`, `lg:`).
 - CVA for component variants. Sonner for toasts. next-themes for theme switching.
 
+### Tailwind v4 Runtime Theming
+
+- Treat Tailwind v4 theme variables as part of the runtime contract, not as
+  ordinary CSS constants. Read the project's actual `globals.css`/theme setup
+  before changing visual states.
+- If dark mode is driven by `next-themes` with `attribute="class"`, ensure
+  Tailwind's `dark:` variant is also class-driven (for example with
+  `@custom-variant dark (&:where(.dark, .dark *));`). Do not assume `.dark`
+  affects Tailwind utilities when the compiled CSS still uses
+  `prefers-color-scheme`.
+- Use `@theme inline` only when utilities should inline a referenced value.
+  Do not use it for semantic colours that must change at runtime between light
+  and dark themes; compiled utilities may freeze light-mode literals such as
+  `#ffffff` or `#e2e8f0`.
+- For semantic colours that must respond to theme changes, prefer utilities
+  that compile to runtime CSS variables, explicit arbitrary values such as
+  `bg-[var(--color-card)]`, or small custom CSS rules that use `var(...)`.
+- When debugging Tailwind v4 styling, inspect the generated CSS or browser
+  computed styles before changing specificity. Cascade layers, `!important`,
+  and `@theme inline` can make source CSS misleading.
+
 ### File Organisation
 
 - Pages in `app/` (App Router). Reusable components in `components/`.
@@ -103,6 +124,27 @@ Every FastAPI response is validated on the frontend with Zod:
 - `environment: 'node'`. Tests in `frontend/tests/*.test.ts`.
 - Contract tests: `.parse()` and `.safeParse()` against schemas.
 - `describe`/`it` blocks, `expect()` matchers.
+
+### Visual and Perceptual UI Tests
+
+- For styling bugs that users perceive visually (contrast, borders, selection,
+  focus rings, dark mode, animations), prefer real-browser tests with
+  Playwright over jsdom-only tests.
+- A test that reads source CSS text, checks for a class name, or asserts only a
+  computed property is not sufficient for a visual regression. It can be useful
+  as a guard, but it does not prove the rendered UI is visible.
+- Assert the user-visible result: compare screenshots or sample rendered pixels
+  from the affected element and its surroundings. For borders and rings, check
+  frame pixels against the element fill and neighbouring cells/surfaces, not
+  just `borderTopColor` against another element's border.
+- Test every relevant theme/mode through the same mechanism the app uses in
+  production. If dark mode is class-driven, set the class and verify compiled
+  CSS responds to it; if it is media-driven, use `page.emulateMedia()`.
+- Avoid injecting fake probe styles into tests for the feature under test. Load
+  the real app stylesheet and fail against the actual cascade.
+- If a visual assertion is hard to express, include a focused screenshot
+  assertion or a small canvas/pixel sampler plus clear thresholds derived from
+  visible contrast, not from the implementation details of a chosen token.
 
 ## Commands
 

@@ -43,3 +43,16 @@ minimalist needs restraint and precision.
 
 When building for a specific project, also read the project's conventions skill
 for tech stack, component patterns, and styling rules.
+
+## Visual Verification
+
+- For UI changes where success is perceptual, verify the rendered result in a
+  real browser. Source CSS checks, class-name checks, and jsdom computed styles
+  are not enough on their own.
+- Test light/dark modes through the same mechanism the application uses in
+  production. With Tailwind v4, confirm generated utilities and theme variables
+  actually respond at runtime before tuning colours or specificity.
+- Prefer screenshot or focused pixel/contrast assertions for borders, focus
+  rings, selection states, hover states, and animation end states. Compare the
+  visible element against its own fill and nearby surfaces, not just token names
+  or raw CSS declarations.
