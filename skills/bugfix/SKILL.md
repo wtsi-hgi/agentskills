@@ -44,6 +44,7 @@ commit) for one bug before starting the next.
 #### 1. Fix (implementor subagent)
 
 Launch an implementor subagent with:
+
 - Conventions and implementor skill paths (to read).
 - The bug description and any relevant file paths or reproduction steps.
 - Instruction: "Read the conventions skill. Investigate the bug. Write a
@@ -57,6 +58,7 @@ move on to the next bug after reverting any other changes.
 #### 2. Review (reviewer subagent)
 
 Launch a reviewer subagent with:
+
 - Conventions and reviewer skill paths (to read).
 - The bug description and list of changed files.
 - Instruction: "You have clean context. Read all changed source and test

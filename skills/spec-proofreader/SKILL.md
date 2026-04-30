@@ -1,6 +1,7 @@
 ---
 name: spec-proofreader
 description: Reviews spec documents for text quality issues without knowledge of the feature description. Fixes errors directly. Invoked by spec-writer, not directly.
+context: fork
 ---
 
 # Spec Proofreader Skill
@@ -44,6 +45,7 @@ purely on its own merits as a written document.
 - Code blocks specify language. Proper heading hierarchy.
 
 ### 5. Fix errors directly. Keep fixes minimal. Check codebase only to resolve
+
 ambiguities.
 
 ### 6. Verdict

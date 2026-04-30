@@ -1,6 +1,7 @@
 ---
 name: python-implementor
 description: Python TDD implementation workflow. References python-conventions and agent-conduct.
+context: fork
 ---
 
 # Python Implementor Skill

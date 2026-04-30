@@ -1,6 +1,7 @@
 ---
 name: spec-reviewer
 description: Reviews a spec against the feature description for completeness. Returns PASS or FAIL. Invoked by spec-writer, not directly.
+context: fork
 ---
 
 # Spec Reviewer Skill
@@ -23,6 +24,7 @@ user's requested feature.
 ### 2. Check coverage
 
 For every requirement in the feature description:
+
 - A user story addresses it.
 - Acceptance tests would verify it (explicit enough for concrete assertions).
 - Edge cases and error conditions are covered.

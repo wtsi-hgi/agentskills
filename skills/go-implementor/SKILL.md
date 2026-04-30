@@ -1,6 +1,7 @@
 ---
 name: go-implementor
 description: Go TDD implementation workflow. References go-conventions and agent-conduct.
+context: fork
 ---
 
 # Go Implementor Skill

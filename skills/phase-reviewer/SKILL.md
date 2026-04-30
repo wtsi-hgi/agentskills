@@ -1,6 +1,7 @@
 ---
 name: phase-reviewer
 description: Reviews phase plan documents for correctness against spec.md and text quality. Fixes errors directly. Invoked by spec-writer, not directly.
+context: fork
 ---
 
 # Phase Reviewer Skill

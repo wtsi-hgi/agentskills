@@ -1,6 +1,7 @@
 ---
 name: nextflow-implementor
 description: Nextflow DSL 2 TDD implementation workflow. References nextflow-conventions and agent-conduct.
+context: fork
 ---
 
 # Nextflow Implementor Skill

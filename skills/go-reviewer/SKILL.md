@@ -1,6 +1,7 @@
 ---
 name: go-reviewer
 description: Review Go implementations against spec acceptance tests. References go-conventions and agent-conduct.
+context: fork
 ---
 
 # Go Reviewer Skill

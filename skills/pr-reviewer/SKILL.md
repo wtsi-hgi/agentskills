@@ -25,6 +25,7 @@ delegating to implementor subagents.
 ### 0. Resolve base (mandatory)
 
 Lock the review base before any diff/lint/test:
+
 1. Caller-provided base, OR
 2. PR `base.ref` (query via `gh api` if needed), OR
 3. `develop` (only if no PR exists and no caller base).
@@ -45,9 +46,11 @@ resolved base matches PR `base.ref`.
 
 Read all review comments via `gh api` (NOT the VS Code tool - it caps at 50
 and misreports state):
+
 ```bash
 gh api repos/{owner}/{repo}/pulls/{number}/comments --paginate
 ```
+
 Note unresolved threads as additional review items.
 
 ### 3. Code review
@@ -107,20 +110,24 @@ agent-conduct no-push rule (see agent-conduct § Git Safety).
 
 **b. Wait for GitHub to see the push.**
 Poll until the PR head SHA matches the local HEAD:
+
 ```bash
 until [ "$(gh api repos/{owner}/{repo}/pulls/{number} --jq .head.sha)" = "$(git rev-parse HEAD)" ]; do sleep 5; done
 ```
 
 **c. Request Copilot re-review.**
+
 ```bash
 gh api repos/{owner}/{repo}/pulls/{number}/requested_reviewers \
   -f 'reviewers[]=copilot' || true
 ```
+
 If Copilot is configured as a required reviewer it may already be queued;
 the `|| true` handles "already requested" errors.
 
 **d. Wait for new Copilot review.**
 Poll for a Copilot review submitted after the push timestamp:
+
 ```bash
 PUSH_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 # Poll until a Copilot review appears after PUSH_TIME
@@ -131,6 +138,7 @@ while true; do
   sleep 15
 done
 ```
+
 Timeout after 20 minutes; if no review appears, log a warning and exit the
 loop.
 
@@ -145,6 +153,7 @@ by Copilot that were not present in the previous cycle.
 **f. Escalation for persistent issues.**
 If the cycle counter reaches **3 or more**, the implementor subagent prompts
 must prepend this instruction:
+
 > Consider the problem holistically. The same area has attracted repeated
 > reviewer findings across multiple fix cycles. Rather than patching
 > individual comments, refactor the surrounding code so that reviewers do not
@@ -168,17 +177,20 @@ report that Copilot keeps raising issues - manual review is needed.
 All commands use `gh` CLI (falls back to `curl` with `$GITHUB_TOKEN`).
 
 ### Fetch PR comments
+
 ```bash
 gh api repos/{owner}/{repo}/pulls/{number}/comments --paginate
 ```
 
 Root comments only:
+
 ```bash
 gh api repos/{owner}/{repo}/pulls/{number}/comments --paginate \
   --jq '[.[] | select(.in_reply_to_id == null)] | .[] | "\(.id) \(.path) \(.body[:80])"'
 ```
 
 ### Reply to thread
+
 ```bash
 gh api repos/{owner}/{repo}/pulls/{number}/comments \
   -f body='fixed - <description>' -F in_reply_to=<comment_id>
@@ -187,6 +199,7 @@ gh api repos/{owner}/{repo}/pulls/{number}/comments \
 ### Resolve thread (GraphQL)
 
 Get thread node IDs:
+
 ```bash
 gh api graphql -f query='{
   repository(owner: "{owner}", name: "{repo}") {
@@ -200,6 +213,7 @@ gh api graphql -f query='{
 ```
 
 Resolve:
+
 ```bash
 gh api graphql -f query='mutation {
   resolveReviewThread(input: {threadId: "{thread_node_id}"}) {
@@ -209,12 +223,14 @@ gh api graphql -f query='mutation {
 ```
 
 ### Request Copilot re-review
+
 ```bash
 gh api repos/{owner}/{repo}/pulls/{number}/requested_reviewers \
   -f 'reviewers[]=copilot' || true
 ```
 
 ### Poll for Copilot review after a push
+
 ```bash
 PUSH_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 while true; do
@@ -226,9 +242,11 @@ done
 ```
 
 ### Filter new unresolved Copilot comments
+
 ```bash
 gh api repos/{owner}/{repo}/pulls/{number}/comments --paginate \
   --jq '[.[] | select(.user.login=="copilot-pull-request-reviewer[bot]") | select(.in_reply_to_id == null)] | .[] | "\(.id) \(.path) \(.body[:80])"'
 ```
+
 Cross-reference with resolved thread IDs from the GraphQL query to find only
 unresolved ones.

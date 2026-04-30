@@ -1,6 +1,7 @@
 ---
 name: nextjs-fastapi-reviewer
 description: Review Next.js + FastAPI implementations against spec acceptance tests. References nextjs-fastapi-conventions and agent-conduct.
+context: fork
 ---
 
 # Next.js + FastAPI Reviewer Skill

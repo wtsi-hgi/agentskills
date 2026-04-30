@@ -1,6 +1,7 @@
 ---
 name: nextflow-reviewer
 description: Review Nextflow DSL 2 implementations against spec acceptance tests. References nextflow-conventions and agent-conduct.
+context: fork
 ---
 
 # Nextflow Reviewer Skill

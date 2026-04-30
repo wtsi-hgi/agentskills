@@ -33,6 +33,7 @@ A phase MD file containing items with `- [ ] implemented` and
 #### a. Implementation
 
 Launch an implementor subagent with:
+
 - Conventions and implementor skill names + file paths (to read).
 - Item description, spec.md section reference, phase instructions.
 - "Read spec.md for acceptance tests. Follow TDD cycle. Run tests and linters."
@@ -42,6 +43,7 @@ On success, check `- [x] implemented`.
 #### b. Review
 
 Launch a reviewer subagent with:
+
 - Conventions and reviewer skill names + file paths (to read).
 - Item(s) description, spec.md section reference(s), phase instructions.
 - "You have clean context. Read spec.md, source and test files, run tests and
@@ -58,6 +60,7 @@ All checkboxes checked -> commit with `Implement phase <N>`.
 ### 5. Spec-aware PR review (after all phases)
 
 Launch a **pr-reviewer** subagent with:
+
 - pr-reviewer skill name + file path.
 - Path to spec document.
 - "Review all changes on this branch vs base. Check code quality, bugs,

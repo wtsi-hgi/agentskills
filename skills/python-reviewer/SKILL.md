@@ -1,6 +1,7 @@
 ---
 name: python-reviewer
 description: Review Python implementations against spec acceptance tests. References python-conventions and agent-conduct.
+context: fork
 ---
 
 # Python Reviewer Skill
@@ -46,6 +47,7 @@ Apply all rules from python-conventions (typing, style, Python 3.14
 specifics, Pydantic v2, testing patterns, copyright boilerplate).
 
 Key checks:
+
 - No `Any` anywhere. pyright strict clean.
 - No `from __future__ import annotations` (unnecessary in 3.14).
 - `type` statement for aliases, not `TypeAlias`.
