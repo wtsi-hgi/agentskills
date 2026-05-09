@@ -12,85 +12,116 @@ bugfix-specific procedure.
 
 ## Input
 
-One or more bug descriptions (from the user, an issue tracker, or a paste).
-Parse them into a numbered list of discrete issues. Apply the same procedure
-whether there is one bug or many.
+One or more bug descriptions. Parse into a numbered list of discrete issues.
+Same procedure whether one bug or many.
+
+Interpret reports by intent, not literally. Separate **visual** complaints
+("this box is ugly") from **layout** requirements: hiding an element
+visually is fine if it still serves sizing/layout. Don't delete structure
+that other things depend on.
+
+## Discover Quality Gates (once, up front)
+
+Before fixing anything, read `README.md`, `Makefile`/`justfile`/`package.json`
+scripts, and any CONTRIBUTING doc to identify the project's lint, test, and
+fixture/dev commands (e.g. `make lint`, `make test`, `make dev-fixtures`,
+`npm run lint`). Record the exact commands and pass them to every subagent.
+Subagents must run these gates, not invent their own.
 
 ## Checklist File
 
-At the start of every invocation, create a checklist file at
-`.docs/bugfixes/<YYMMDD>-<N>.md`, where `<YYMMDD>` is today's date and `<N>`
-is the smallest positive integer that yields a path not already present.
-Create the `.docs/bugfixes/` directory if missing.
-
-Write the bugs verbatim as a GitHub-style checklist:
+Create `.docs/bugfixes/<YYMMDD>-<N>.md` (smallest `N` not already taken;
+create `.docs/bugfixes/` if missing). Write each bug verbatim:
 
 ```
 - [ ] <bug 1 description, verbatim>
 - [ ] <bug 2 description, verbatim>
 ```
 
-As each bug is completed (after commit), update its entry to `- [x]` and add
-indented bullets summarising the fix (files touched, approach). Commit the
-checklist update together with the fix.
+After each fix is committed, change `- [ ]` to `- [x]` and add indented
+bullets summarising files touched and approach. Commit the checklist update
+with the fix.
+
+**Before starting a new bug, scan prior `.docs/bugfixes/*.md` checklists.**
+Their checked items define behaviour that must not regress. A new fix may
+only change a previously-fixed behaviour if that prior item is demonstrably
+wrong; if so, note the reasoning in the new checklist entry.
 
 ## Procedure
 
-Process each bug **sequentially**. Complete the full cycle (fix → review →
-commit) for one bug before starting the next.
+Process each bug **sequentially**. Complete fix → review → commit before
+starting the next.
 
 ### For each bug:
 
-#### 1. Fix (implementor subagent)
+#### 1. Reproduce first (UI bugs)
 
-Launch an implementor subagent with:
+If the bug is visual or interactive, brief an implementor subagent to:
 
-- Conventions and implementor skill paths (to read).
-- The bug description and any relevant file paths or reproduction steps.
-- Instruction: "Read the conventions skill. Investigate the bug. Write a
-  **regression test that fails** demonstrating the bug, then fix the code so
-  the test passes. Follow the TDD cycle. Run tests and linters."
+- Extend the dev fixtures (e.g. `make dev-fixtures`) so the buggy state is
+  reachable.
+- Capture a screenshot demonstrating the issue.
+- Stop there and report the fixture changes and screenshot path.
 
-If the subagent reports it cannot reproduce or fix the bug, note the details of
-this as indented bullets under the checklist item, do not check the item, and
-move on to the next bug after reverting any other changes.
+Keep the screenshot for comparison. The fixture extension is part of the
+fix and should be committed with it.
 
-#### 2. Review (reviewer subagent)
+#### 2. Fix (implementor subagent)
 
-Launch a reviewer subagent with:
+Brief an implementor subagent with:
 
-- Conventions and reviewer skill paths (to read).
-- The bug description and list of changed files.
-- Instruction: "You have clean context. Read all changed source and test
-  files. Verify: (a) a regression test exists that would fail without the
-  fix, (b) the fix is correct and minimal, (c) all tests pass, (d) linter is
-  clean. Return PASS or FAIL with specific feedback."
+- Conventions and implementor skill paths.
+- Bug description, repro steps, relevant paths, and the discovered quality
+  gate commands.
+- Paths to prior bugfix checklists; instruction not to break, bypass, or
+  weaken any existing regression test unless explicitly justified per the
+  rule above.
+- Instruction: "Follow TDD. Add a **behavioural regression test** that
+  fails for this bug, then fix the code so it passes. Do not modify
+  unrelated tests. Run the project's lint and test commands; both must
+  pass."
 
-**PASS →** proceed to step 3.
-**FAIL →** launch a new implementor subagent with the reviewer feedback, then
-a fresh reviewer. Repeat until PASS (max 5 cycles; if still failing, note the
-problem under the checklist item, do not check the item, and move on to the
-next bug after reverting any other changes).
+If the subagent reports it cannot reproduce or fix, note details under the
+checklist item (unchecked), revert any partial changes, move on.
 
-#### 3. Commit and update checklist
+#### 3. Review (reviewer subagent)
 
-Update the checklist: change the bug's `- [ ]` to `- [x]` and append indented
-bullets summarising the fix. Stage the files changed for this bug plus the
-checklist file with `git add <files>`. Commit with a short imperative message
-(max 72 chars) describing the bug fixed, e.g.
-`Fix off-by-one in batch size calculation`.
+Brief a reviewer subagent with:
 
-Do NOT run `git push`. Do NOT ask the user for confirmation — proceed
-straight to the next bug.
+- Conventions and reviewer skill paths.
+- Bug description, list of changed files, prior bugfix checklist paths, and
+  the quality gate commands.
+- Instruction: "Clean context. Read all changed source and test files.
+  Verify: (a) a regression test exists that fails without the fix; (b) the
+  fix is minimal and correct; (c) no prior regression test was deleted,
+  skipped, or weakened; (d) the project's lint and test commands pass
+  (run them); (e) for UI bugs, a post-fix screenshot from the same fixture
+  shows the issue resolved with no visible regressions elsewhere. Return
+  PASS or FAIL with specific feedback."
+
+**PASS →** step 4. **FAIL →** new implementor with feedback, then new
+reviewer. Max 5 cycles; if still failing, note the problem under the
+checklist item (unchecked), revert, move on.
+
+Watch for flip-flopping across cycles (fix A re-breaks B). If you see it,
+brief the next implementor explicitly on which behaviours must coexist.
+
+#### 4. Commit and update checklist
+
+Update the checklist (`- [x]` plus indented summary). `git add` the changed
+files plus the checklist. Commit with a short imperative message
+(≤72 chars), e.g. `Fix off-by-one in batch size calculation`.
+
+Do NOT `git push`. Do NOT ask for confirmation — proceed to the next bug.
 
 ### After all bugs
 
-Report completion with the checklist path and a summary of commits made.
+Report the checklist path and a summary of commits.
 
 ## Rules
 
-- Follow the rules in **subagents** (no direct implementation, no read-only
-  agents for writing work, etc.).
-- Always create the dated checklist file, even for a single bug.
-- NEVER run `git push`.
-- Process bugs sequentially — one fix-review-commit cycle at a time.
+- Follow **subagents** rules (no direct implementation, always writable
+  subagents, etc.).
+- Always create the dated checklist, even for one bug.
+- NEVER `git push`.
+- One fix-review-commit cycle at a time.
