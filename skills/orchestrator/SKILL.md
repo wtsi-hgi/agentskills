@@ -78,6 +78,18 @@ usability only). Repeat until **2 consecutive clean passes**.
 
 - **Transient failures:** see **subagents**.
 - **File removal:** move to `.trash/` in repo; clean up after all phases.
+- **Blocker reported by subagent** (per agent-conduct § Honesty About
+  Blockers - e.g. an external API cannot do what the spec requires):
+  1. Do NOT relaunch the implementor to "find a way". Do NOT check the
+     item.
+  2. Write `blocker-phase<N>-<item-id>.md` next to the phase file,
+     containing: the item, the impossibility (what was tried, what
+     failed and why), and 1-3 proposed alternatives or clarifications
+     needed from the user.
+  3. Abort the current phase and any later phases that depend on the
+     blocked item. Continue only with independent phases.
+  4. At the end, report all blocker files and which phases were
+     skipped.
 
 ## Rules
 

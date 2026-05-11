@@ -79,10 +79,16 @@ Brief an implementor subagent with:
 - Instruction: "Follow TDD. Add a **behavioural regression test** that
   fails for this bug, then fix the code so it passes. Do not modify
   unrelated tests. Run the project's lint and test commands; both must
-  pass."
+  pass. Do not paper over, work around, or fake a fix (see agent-conduct
+  § Honesty About Blockers). If the bug cannot be fixed due to an
+  outside constraint, revert and report the blocker with reasoning and
+  1-3 alternatives - do not commit code."
 
-If the subagent reports it cannot reproduce or fix, note details under the
-checklist item (unchecked), revert any partial changes, move on.
+If the subagent reports it cannot reproduce, cannot fix, or hits a
+blocker, leave the checklist item **unchecked**, add indented notes
+under it explaining the issue and any proposed alternatives, revert any
+partial changes, and move to the next bug. Do not retry with "try
+harder" wording.
 
 #### 3. Review (reviewer subagent)
 

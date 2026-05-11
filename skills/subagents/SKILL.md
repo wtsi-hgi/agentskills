@@ -47,6 +47,24 @@ Pass paths, not skill text.
   far.
 - **Repeated failure on the same item:** stop at the calling skill's cap
   (e.g. 5 cycles) and report to the user.
+- **Blocker reported by subagent:** see agent-conduct § Honesty About
+  Blockers. Do not relaunch with "try harder" wording. Route per the
+  calling skill (bugfix / orchestrator / spec-writer).
+
+## Liveness and Bounded Tool Calls
+
+Before every `runSubagent` call, run
+`mkdir -p .tmp/agent && touch .tmp/agent/heartbeat`. This lets the user
+verify from outside the IDE that the orchestrator is still alive. After
+each subagent returns, check the file: **if `.tmp/agent/heartbeat` has
+been deleted, the user has taken over elsewhere - stop immediately, do
+not launch further subagents, do not write files.**
+
+Brief every subagent to bound its tool calls and shell commands so they
+cannot hang indefinitely: wrap potentially long or networked commands
+with `timeout` (or framework-native timeout flags), and prefer
+test/lint invocations that fail fast. Subagents must abort and report
+rather than wait forever on an unresponsive command.
 
 ## Rules
 
@@ -54,3 +72,4 @@ Pass paths, not skill text.
 - NEVER edit files or run tests/linters directly.
 - NEVER check a progress marker until the subagent confirms success.
 - NEVER embed skill contents in prompts - pass name + path.
+- NEVER skip the heartbeat touch or the post-return heartbeat check.

@@ -91,6 +91,18 @@ Report completion when all phases pass.
 
 Transient subagent failures: see **subagents**.
 
+**Blocker during clarification or authoring** (per agent-conduct §
+Honesty About Blockers - e.g. the requested feature relies on a
+capability the chosen external API does not provide):
+
+1. Stop the current cycle. Do not have spec-author invent functionality
+   to fill the gap.
+2. Write `blocker.md` alongside `prompt.md` describing the
+   impossibility (what was requested, why it cannot work) and 1-3
+   proposed alternatives or scope changes.
+3. Do not author or revise the spec further. Report the blocker path to
+   the user and stop.
+
 ## Rules
 
 - Follow the rules in **subagents** (no direct spec writing/reviewing, no
