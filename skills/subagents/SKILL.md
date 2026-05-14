@@ -21,6 +21,17 @@ files and run tests. **Call `runSubagent` without `agentName`.** Do NOT
 pass `agentName: "Explore"` or any other read-only agent - they return
 diagnoses but cannot change anything, wasting a full cycle.
 
+## Model Selection
+
+Always pass `model` to `runSubagent`; otherwise it picks one for you. Strings
+must be exact, format `"<Model Name> (<Vendor>)"` (vendor usually `copilot`).
+
+To discover valid strings, call `runSubagent` once with `model: "__probe__"`
+— the error lists every available model verbatim. Cache that list.
+
+Default to your own model (per your system prompt). If the user names one,
+pick the closest match from the discovered list; if none is plausible, ask.
+
 ## Skill Discovery
 
 Identify the tech stack from the codebase and use the matching triplet:
@@ -73,3 +84,4 @@ rather than wait forever on an unresponsive command.
 - NEVER check a progress marker until the subagent confirms success.
 - NEVER embed skill contents in prompts - pass name + path.
 - NEVER skip the heartbeat touch or the post-return heartbeat check.
+- NEVER omit the `model` parameter on `runSubagent` (see Model Selection).
