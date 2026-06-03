@@ -22,12 +22,34 @@ delegating to implementor subagents.
 
 ## Procedure
 
+### GitHub CLI prerequisite (mandatory)
+
+Before resolving base or doing any diff/lint/test, verify `gh` is installed
+and authenticated:
+
+```bash
+if ! command -v gh >/dev/null 2>&1; then
+  echo "GitHub CLI (gh) is not installed. Stop. Install gh from https://cli.github.com/manual/installation, then run: gh auth login" >&2
+  exit 1
+fi
+
+if ! gh auth status >/dev/null 2>&1; then
+  echo "GitHub CLI (gh) is not authenticated. Stop. Run: gh auth login. For non-interactive environments, set GH_TOKEN or GITHUB_TOKEN, then confirm with: gh auth status" >&2
+  exit 1
+fi
+```
+
+If either check fails, stop, with instructions on how to install and
+authenticate `gh`. Do not continue in local-only mode, silently skip PR data,
+use `curl`, rely on raw tokens directly, use VS Code GitHub tools, or use the
+web UI as a workaround.
+
 ### 0. Resolve base (mandatory)
 
 Lock the review base before any diff/lint/test:
 
 1. Caller-provided base, OR
-2. PR `base.ref` (query via `gh api` if needed), OR
+2. PR `base.ref` (query via `gh pr view --json baseRefName` if needed), OR
 3. `develop` (only if no PR exists and no caller base).
 
 **Hard rules:** Never use repo default branch when a PR exists. Never diff
@@ -41,11 +63,12 @@ before base is resolved. Emit `Review base resolved: <base>`. If PR exists but
 
 ### 2. Check for open PR
 
-Use `github-pull-request_activePullRequest` to check for a PR. Validate
-resolved base matches PR `base.ref`.
+Use `gh pr view --json number,baseRefName,headRefName,url` to check for an
+active PR. If there is an active PR, validate the resolved base matches PR
+`base.ref`. If there is no active PR, skip PR comment handling.
 
-Read all review comments via `gh api` (NOT the VS Code tool - it caps at 50
-and misreports state):
+When an active PR exists, read all review comments via `gh api` (NOT the
+VS Code tool - it caps at 50 and misreports state):
 
 ```bash
 gh api repos/{owner}/{repo}/pulls/{number}/comments --paginate
@@ -101,8 +124,10 @@ purely cosmetic fixes into one style-cleanup commit.
 ### 8. Copilot re-review loop
 
 If any resolved threads in step 7 were authored by Copilot (`login` =
-`"copilot"` or `"github-actions[bot]"` with Copilot indicators), enter the
-re-review loop. Track a **cycle counter** starting at 1.
+`"Copilot"`, `"copilot-pull-request-reviewer"`,
+`"copilot-pull-request-reviewer[bot]"`, or `"github-actions[bot]"` with
+Copilot indicators), enter the re-review loop. Track a **cycle counter**
+starting at 1.
 
 **a. Push fixes.**
 `git push` the current branch. This is an allowed exception to the
@@ -117,23 +142,59 @@ until [ "$(gh api repos/{owner}/{repo}/pulls/{number} --jq .head.sha)" = "$(git 
 
 **c. Request Copilot re-review.**
 
+Use the official `gh pr edit --add-reviewer @copilot` path when available.
+GitHub CLI versions before the Copilot-reviewer release can fail on unrelated
+deprecated GraphQL fields, so fall back to the GraphQL `requestReviews`
+mutation with `botIds`. Do **not** use the generic REST
+`requested_reviewers` endpoint as proof that Copilot was queued; it can return
+success-shaped PR data while creating no Copilot review request.
+
 ```bash
-gh api repos/{owner}/{repo}/pulls/{number}/requested_reviewers \
-  -f 'reviewers[]=copilot' || true
+REQUEST_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+if gh pr edit {number} --add-reviewer @copilot; then
+  :
+else
+  PR_ID=$(gh api repos/{owner}/{repo}/pulls/{number} --jq .node_id)
+  COPILOT_BOT_ID=$(gh api 'users/copilot-pull-request-reviewer%5Bbot%5D' --jq .node_id)
+
+  gh api graphql \
+    -f pr="$PR_ID" \
+    -f bot="$COPILOT_BOT_ID" \
+    -f query='
+mutation($pr: ID!, $bot: ID!) {
+  requestReviews(input: {pullRequestId: $pr, botIds: [$bot]}) {
+    pullRequest { number }
+  }
+}'
+fi
+
+DEADLINE=$((SECONDS + 120))
+until gh api repos/{owner}/{repo}/issues/{number}/events --paginate \
+  --jq '[.[] | select(.created_at > "'"$REQUEST_TIME"'") | select(.event=="review_requested" and .requested_reviewer.login=="Copilot")] | length' \
+  | grep -q '^[1-9]'; do
+  if [ "$SECONDS" -ge "$DEADLINE" ]; then
+    echo "Timed out waiting for Copilot review_requested event" >&2
+    exit 1
+  fi
+  sleep 5
+done
 ```
 
-If Copilot is configured as a required reviewer it may already be queued;
-the `|| true` handles "already requested" errors.
-
-**d. Wait for new Copilot review.**
-Poll for a Copilot review submitted after the push timestamp:
+Optionally confirm that Copilot work started before waiting for the review:
 
 ```bash
-PUSH_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-# Poll until a Copilot review appears after PUSH_TIME
+gh api repos/{owner}/{repo}/issues/{number}/events --paginate \
+  --jq '.[] | select(.created_at > "'"$REQUEST_TIME"'") | select(.event=="review_requested" or .event=="copilot_work_started")'
+```
+
+**d. Wait for new Copilot review.**
+Poll for a Copilot review submitted after `REQUEST_TIME` from step 8c:
+
+```bash
 while true; do
   LATEST=$(gh api repos/{owner}/{repo}/pulls/{number}/reviews --paginate \
-    --jq '[.[] | select(.user.login=="copilot-pull-request-reviewer[bot]") | select(.submitted_at > "'"$PUSH_TIME"'") | .id] | last')
+    --jq '[.[] | select(.user.login=="copilot-pull-request-reviewer[bot]") | select(.submitted_at > "'"$REQUEST_TIME"'") | .id] | last')
   [ -n "$LATEST" ] && break
   sleep 15
 done
@@ -169,12 +230,25 @@ report that Copilot keeps raising issues - manual review is needed.
 - NEVER skip findings.
 - One fix per commit (cosmetic batches excepted).
 - Reply+resolve PR threads before committing fixes that address them.
+- `gh` is mandatory. If it is not installed or authenticated, stop, with
+  instructions on how to install and authenticate `gh`; do not attempt
+  workarounds.
 - `git push` is ONLY permitted during the Copilot re-review loop (step 8).
   This is the sole exception to the agent-conduct no-push rule.
 
 ## Appendix: GitHub API Recipes
 
-All commands use `gh` CLI (falls back to `curl` with `$GITHUB_TOKEN`).
+All commands require an installed and authenticated `gh` CLI. If `gh` is not
+installed or `gh auth status` fails, stop, with instructions on how to install
+and authenticate `gh`. Do not fall back to `curl`, raw token calls, VS Code
+GitHub tools, or the web UI.
+
+### Verify GitHub CLI
+
+```bash
+command -v gh >/dev/null 2>&1
+gh auth status >/dev/null 2>&1
+```
 
 ### Fetch PR comments
 
@@ -224,18 +298,54 @@ gh api graphql -f query='mutation {
 
 ### Request Copilot re-review
 
+Preferred path:
+
+```bash
+REQUEST_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+gh pr edit {number} --add-reviewer @copilot
+```
+
+Fallback for older GitHub CLI versions:
+
+```bash
+REQUEST_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+PR_ID=$(gh api repos/{owner}/{repo}/pulls/{number} --jq .node_id)
+COPILOT_BOT_ID=$(gh api 'users/copilot-pull-request-reviewer%5Bbot%5D' --jq .node_id)
+
+gh api graphql \
+  -f pr="$PR_ID" \
+  -f bot="$COPILOT_BOT_ID" \
+  -f query='
+mutation($pr: ID!, $bot: ID!) {
+  requestReviews(input: {pullRequestId: $pr, botIds: [$bot]}) {
+    pullRequest { number }
+  }
+}'
+```
+
+Verify Copilot was queued:
+
+```bash
+gh api repos/{owner}/{repo}/issues/{number}/events --paginate \
+  --jq '.[] | select(.created_at > "'"$REQUEST_TIME"'") | select(.event=="review_requested" or .event=="copilot_work_started")'
+```
+
+Do not rely on this REST call for Copilot re-review:
+
 ```bash
 gh api repos/{owner}/{repo}/pulls/{number}/requested_reviewers \
-  -f 'reviewers[]=copilot' || true
+  -f 'reviewers[]=copilot'
 ```
+
+It can return successful PR data while leaving no `review_requested` event and
+no queued Copilot review.
 
 ### Poll for Copilot review after a push
 
 ```bash
-PUSH_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 while true; do
   LATEST=$(gh api repos/{owner}/{repo}/pulls/{number}/reviews --paginate \
-    --jq '[.[] | select(.user.login=="copilot-pull-request-reviewer[bot]") | select(.submitted_at > "'"$PUSH_TIME"'") | .id] | last')
+    --jq '[.[] | select(.user.login=="copilot-pull-request-reviewer[bot]") | select(.submitted_at > "'"$REQUEST_TIME"'") | .id] | last')
   [ -n "$LATEST" ] && break
   sleep 15
 done
@@ -245,7 +355,7 @@ done
 
 ```bash
 gh api repos/{owner}/{repo}/pulls/{number}/comments --paginate \
-  --jq '[.[] | select(.user.login=="copilot-pull-request-reviewer[bot]") | select(.in_reply_to_id == null)] | .[] | "\(.id) \(.path) \(.body[:80])"'
+  --jq '[.[] | select(.user.login=="Copilot" or .user.login=="copilot-pull-request-reviewer[bot]") | select(.in_reply_to_id == null)] | .[] | "\(.id) \(.path) \(.body[:80])"'
 ```
 
 Cross-reference with resolved thread IDs from the GraphQL query to find only
