@@ -1,6 +1,6 @@
 ---
 name: subagents
-description: Shared rules for orchestrating agents that delegate work to subagents. Referenced by orchestrator, bugfix, spec-writer, and pr-reviewer.
+description: Shared rules for orchestrating agents that delegate work to subagents. Referenced by orchestrator, bugfix, spec-writer, pr-reviewer, and pr-resolver.
 ---
 
 # Subagents Skill
