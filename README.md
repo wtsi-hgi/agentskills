@@ -31,6 +31,33 @@ Then ask your AI agent to use the **spec-writer**, **orchestrator**, or
 **pr-reviewer** skills. See the [skills documentation](docs/skills.md) for the
 full inventory and usage guide.
 
+#### Using the skills with Claude Code
+
+Claude Code does **not** look in `~/.agents/skills`; it discovers personal
+skills only under `~/.claude/skills/`. The simplest, most effective bridge is a
+one-time symlink so every skill in this repo (and any you add later) shows up
+automatically:
+
+```bash
+# If you don't already have personal Claude Code skills, link the whole set:
+ln -s ~/.agents/skills ~/.claude/skills
+```
+
+If `~/.claude/skills/` already exists with skills of your own, symlink the
+individual skills instead so you keep both:
+
+```bash
+mkdir -p ~/.claude/skills
+for d in ~/.agents/skills/*/; do
+  ln -s "$d" ~/.claude/skills/"$(basename "$d")"
+done
+```
+
+Start a new Claude Code session and the skills are available — invoke one
+directly (e.g. `/orchestrator`, `/spec-writer`, `/pr-reviewer`) or just ask
+Claude to use it by name. Skills update in place because they are symlinked,
+so a `git pull` in `~/.agents` is all it takes to get the latest versions.
+
 ### Copilot Conductor extension
 
 Install the `.vsix` in VS Code and run **Conductor: Start** — type your feature

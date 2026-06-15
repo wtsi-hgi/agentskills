@@ -64,17 +64,44 @@ Use the active harness's vocabulary and constraints.
 - For parallel batches, spawn all independent workers first, then wait for
   completion as needed.
 
+### Claude Code Harness
+
+- Launch with the `Agent` tool, passing `subagent_type`.
+- For writable work, use `subagent_type: "general-purpose"` (or `"claude"`).
+  Both carry the full toolset (`*`), including `Edit`, `Write`, and
+  `NotebookEdit`, so they can implement, write specs, and run tests/linters.
+- Do NOT pass `subagent_type: "Explore"` or `"Plan"` for work that must edit
+  files: those agent types are missing `Edit`, `Write`, and `NotebookEdit`.
+  (They retain `Bash`, so a determined agent could still shell-write, but it
+  lacks the proper editing tools and returns diagnoses, not completed work.)
+- Omit `model` by default so the subagent inherits the parent model. When you
+  do set it, use a tier keyword: `"opus"`, `"sonnet"`, `"haiku"`, or
+  `"fable"` (not a full model id).
+- For parallel batches, emit all independent `Agent` calls in a single
+  response so they run concurrently; the runtime returns each result when it
+  finishes. Use `run_in_background: true` for long work you do not need to
+  block on - you are notified when it completes.
+- Each `Agent` result ends with an `agentId`. To continue that subagent with
+  its context intact, use `SendMessage` (`to: "<agentId>"`) **if the harness
+  exposes it**. `SendMessage` is not always available; when it is absent,
+  start a fresh `Agent` and summarise progress so far (see Error Handling).
+- If a needed tool is not in the top-level tool list, use `ToolSearch` to load
+  its schema before calling it - this is the Claude Code tool-discovery
+  mechanism.
+
 ## Always Use Writable Subagents
 
 Every subagent launched from an orchestrating skill must be able to edit
 files and run tests unless the calling skill explicitly says the task is
 read-only. Use the writable/default agent in VS Code (`runSubagent` without
-`agentName`) or a Codex worker (`spawn_agent` with `agent_type: "worker"`).
+`agentName`), a Codex worker (`spawn_agent` with `agent_type: "worker"`), or a
+Claude Code writable agent (`Agent` with `subagent_type: "general-purpose"` or
+`"claude"`).
 
-Do NOT use VS Code `agentName: "Explore"` or Codex `agent_type: "explorer"`
-for work that must change files, write specs, run tests, or verify fixes.
-Read-only agents return diagnoses but cannot complete the workflow, wasting a
-full cycle.
+Do NOT use VS Code `agentName: "Explore"`, Codex `agent_type: "explorer"`, or
+Claude Code `subagent_type: "Explore"`/`"Plan"` for work that must change
+files, write specs, run tests, or verify fixes. Read-only agents return
+diagnoses but cannot complete the workflow, wasting a full cycle.
 
 ## Model Selection
 
@@ -88,6 +115,9 @@ Apply the harness-specific rule:
 - Codex `spawn_agent`: omit `model` by default so the subagent inherits the
   parent model; set it only for an explicit user request or a clear
   task-specific reason.
+- Claude Code `Agent`: omit `model` by default so the subagent inherits the
+  parent model; when set, use a tier keyword (`"opus"`, `"sonnet"`,
+  `"haiku"`, `"fable"`).
 
 ## Skill Discovery
 
@@ -157,5 +187,5 @@ rather than wait forever on an unresponsive command.
   check after a subagent returns.
 - NEVER leave Codex subagents open once they are no longer needed.
 - NEVER omit the `model` parameter on VS Code `runSubagent`; never set Codex
-  `spawn_agent.model` without an explicit user request or clear task-specific
-  reason.
+  `spawn_agent.model` or Claude Code `Agent.model` without an explicit user
+  request or clear task-specific reason.
