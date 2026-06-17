@@ -153,6 +153,14 @@ Pass paths, not skill text.
 
 ### All Harnesses — ownership claim
 
+**Parent orchestrator only.** Only the top-level orchestrator may create,
+overwrite, touch, or delete `.tmp/agent/owner`. Subagents must NEVER run the
+claim, liveness, or cleanup steps below — a subagent that claims ownership
+overwrites its own parent's token and evicts it. A subagent may read the file
+for diagnostics, but never as its own liveness token. When briefing a subagent,
+add: "Do not run the ownership-claim snippet from the subagents skill; that is
+for the parent orchestrator only, and never delete `.tmp/agent/owner`."
+
 Hold an **ownership token** so a takeover (e.g. a second client session on the
 same shared filesystem) cleanly fences out the previous orchestrator. A
 presence file alone fails: a second session re-touching it looks identical to
@@ -213,6 +221,8 @@ rather than wait forever on an unresponsive command.
 - NEVER embed skill contents in prompts - pass name + path.
 - NEVER skip the ownership check before a subagent launch and after a
   subagent returns; NEVER continue once the token no longer matches.
+- NEVER let a subagent claim, touch, or delete `.tmp/agent/owner`; ownership is
+  parent-orchestrator-only. Brief subagents not to run the claim snippet.
 - NEVER leave Codex subagents open once they are no longer needed.
 - NEVER omit the `model` parameter on VS Code `runSubagent`; never set Codex
   `spawn_agent.model` or Claude Code `Agent.model` without an explicit user
