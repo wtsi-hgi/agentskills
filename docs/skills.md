@@ -2,21 +2,8 @@
 
 A collection of [agentskills.io](https://agentskills.io/) skills for AI coding
 agents. These skills provide structured workflows for specification writing, TDD
-implementation, code review, and PR review across multiple tech stacks.
-
-## Compatibility
-
-The [agentskills.io](https://agentskills.io/) format is supported by a growing
-number of AI coding tools:
-
-- **VS Code** with GitHub Copilot (agent mode)
-- **Claude Code** (Anthropic CLI)
-- **Cursor**
-- **Windsurf**
-
-The examples below use VS Code, but the concepts apply to any supported tool.
-Check your tool's documentation for details on skill discovery paths and
-configuration.
+implementation, code review, PR review, PR comment resolution, and bug fixing
+across multiple tech stacks.
 
 ## Setup
 
@@ -27,35 +14,32 @@ git clone https://github.com/wtsi-hgi/agentskills.git ~/.agents
 ```
 
 Tools that support agentskills.io automatically discover skills in
-`~/.agents/skills/`. For example, VS Code with GitHub Copilot picks them up
-immediately across all workspaces.
-
-### Per-project overrides
-
-Projects can also have their own skills in `.github/skills/`. Any project-level
-skills supplement or override the global ones from `~/.agents/skills/`. This is
-useful for project-specific conventions that don't belong in the shared set.
+`~/.agents/skills/`. Projects can also add their own skills in
+`.github/skills/`; project-level skills supplement or override the global ones.
 
 ## Skill Inventory
 
-### Shared Building Blocks
+This inventory corresponds to the directories under `skills/`.
+
+### Shared Building Blocks and Workflows
 
 These skills are tech-stack-agnostic and used across all projects:
 
 | Skill | Purpose |
 |---|---|
-| **agent-conduct** | Universal safety rules: workspace boundaries, scratch work, terminal safety, git safety. Referenced by every other skill. |
-| **subagents** | Shared rules for orchestrating skills that delegate work via `runSubagent`: agent-type selection (writable vs read-only), briefing, skill discovery, error handling. Referenced by orchestrator, bugfix, spec-writer, and pr-reviewer. |
-| **bugfix** | Orchestrates bug fixes via implementor and reviewer subagents using TDD. Handles one or many bugs sequentially with human verification between each. |
-| **frontend-design** | Guidelines for creating distinctive, production-grade frontend interfaces with high design quality. |
-| **orchestrator** | Coordinates implementation and review of phase plans by launching implementor and reviewer subagents. |
-| **pr-reviewer** | Reviews PR diffs for code quality, subtle bugs, real-world usability, and optionally spec conformance. Fixes issues via implementor subagents. |
-| **spec-writer** | Orchestrates creation and review of feature specifications by coordinating spec-author, spec-reviewer, and spec-proofreader subagents. |
-| **spec-author** | Writes or revises a feature specification with user stories and acceptance tests. |
-| **spec-reviewer** | Reviews a specification against the feature description for completeness. |
-| **spec-proofreader** | Reviews a specification for text quality issues (repetition, contradictions, formatting). |
-| **phase-creator** | Creates phase plan documents from a spec's Implementation Order. |
-| **phase-reviewer** | Reviews phase plan documents for correctness and consistency. |
+| **agent-conduct** | Mandatory safety rules for all agents. Read before starting any work. |
+| **subagents** | Shared rules for orchestrating agents that delegate work to subagents. Referenced by orchestrator, bugfix, spec-writer, pr-reviewer, and pr-resolver. |
+| **bugfix** | Orchestrates bug fixes via implementor and reviewer subagents using TDD. Handles one or many bugs sequentially, tracks them in a dated checklist, and auto-commits each fix. |
+| **frontend-design** | Create distinctive, production-grade frontend interfaces that avoid generic AI aesthetics. Use when building web components, pages, dashboards, or styling web UI. |
+| **orchestrator** | Orchestrates implementation and review of phase plans via subagents. Use when given a phase MD file to complete. |
+| **pr-reviewer** | Reviews changes on current branch vs base. Checks code quality, bugs, usability, and optionally spec conformance. Fixes issues via implementor subagents. |
+| **pr-resolver** | Resolve GitHub PR review comments from humans and Copilot. Use when asked to address PR comments, distinguish required human change requests from questions or suggestions, evaluate invalid or low-value comments, reply and resolve threads, and push only when needed for Copilot re-review. |
+| **spec-writer** | Orchestrates spec creation and review via subagents. Use when designing a new feature or writing a spec. |
+| **spec-author** | Writes or revises feature specs with user stories and acceptance tests for TDD implementation. Invoked by spec-writer, not directly. |
+| **spec-reviewer** | Reviews a spec against the feature description for completeness. Returns PASS or FAIL. Invoked by spec-writer, not directly. |
+| **spec-proofreader** | Reviews spec documents for text quality issues without knowledge of the feature description. Fixes errors directly. Invoked by spec-writer, not directly. |
+| **phase-creator** | Creates phase plan documents from a spec.md Implementation Order. Invoked by spec-writer, not directly. |
+| **phase-reviewer** | Reviews phase plan documents for correctness against spec.md and text quality. Fixes errors directly. Invoked by spec-writer, not directly. |
 
 ### Go
 
@@ -63,29 +47,39 @@ Skills for Go projects using GoConvey testing:
 
 | Skill | Purpose |
 |---|---|
-| **go-conventions** | Code quality standards, GoConvey testing patterns, copyright boilerplate, architecture principles, and tool commands for Go projects. |
-| **go-implementor** | TDD implementation cycle for Go code. References go-conventions. |
-| **go-reviewer** | Review checklist for Go implementations against spec acceptance tests. References go-conventions. |
+| **go-conventions** | Shared conventions for Go projects. Copyright boilerplate, code quality, GoConvey testing, architecture, and commands. Referenced by go-implementor, go-reviewer, and workflow skills. |
+| **go-implementor** | Go TDD implementation workflow. References go-conventions and agent-conduct. |
+| **go-reviewer** | Review Go implementations against spec acceptance tests. References go-conventions and agent-conduct. |
+
+### Nextflow
+
+Skills for Nextflow DSL 2 workflows:
+
+| Skill | Purpose |
+|---|---|
+| **nextflow-conventions** | Shared conventions for Nextflow DSL 2 workflows. Project layout, modules, nf-test testing, config, containers, and commands. Referenced by nextflow-implementor, nextflow-reviewer, and workflow skills. |
+| **nextflow-implementor** | Nextflow DSL 2 TDD implementation workflow. References nextflow-conventions and agent-conduct. |
+| **nextflow-reviewer** | Review Nextflow DSL 2 implementations against spec acceptance tests. References nextflow-conventions and agent-conduct. |
 
 ### Next.js + FastAPI
 
-Skills for full-stack projects with Next.js 16 (App Router) + FastAPI:
+Skills for full-stack projects with Next.js 16 and FastAPI:
 
 | Skill | Purpose |
 |---|---|
-| **nextjs-fastapi-conventions** | Architecture principles (BFF pattern, Zod contracts), code quality for Python and TypeScript, testing standards, and commands. |
-| **nextjs-fastapi-implementor** | TDD implementation cycle for full-stack features (pytest + Vitest). References nextjs-fastapi-conventions. |
-| **nextjs-fastapi-reviewer** | Review checklist for full-stack implementations including BFF and contract integrity. References nextjs-fastapi-conventions. |
+| **nextjs-fastapi-conventions** | Shared conventions for Next.js 16 + FastAPI full-stack projects. Architecture, code quality, testing, styling, and commands. Referenced by nextjs-fastapi-implementor and nextjs-fastapi-reviewer. |
+| **nextjs-fastapi-implementor** | Full-stack TDD implementation for Next.js 16 + FastAPI projects. References nextjs-fastapi-conventions and agent-conduct. |
+| **nextjs-fastapi-reviewer** | Review Next.js + FastAPI implementations against spec acceptance tests. References nextjs-fastapi-conventions and agent-conduct. |
 
 ### Python
 
-Skills for Python 3.14 projects:
+Skills for modern Python projects:
 
 | Skill | Purpose |
 |---|---|
-| **python-conventions** | Project layout, typing, linting, testing, and commands for modern Python projects. |
-| **python-implementor** | TDD implementation cycle for Python code. References python-conventions. |
-| **python-reviewer** | Review checklist for Python implementations against spec acceptance tests. References python-conventions. |
+| **python-conventions** | Shared conventions for modern Python 3.14 projects. Project layout, typing, linting, testing, and commands. Referenced by python-implementor, python-reviewer, and workflow skills. |
+| **python-implementor** | Python TDD implementation workflow. References python-conventions and agent-conduct. |
+| **python-reviewer** | Review Python implementations against spec acceptance tests. References python-conventions and agent-conduct. |
 
 ## How It Works
 
@@ -93,66 +87,24 @@ The skills form a layered system:
 
 1. **agent-conduct** provides universal safety rules that all other skills
    reference.
-2. **Conventions skills** (`go-conventions`, `python-conventions`,
-   `nextjs-fastapi-conventions`) define tech-stack-specific standards, acting as
-   a single source of truth for code quality, testing patterns, and commands.
-3. **Implementor/reviewer skills** provide the TDD cycle and review checklists,
-   referencing their conventions skill to avoid duplicating rules.
-4. **Workflow skills** (`orchestrator`, `pr-reviewer`, `spec-writer`, etc.)
-   coordinate multi-step processes by launching subagents with the appropriate
+2. **Conventions skills** define tech-stack-specific standards and commands.
+3. **Implementor/reviewer skills** provide TDD cycles and review checklists.
+4. **Workflow skills** coordinate multi-step processes using the appropriate
    tech-stack skills.
 
-The workflow skills are generic — they discover which
-implementor/reviewer/conventions skills to use based on the project context.
-This means the same orchestrator can drive a Go project, a Python project, or a
-Next.js+FastAPI project without modification.
-
-### Typical workflow
-
-1. **spec-writer** takes a feature description and produces a detailed spec with
-   acceptance tests, then creates phase plan documents.
-2. **orchestrator** processes each phase: launches implementor subagents for TDD
-   implementation, then reviewer subagents for verification.
-3. **pr-reviewer** performs a final holistic review of all changes, fixing
-   issues via implementor subagents.
-
-### Skills used by Copilot Conductor
-
-The [Copilot Conductor extension](extension-guide.md) automates the
-orchestrator, spec-writer, and pr-reviewer workflows with a deterministic state
-machine. It uses skills differently from the manual workflow:
-
-| Skill category | Manual workflow | Conductor |
-|---|---|---|
-| Conventions (`*-conventions`) | Loaded by agents | Auto-detected at run start; loaded by extension into system prompt |
-| Implementor/reviewer (`*-implementor`, `*-reviewer`) | Loaded by agents | Loaded by extension into system prompt |
-| PR reviewer (`pr-reviewer`) | Agent reads and follows | Loaded by extension for built-in PR review cycle |
-| Orchestrator, spec-writer | Agent reads and follows | Replaced by extension code |
-| Bugfix | Agent reads and follows | Replaced by extension's built-in bugfix workflow |
-| Agent-conduct | Agent reads and follows | Redundant — safety enforced by extension's bash tool |
-
-The orchestrator, spec-writer, and bugfix skills are all orchestrating
-workflows that coordinate subagents. Conductor replaces all three with its own
-state machine. The pr-reviewer skill is loaded directly by the extension for its
-built-in PR review steps.
-
-**Note on agent-conduct:** All skills begin with "Read and follow
-**agent-conduct**\u2026". When Conductor loads skills into the LLM's system
-prompt, the model may waste a tool turn attempting to read the agent-conduct
-file, even though the extension already enforces those safety rules in code
-(bash command validation, file path restrictions). To avoid this, Conductor
-strips agent-conduct references from skill text before prompt assembly.
+The workflow skills are generic. They discover which implementor, reviewer, and
+conventions skills to use based on project context, so the same workflow can
+drive Go, Nextflow, Next.js + FastAPI, or Python projects.
 
 ## Adding New Tech Stacks
 
-To add support for a new tech stack (e.g. Rust, Django):
+To add support for a new tech stack:
 
 1. Create a `<stack>-conventions` skill with code quality standards, testing
    patterns, architecture principles, and commands.
-2. Create a `<stack>-implementor` skill with the TDD cycle, referencing your
+2. Create a `<stack>-implementor` skill with the TDD cycle, referencing the
    conventions skill and agent-conduct.
-3. Create a `<stack>-reviewer` skill with the review checklist, referencing your
+3. Create a `<stack>-reviewer` skill with the review checklist, referencing the
    conventions skill and agent-conduct.
 
-The generic workflow skills (orchestrator, pr-reviewer, spec-writer, etc.) and
-the Conductor extension will automatically work with the new stack.
+The generic workflow skills will automatically work with the new stack.

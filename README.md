@@ -1,25 +1,11 @@
-# Agent Skills & Copilot Conductor
+# Agent Skills
 
-This repository contains two related but distinct things:
-
-1. **Agent Skills** — a collection of
-   [agentskills.io](https://agentskills.io/) skills that teach AI coding agents
-   how to write specs, implement code with TDD, review changes, and fix bugs
-   across multiple tech stacks.
-
-2. **Copilot Conductor** — a VS Code extension that automates the
-   implement → test → lint → review → PR review cycle by driving those skills
-   with a deterministic state machine, replacing manual prompt-based
-   orchestration. It also handles bugfix workflows, branch safety checks,
-   per-phase git commits, and crash recovery.
-
-You can use the skills without the extension (they work with any agentskills.io
-compatible tool), and you can use the extension to automate the skills instead
-of invoking them manually.
+This repository contains [agentskills.io](https://agentskills.io/) skills for
+AI coding agents. The skills provide structured workflows for specification
+writing, TDD implementation, code review, PR review, PR comment resolution, and
+bug fixing across Go, Nextflow, Next.js + FastAPI, and Python projects.
 
 ## Quick Start
-
-### Skills only
 
 Clone to `~/.agents` so compatible tools discover them automatically:
 
@@ -31,15 +17,13 @@ Then ask your AI agent to use the **spec-writer**, **orchestrator**, or
 **pr-reviewer** skills. See the [skills documentation](docs/skills.md) for the
 full inventory and usage guide.
 
-#### Using the skills with Claude Code
+### Claude Code
 
 Claude Code does **not** look in `~/.agents/skills`; it discovers personal
-skills only under `~/.claude/skills/`. The simplest, most effective bridge is a
-one-time symlink so every skill in this repo (and any you add later) shows up
-automatically:
+skills only under `~/.claude/skills/`. The simplest bridge is a one-time symlink
+so every skill in this repo, including any added later, shows up automatically:
 
 ```bash
-# If you don't already have personal Claude Code skills, link the whole set:
 ln -s ~/.agents/skills ~/.claude/skills
 ```
 
@@ -53,36 +37,20 @@ for d in ~/.agents/skills/*/; do
 done
 ```
 
-Start a new Claude Code session and the skills are available — invoke one
-directly (e.g. `/orchestrator`, `/spec-writer`, `/pr-reviewer`) or just ask
-Claude to use it by name. Skills update in place because they are symlinked,
-so a `git pull` in `~/.agents` is all it takes to get the latest versions.
-
-### Copilot Conductor extension
-
-Install the `.vsix` in VS Code and run **Conductor: Start** — type your feature
-description inline or point it at an existing `spec.md` + phase files. Conductor
-auto-detects your conventions skill, extracts test/lint commands, and stores
-everything per feature in `.conductor/state.json`. Use **Conductor: Fix Bugs**
-for targeted bugfix workflows. See the
-[extension guide](docs/extension-guide.md) for setup and usage.
+Start a new Claude Code session and the skills are available. Skills update in
+place because they are symlinked, so a `git pull` in `~/.agents` is all it takes
+to get the latest versions.
 
 ## Documentation
 
-| Document | Audience | Content |
-|---|---|---|
-| [Skills Reference](docs/skills.md) | All users | Skill inventory, setup, how the layered system works, adding new tech stacks. |
-| [Extension Guide](docs/extension-guide.md) | End users | What Conductor does, why to use it, configuration, commands, monitoring. |
-| [Extension Development](docs/extension-development.md) | Developers | Building, testing, running locally, packaging, and publishing the extension. |
+See [docs/skills.md](docs/skills.md) for the full skill inventory, setup notes,
+and guidance for adding new tech stacks.
 
 ## Repository Layout
 
 ```text
 skills/                  agentskills.io skill definitions (SKILL.md per skill)
-src/                     Copilot Conductor extension source (TypeScript)
-docs/                    documentation
-media/                   extension icons
-.docs/conductor/         extension specification and phase plans
+docs/skills.md           skill inventory and usage guide
 ```
 
 ## License
