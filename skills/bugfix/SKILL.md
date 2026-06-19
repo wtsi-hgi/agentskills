@@ -118,7 +118,8 @@ Update the checklist (`- [x]` plus indented summary). `git add` the changed
 files plus the checklist. Commit with a short imperative message
 (≤72 chars), e.g. `Fix off-by-one in batch size calculation`.
 
-Do NOT `git push`. Do NOT ask for confirmation — proceed to the next bug.
+Do not `git push` unless the user asked for it. Never push to `master`,
+`main`, or `develop`. Do NOT ask for confirmation — proceed to the next bug.
 
 ### After all bugs
 
@@ -129,5 +130,6 @@ Report the checklist path and a summary of commits.
 - Follow **subagents** rules (no direct implementation, always writable
   subagents, etc.).
 - Always create the dated checklist, even for one bug.
-- NEVER `git push`.
+- Do not `git push` unless the user asked for it. Never push to `master`,
+  `main`, or `develop`.
 - One fix-review-commit cycle at a time.

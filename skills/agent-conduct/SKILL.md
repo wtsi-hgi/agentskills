@@ -30,10 +30,11 @@ Avoid triggering VS Code modal confirmation prompts:
 
 ## Git Safety
 
-- NEVER `git push` or force-push.
-  - **Exception:** The `pr-resolver` skill, including when invoked from
-    `pr-reviewer`, may `git push` to a PR branch during its Copilot re-review
-    loop, as that loop requires pushed commits to trigger a new review.
+- NEVER push to `master`, `main`, or `develop` branches. No exceptions.
+- Do not push other branches unless the user asks or the task is working on a
+  PR and a push is needed to update the PR, rerun checks, or request review.
+- Do not force-push unless the user explicitly asks, and never to `master`,
+  `main`, or `develop`.
 - Do NOT modify `.git/` internals.
 - Use targeted `git add <file>` over `git add .`.
 

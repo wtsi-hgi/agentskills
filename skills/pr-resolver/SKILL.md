@@ -1,6 +1,6 @@
 ---
 name: pr-resolver
-description: Resolve GitHub PR review comments from humans and Copilot. Use when asked to address PR comments, distinguish required human change requests from questions or suggestions, evaluate invalid or low-value comments, reply and resolve threads, and push only when needed for Copilot re-review.
+description: Resolve GitHub PR review comments from humans and Copilot. Use when asked to address PR comments, distinguish required human change requests from questions or suggestions, evaluate invalid or low-value comments, reply and resolve threads, and run PR CI/Copilot loops.
 ---
 
 # PR Resolver Skill
@@ -108,18 +108,31 @@ gh api graphql -f query='mutation {
 }'
 ```
 
-### 5. Copilot re-review loop
+### 5. CI and Copilot loop
 
-Run this loop only after committed code changes address Copilot comments, or
-when the user explicitly asks for a Copilot re-review. If every thread was
-resolved by explanation or "already handled" replies, do not push or request
-another review unless asked. If human comments changed code but Copilot did
-not comment on those changes, do not start the Copilot loop.
+Run this loop after committed PR code changes, when PR checks fail, or when
+the user explicitly asks for a Copilot re-review. If every thread was resolved
+by explanation or "already handled" replies and checks already pass, do not
+push or request another review unless asked.
 
 Track a cycle counter starting at 1.
 
-1. Push the current branch. This is the allowed `git push` exception in
-   **agent-conduct** for this skill.
+1. Confirm the current branch is safe to push, then push the PR branch.
+
+```bash
+branch=$(git branch --show-current)
+case "$branch" in
+  master|main|develop|"")
+    echo "Stop: never push $branch" >&2
+    exit 1
+    ;;
+esac
+git push
+```
+
+This is allowed by **agent-conduct** only because this skill is working on a
+PR. Do not force-push unless the user explicitly asked.
+
 2. Wait until GitHub sees local `HEAD`:
 
 ```bash
@@ -128,9 +141,55 @@ until [ "$(gh api repos/{owner}/{repo}/pulls/{number} --jq .head.sha)" = "$(git 
 done
 ```
 
-3. Request Copilot re-review. Prefer `gh pr edit`; fall back to GraphQL
-   `requestReviews` with `botIds`. Do not treat the generic REST
-   `requested_reviewers` endpoint as proof that Copilot was queued.
+3. Wait for checks. If any fail, inspect logs, reproduce locally, fix, commit,
+   and return to step 1. Do not request Copilot re-review while checks fail.
+
+```bash
+gh pr checks {number} -R {owner}/{repo} --watch --fail-fast
+
+gh pr view {number} -R {owner}/{repo} \
+  --json headRefOid,statusCheckRollup \
+  --jq '.statusCheckRollup[] |
+    {name, workflowName, status, conclusion, state, detailsUrl}'
+```
+
+For a failed GitHub Actions job, first try the CLI log command:
+
+```bash
+gh run view {run_id} -R {owner}/{repo} --job {job_id} --log-failed
+```
+
+If the workflow run is still in progress, `gh run view` may refuse logs even
+for a completed failed job. Use the job API instead; get `{run_id}` and
+`{job_id}` from the `detailsUrl` like
+`.../actions/runs/{run_id}/job/{job_id}`.
+
+```bash
+gh api repos/{owner}/{repo}/actions/jobs/{job_id} \
+  --jq '{id, run_id, name, status, conclusion, html_url,
+         steps: [.steps[] |
+           select(.conclusion != "success" and .conclusion != "skipped")] }'
+
+gh api repos/{owner}/{repo}/actions/jobs/{job_id}/logs |
+  rg -n -i -C 3 '##\[error\]|error|fail|panic|traceback|make:|eslint|prettier'
+```
+
+For non-Actions check runs, inspect output and annotations:
+
+```bash
+gh api repos/{owner}/{repo}/commits/{head_sha}/check-runs \
+  --jq '.check_runs[] |
+    select(.conclusion != null and .conclusion != "success") |
+    {id, name, conclusion, details_url, output}'
+
+gh api repos/{owner}/{repo}/check-runs/{check_run_id}/annotations --paginate
+```
+
+4. When checks pass, request Copilot re-review if committed code changes
+   addressed Copilot comments or the user asked for it. Prefer `gh pr edit`;
+   fall back to GraphQL `requestReviews` with `botIds`. Do not treat the
+   generic REST `requested_reviewers` endpoint as proof that Copilot was
+   queued.
 
 ```bash
 REQUEST_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -151,13 +210,13 @@ mutation($pr: ID!, $bot: ID!) {
 fi
 ```
 
-4. Confirm a `review_requested` or `copilot_work_started` event appears after
+5. Confirm a `review_requested` or `copilot_work_started` event appears after
    `REQUEST_TIME`; time out after 2 minutes if neither appears.
-5. Poll up to 20 minutes for a new
+6. Poll up to 20 minutes for a new
    `copilot-pull-request-reviewer[bot]` review submitted after `REQUEST_TIME`.
-6. Re-fetch unresolved review threads. Continue the loop only for new
-   unresolved Copilot comments. If Copilot stops commenting, end the loop even
-   if unrelated human comments remain.
+7. Re-fetch unresolved review threads and checks. Continue the loop for any
+   failed check or new unresolved Copilot comment. End only when checks pass
+   and Copilot has no new unresolved comments.
 
 If the cycle counter reaches 3, prepend implementor prompts with:
 
@@ -166,8 +225,8 @@ If the cycle counter reaches 3, prepend implementor prompts with:
 > individual comments, refactor the surrounding code so that reviewers do not
 > keep finding issues.
 
-After 20 cycles, stop, push committed work, and report that Copilot keeps
-raising issues and manual review is needed.
+After 20 cycles, stop after any committed PR-branch work has been pushed and
+report that checks or Copilot keep failing and manual review is needed.
 
 ## Rules
 
@@ -178,4 +237,5 @@ raising issues and manual review is needed.
   human change requests instead of silently resolving them.
 - Do not request Copilot re-review when only comment replies changed unless
   the user asks.
-- `git push` is permitted only inside the re-review loop.
+- Follow **agent-conduct** for pushes: never push `master`, `main`, or
+  `develop`; push other branches only when asked or while updating this PR.

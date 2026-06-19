@@ -7,7 +7,7 @@ description: Reviews changes on current branch vs base. Checks code quality, bug
 
 Read and follow **agent-conduct**, **subagents**, and the project's
 **conventions** skill before starting. Use **pr-resolver** for GitHub PR
-review comments and Copilot re-review loops. **subagents** covers
+review comments plus CI/Copilot loops. **subagents** covers
 orchestrator role, agent selection (always writable), briefing, skill
 discovery, and error handling. This skill covers only PR-review specifics.
 
@@ -124,10 +124,10 @@ purely cosmetic fixes into one style-cleanup commit.
 
 ### 8. PR comments
 
-If there are unresolved PR threads, if step 7 fixes resolve PR threads, or if
-the caller specifically asks to address PR review comments, switch to
-**pr-resolver** for thread triage, replies, resolution, and Copilot re-review
-push handling. Direct human requests for changes are
+If there are unresolved PR threads, if step 7 fixes resolve PR threads, if
+checks need to be verified after a PR fix, or if the caller specifically asks
+to address PR review comments, switch to **pr-resolver** for thread triage,
+replies, resolution, and CI/Copilot push handling. Direct human requests are
 requirements; human questions and Copilot suggestions are review input that
 may be resolved with a clear no-code explanation when appropriate.
 
@@ -141,8 +141,8 @@ may be resolved with a clear no-code explanation when appropriate.
 - `gh` is mandatory. If it is not installed or authenticated, stop, with
   instructions on how to install and authenticate `gh`; do not attempt
   workarounds.
-- `git push` is ONLY permitted by **pr-resolver** during its Copilot
-  re-review loop.
+- Follow **agent-conduct** for pushes. This skill normally delegates PR
+  push/check/review loops to **pr-resolver**.
 
 ## Appendix: GitHub API Recipes
 
