@@ -214,6 +214,12 @@ fi
    `REQUEST_TIME`; time out after 2 minutes if neither appears.
 6. Poll up to 20 minutes for a new
    `copilot-pull-request-reviewer[bot]` review submitted after `REQUEST_TIME`.
+   Use GraphQL `pullRequest.reviews(last: 20)` or the REST reviews endpoint
+   with `--paginate`; do not rely on an unpaginated
+   `gh api repos/{owner}/{repo}/pulls/{number}/reviews` response. PRs with
+   many review events can omit the newest Copilot review from the first REST
+   page, causing agents to keep waiting after Copilot has already submitted
+   "generated no new comments."
 7. Re-fetch unresolved review threads and checks. Continue the loop for any
    failed check or new unresolved Copilot comment. End only when checks pass
    and Copilot has no new unresolved comments.
