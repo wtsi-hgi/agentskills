@@ -151,51 +151,7 @@ Pass paths, not skill text.
 
 ## Liveness and Bounded Tool Calls
 
-### All Harnesses — ownership claim
-
-**Parent orchestrator only.** Only the top-level orchestrator may create,
-overwrite, touch, or delete `.tmp/agent/owner`. Subagents must NEVER run the
-claim, liveness, or cleanup steps below — a subagent that claims ownership
-overwrites its own parent's token and evicts it. A subagent may read the file
-for diagnostics, but never as its own liveness token. When briefing a subagent,
-add: "Do not run the ownership-claim snippet from the subagents skill; that is
-for the parent orchestrator only, and never delete `.tmp/agent/owner`."
-
-Hold an **ownership token** so a takeover (e.g. a second client session on the
-same shared filesystem) cleanly fences out the previous orchestrator. A
-presence file alone fails: a second session re-touching it looks identical to
-"still mine". The token must live in *your own context*, never at a shared
-path the other session could overwrite.
-
-Claim once at startup, then remember `MINE` for the whole run:
-
-```bash
-mkdir -p .tmp/agent
-MINE="$(hostname)-$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"
-printf '%s\n' "$MINE" > .tmp/agent/owner
-echo "MY OWNER TOKEN: $MINE"
-```
-
-Before every subagent launch and after every return, verify you still hold it
-(substitute your remembered token for the literal):
-
-```bash
-if [ "$(cat .tmp/agent/owner 2>/dev/null)" = "host-ab12cd34ef56" ]; then
-  touch .tmp/agent/owner   # liveness only; never rewrite content
-else
-  echo "ownership lost — standing down"; exit 1
-fi
-```
-
-If the check fails — file deleted (user stopped you) or holds a different
-token (another orchestrator took over) — **stop immediately: launch no
-further subagents, write no files.** To take over from elsewhere, just run
-the claim step; the previous owner stands down at its next check.
-
-Durability of `MINE`: treat it as run-state and restate it (runs are bounded
-by the calling skill's cap). Hardening — if your harness exposes a stable
-per-session id, use that as `MINE` so it survives context summarization:
-Claude Code session id, Codex conversation id, or VS Code session id.
+### All Harnesses
 
 Brief every subagent to bound its tool calls and shell commands so they
 cannot hang indefinitely: wrap potentially long or networked commands
@@ -219,10 +175,6 @@ rather than wait forever on an unresponsive command.
 - NEVER edit files or run tests/linters directly.
 - NEVER check a progress marker until the subagent confirms success.
 - NEVER embed skill contents in prompts - pass name + path.
-- NEVER skip the ownership check before a subagent launch and after a
-  subagent returns; NEVER continue once the token no longer matches.
-- NEVER let a subagent claim, touch, or delete `.tmp/agent/owner`; ownership is
-  parent-orchestrator-only. Brief subagents not to run the claim snippet.
 - NEVER leave Codex subagents open once they are no longer needed.
 - NEVER omit the `model` parameter on VS Code `runSubagent`; never set Codex
   `spawn_agent.model` or Claude Code `Agent.model` without an explicit user
