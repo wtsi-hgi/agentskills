@@ -6,8 +6,8 @@ context: fork
 
 # Next.js + FastAPI Implementor Skill
 
-Read and follow **agent-conduct** and **nextjs-fastapi-conventions** before
-starting.
+Read and follow **agent-conduct**, **testing-principles**, and
+**nextjs-fastapi-conventions** before starting.
 
 ## TDD Cycle
 

@@ -6,7 +6,8 @@ context: fork
 
 # Python Implementor Skill
 
-Read and follow **agent-conduct** and **python-conventions** before starting.
+Read and follow **agent-conduct**, **testing-principles**, and
+**python-conventions** before starting.
 
 ## TDD Cycle
 

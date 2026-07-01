@@ -5,9 +5,9 @@ description: Reviews changes on current branch vs base. Checks code quality, bug
 
 # PR Reviewer Skill
 
-Read and follow **agent-conduct**, **subagents**, and the project's
-**conventions** skill before starting. Use **pr-resolver** for GitHub PR
-review comments plus CI/Copilot loops. **subagents** covers
+Read and follow **agent-conduct**, **testing-principles**, **subagents**, and
+the project's **conventions** skill before starting. Use **pr-resolver** for
+GitHub PR review comments plus CI/Copilot loops. **subagents** covers
 orchestrator role, agent selection (always writable), briefing, skill
 discovery, and error handling. This skill covers only PR-review specifics.
 
@@ -87,7 +87,7 @@ For every changed file, assess:
 - **Usability:** Are features actually usable end-to-end (not just mocked)?
   Clear CLI help/error messages? Edge cases handled?
 - **Test quality:** Meaningful assertions? Faithful mocks? Adequate coverage?
-  Conventions-compliant patterns?
+  Conforms to **testing-principles** and conventions?
 - **Unresolved PR comments:** verify if current code addresses them.
 
 ### 4. Spec conformance (if spec provided)
@@ -109,10 +109,10 @@ and stop.
 
 For each finding:
 
-**a.** Launch an implementor subagent with: implementor + conventions skill
-paths, the specific finding (file, lines, description, fix), surrounding
-context, and "Fix this issue. Follow TDD cycle. Run linters. Confirm tests
-pass."
+**a.** Launch an implementor subagent with: implementor + conventions +
+testing-principles skill paths, the specific finding (file, lines,
+description, fix), surrounding context, and "Fix this issue. Follow TDD cycle
+and testing-principles. Run linters. Confirm tests pass."
 
 **b.** Verify the fix is correct and tests pass. Retry if needed.
 

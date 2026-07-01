@@ -66,6 +66,8 @@ All new source files must start with:
 - `t.TempDir()` for filesystem ops.
 - Each `Convey` block independent; no shared mutable state.
 - Never put `So()` in loops >20 iterations; count and assert final count.
+- Follow **testing-principles** for test intent; this section covers GoConvey
+  mechanics.
 - Every spec.md acceptance test MUST have a corresponding GoConvey test. No
   stubs, no hardcoded results, no swallowed failures, no build-tag exclusions.
 

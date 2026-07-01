@@ -5,7 +5,8 @@ description: Orchestrates implementation and review of phase plans via subagents
 
 # Orchestrator Skill
 
-Read and follow **agent-conduct** and **subagents** before starting.
+Read and follow **agent-conduct**, **testing-principles**, and **subagents**
+before starting.
 **subagents** covers orchestrator role, agent selection (always writable),
 briefing, skill discovery, and error handling. This skill covers only the
 orchestrator-specific procedure.
@@ -34,9 +35,11 @@ A phase MD file containing items with `- [ ] implemented` and
 
 Launch an implementor subagent with:
 
-- Conventions and implementor skill names + file paths (to read).
+- Conventions, testing-principles, and implementor skill names + file paths
+  (to read).
 - Item description, spec.md section reference, phase instructions.
-- "Read spec.md for acceptance tests. Follow TDD cycle. Run tests and linters."
+- "Read spec.md for acceptance tests. Follow TDD cycle and
+  **testing-principles**. Run tests and linters."
 
 On success, check `- [x] implemented`.
 
@@ -44,7 +47,8 @@ On success, check `- [x] implemented`.
 
 Launch a reviewer subagent with:
 
-- Conventions and reviewer skill names + file paths (to read).
+- Conventions, testing-principles, and reviewer skill names + file paths (to
+  read).
 - Item(s) description, spec.md section reference(s), phase instructions.
 - "You have clean context. Read spec.md, source and test files, run tests and
   linter, return PASS or FAIL with specific feedback."

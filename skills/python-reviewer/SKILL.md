@@ -6,7 +6,8 @@ context: fork
 
 # Python Reviewer Skill
 
-Read and follow **agent-conduct** and **python-conventions** before starting.
+Read and follow **agent-conduct**, **testing-principles**, and
+**python-conventions** before starting.
 
 You are a review subagent with clean context. Independently verify that code
 meets the spec and quality standards.
@@ -27,8 +28,9 @@ Run for every modified module. All must pass.
 
 ### 3. Verify acceptance test coverage
 
-Every spec.md acceptance test must have a corresponding pytest test. Reject
-missing, stubbed, circumvented, or hardcoded-result tests.
+Every spec.md acceptance test must have a corresponding pytest test. Apply the
+**testing-principles** review rule. Reject missing, stubbed, circumvented, or
+hardcoded-result tests.
 
 ### 4. Verify implementation correctness
 

@@ -137,6 +137,8 @@ LLMs trained on older code will get these wrong. Pay attention.
 - No mutable global state between tests.
 - Test files mirror `src/` structure: `tests/test_<module>.py`.
 - Assertions use plain `assert` (pytest introspection rewrites them).
+- Follow **testing-principles** for test intent; this section covers pytest
+  mechanics.
 - Every spec.md acceptance test MUST have a corresponding pytest test. No
   stubs, no hardcoded results, no swallowed failures.
 

@@ -6,7 +6,8 @@ context: fork
 
 # Nextflow Implementor Skill
 
-Read and follow **agent-conduct** and **nextflow-conventions** before starting.
+Read and follow **agent-conduct**, **testing-principles**, and
+**nextflow-conventions** before starting.
 
 ## TDD Cycle
 

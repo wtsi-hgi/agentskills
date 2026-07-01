@@ -112,6 +112,9 @@ Every FastAPI response is validated on the frontend with Zod:
 
 ## Testing
 
+- Follow **testing-principles** for test intent; this section covers stack
+  mechanics.
+
 ### Backend (pytest)
 
 - `pytest` + `pytest-asyncio` (auto mode).

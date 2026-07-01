@@ -125,7 +125,8 @@ Identify the tech stack from the codebase and use the matching triplet:
 `<stack>-conventions`, `<stack>-implementor`, `<stack>-reviewer` (e.g.
 `go-conventions`, `python-implementor`). Available stacks are in your system
 prompt. Override with any skills named in the task input (phase file
-Instructions, caller arguments).
+Instructions, caller arguments). For tasks that write or review tests, also
+include `testing-principles`.
 
 ## Briefing
 
@@ -133,8 +134,8 @@ Each subagent starts with clean context. Give it:
 
 - Skill names and absolute file paths to read.
 - The specific task (item, spec section, file list, bug, finding).
-- Expected output (e.g. "Follow TDD cycle, run tests and linter"; "Return
-  PASS or FAIL with specific feedback").
+- Expected output (e.g. "Follow TDD cycle and testing-principles, run tests
+  and linter"; "Return PASS or FAIL with specific feedback").
 - Caller constraints (phase instructions, focus areas).
 
 Pass paths, not skill text.

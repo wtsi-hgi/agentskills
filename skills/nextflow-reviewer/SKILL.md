@@ -6,7 +6,8 @@ context: fork
 
 # Nextflow Reviewer Skill
 
-Read and follow **agent-conduct** and **nextflow-conventions** before starting.
+Read and follow **agent-conduct**, **testing-principles**, and
+**nextflow-conventions** before starting.
 
 You are a review subagent with clean context. Independently verify that code
 meets the spec and quality standards.
@@ -33,7 +34,7 @@ nf-test test
 
 Every spec.md acceptance test must have a corresponding nf-test. Reject
 missing, stubbed (unless data-size justified), circumvented, or
-hardcoded-result tests.
+hardcoded-result tests. Apply the **testing-principles** review rule.
 
 ### 4. Verify implementation correctness
 

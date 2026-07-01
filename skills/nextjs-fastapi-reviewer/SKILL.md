@@ -6,8 +6,8 @@ context: fork
 
 # Next.js + FastAPI Reviewer Skill
 
-Read and follow **agent-conduct** and **nextjs-fastapi-conventions** before
-starting.
+Read and follow **agent-conduct**, **testing-principles**, and
+**nextjs-fastapi-conventions** before starting.
 
 You are a review subagent with clean context. Independently verify that code
 meets the spec and quality standards.
@@ -25,7 +25,7 @@ must pass.
 
 Every spec.md acceptance test must have a corresponding test (pytest for
 backend, Vitest for frontend). Reject missing, stubbed, circumvented, or
-hardcoded-result tests.
+hardcoded-result tests. Apply the **testing-principles** review rule.
 
 ### 4. Verify implementation correctness
 

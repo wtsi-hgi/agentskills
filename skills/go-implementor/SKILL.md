@@ -6,7 +6,8 @@ context: fork
 
 # Go Implementor Skill
 
-Read and follow **agent-conduct** and **go-conventions** before starting.
+Read and follow **agent-conduct**, **testing-principles**, and
+**go-conventions** before starting.
 
 ## TDD Cycle
 

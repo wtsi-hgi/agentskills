@@ -6,8 +6,8 @@ description: Resolve GitHub PR review comments from humans and Copilot. Use when
 # PR Resolver Skill
 
 Read and follow **agent-conduct**. If code changes are needed, also read
-**subagents**, the project's **conventions** skill, and the matching
-implementor skill. This skill covers PR review comment resolution.
+**testing-principles**, **subagents**, the project's **conventions** skill, and
+the matching implementor skill. This skill covers PR review comment resolution.
 
 ## Core rule
 
@@ -77,7 +77,8 @@ thread, choose exactly one outcome:
 
 - **Fix:** The concern is valid and current code should change. Delegate to an
   implementor subagent with the exact comment, file/line, surrounding context,
-  and instructions to follow TDD, run lint/tests, and avoid unrelated changes.
+  testing-principles skill path, and instructions to follow TDD and
+  testing-principles, run lint/tests, and avoid unrelated changes.
 - **Explain:** The concern does not warrant a code change. Reply in the review
   thread with the concrete reason and resolve it.
 - **Already handled:** Current code or tests already address the concern.

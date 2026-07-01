@@ -207,6 +207,8 @@ needed.
 - Use minimal test data; for large data use `-stub` mode with stub blocks.
 - Test both single-sample and multi-sample cases where applicable.
 - Pipeline-level tests in `tests/` at project root.
+- Follow **testing-principles** for test intent; this section covers nf-test
+  mechanics.
 - Every spec.md acceptance test MUST have a corresponding nf-test. No stubs
   for logic tests, no hardcoded results, no swallowed failures.
 

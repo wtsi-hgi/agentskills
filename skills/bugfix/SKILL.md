@@ -5,7 +5,8 @@ description: Orchestrates bug fixes via implementor and reviewer subagents using
 
 # Bugfix Skill
 
-Read and follow **agent-conduct** and **subagents** before starting.
+Read and follow **agent-conduct**, **testing-principles**, and **subagents**
+before starting.
 **subagents** covers orchestrator role, agent selection (always writable),
 briefing, skill discovery, and error handling. This skill covers only the
 bugfix-specific procedure.
@@ -70,19 +71,19 @@ fix and should be committed with it.
 
 Brief an implementor subagent with:
 
-- Conventions and implementor skill paths.
+- Conventions, testing-principles, and implementor skill paths.
 - Bug description, repro steps, relevant paths, and the discovered quality
   gate commands.
 - Paths to prior bugfix checklists; instruction not to break, bypass, or
   weaken any existing regression test unless explicitly justified per the
   rule above.
-- Instruction: "Follow TDD. Add a **behavioural regression test** that
-  fails for this bug, then fix the code so it passes. Do not modify
-  unrelated tests. Run the project's lint and test commands; both must
-  pass. Do not paper over, work around, or fake a fix (see agent-conduct
-  § Honesty About Blockers). If the bug cannot be fixed due to an
-  outside constraint, revert and report the blocker with reasoning and
-  1-3 alternatives - do not commit code."
+- Instruction: "Follow TDD and **testing-principles**. Add a behavioural
+  regression test when testing-principles calls for one, then fix the code so
+  it passes. Do not modify unrelated tests. Run the project's lint and test
+  commands; both must pass. Do not paper over, work around, or fake a fix (see
+  agent-conduct § Honesty About Blockers). If the bug cannot be fixed due to
+  an outside constraint, revert and report the blocker with reasoning and 1-3
+  alternatives - do not commit code."
 
 If the subagent reports it cannot reproduce, cannot fix, or hits a
 blocker, leave the checklist item **unchecked**, add indented notes
@@ -94,16 +95,16 @@ harder" wording.
 
 Brief a reviewer subagent with:
 
-- Conventions and reviewer skill paths.
+- Conventions, testing-principles, and reviewer skill paths.
 - Bug description, list of changed files, prior bugfix checklist paths, and
   the quality gate commands.
 - Instruction: "Clean context. Read all changed source and test files.
-  Verify: (a) a regression test exists that fails without the fix; (b) the
-  fix is minimal and correct; (c) no prior regression test was deleted,
-  skipped, or weakened; (d) the project's lint and test commands pass
-  (run them); (e) for UI bugs, a post-fix screenshot from the same fixture
-  shows the issue resolved with no visible regressions elsewhere. Return
-  PASS or FAIL with specific feedback."
+  Verify: (a) test strategy follows **testing-principles**; (b) the fix is
+  minimal and correct; (c) no prior regression test was deleted, skipped, or
+  weakened; (d) the project's lint and test commands pass (run them); (e) for
+  UI bugs, a post-fix screenshot from the same fixture shows the issue resolved
+  with no visible regressions elsewhere. Return PASS or FAIL with specific
+  feedback."
 
 **PASS →** step 4. **FAIL →** new implementor with feedback, then new
 reviewer. Max 5 cycles; if still failing, note the problem under the
