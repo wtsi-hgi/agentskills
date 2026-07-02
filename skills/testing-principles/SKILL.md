@@ -1,6 +1,6 @@
 ---
 name: testing-principles
-description: Shared guidance for behaviour-focused tests in TDD, regression fixes, acceptance-test implementation, and test review. Use when Codex writes, updates, reviews, or briefs another agent about tests, especially when deciding whether a cleanup/removal request needs a new test.
+description: Shared guidance for behaviour-focused tests in TDD, regression fixes, acceptance-test implementation, and test review. Use when writing, updating, or reviewing tests, or briefing another agent about tests, especially when deciding whether a cleanup/removal request needs a new test.
 ---
 
 # Testing Principles

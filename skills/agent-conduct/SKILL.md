@@ -9,13 +9,17 @@ These rules apply to ALL agents regardless of skill.
 
 ## Workspace Boundary
 
-- NEVER write files outside the repository directory. This includes `/dev/null`.
-- Before any file-writing command, confirm the target path is inside the repo.
+- Do NOT write files outside the repository directory, except a
+  harness-provided scratchpad/temp directory if one exists. Redirecting
+  command output to `/dev/null` is fine.
+- Before any file-writing command, confirm the target path is inside the
+  repo or the harness scratchpad.
 
 ## Scratch Work
 
 - Use language-appropriate test temp dirs (`t.TempDir()`, `tmp_path`, etc.).
-- If a temp file is truly needed, use `.tmp/agent/` in the repo and clean up.
+- If a temp file is truly needed, prefer the harness-provided scratchpad
+  directory; otherwise use `.tmp/agent/` in the repo and clean up.
 - Do NOT create stray source files (`.go`, `.py`, etc.) outside proper packages
   - they confuse tooling.
 
@@ -26,7 +30,6 @@ Avoid triggering VS Code modal confirmation prompts:
 - No interactive commands (`ssh`, `less`, `vi`). Use `git --no-pager`, etc.
 - No `sudo`. No broad `rm -rf`.
 - No port-listening processes without background mode.
-- Use `command | cat` to avoid pagers.
 
 ## Git Safety
 

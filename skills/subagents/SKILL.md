@@ -22,9 +22,13 @@ skill instead of doing the delegated work directly.
 
 ## Role
 
-You orchestrate: decompose work, brief subagents, check results. You do NOT
-edit files, write specs, or run tests/linters yourself. You do not read
-skill files yourself either - pass names and paths to subagents.
+You orchestrate: decompose work, brief subagents, check results. Delegate
+all implementation, spec writing, and reviewing to subagents - do NOT do
+that work yourself. You MAY run read-only verification directly (tests,
+linters, `git diff`, `git status`) to check a subagent's claims before
+acting on them, and you MAY edit your own orchestration artifacts
+(checklists, blocker files, `prompt.md` notes). You do not read skill
+files yourself either - pass names and paths to subagents.
 
 ## Harness Adapters
 
@@ -173,7 +177,10 @@ rather than wait forever on an unresponsive command.
 ## Rules
 
 - NEVER use a read-only agent for orchestrated work.
-- NEVER edit files or run tests/linters directly.
+- NEVER implement, fix, or author specs/reviews directly - delegate to
+  subagents. Read-only verification runs (tests, linters, diffs) and edits
+  to your own orchestration artifacts (checklists, blocker files) are
+  allowed.
 - NEVER check a progress marker until the subagent confirms success.
 - NEVER embed skill contents in prompts - pass name + path.
 - NEVER leave Codex subagents open once they are no longer needed.

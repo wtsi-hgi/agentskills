@@ -81,7 +81,9 @@ usability only). Repeat until **2 consecutive clean passes**.
 ## Error Handling
 
 - **Transient failures:** see **subagents**.
-- **File removal:** move to `.trash/` in repo; clean up after all phases.
+- **File removal:** delete normally. If deletion fails (e.g. NFS refusing
+  the unlink), move the file to `.tmp/trash/` in the repo instead; clean up
+  after all phases.
 - **Blocker reported by subagent** (per agent-conduct § Honesty About
   Blockers - e.g. an external API cannot do what the spec requires):
   1. Do NOT relaunch the implementor to "find a way". Do NOT check the

@@ -142,6 +142,12 @@ until [ "$(gh api repos/{owner}/{repo}/pulls/{number} --jq .head.sha)" = "$(git 
 done
 ```
 
+Harness note: Claude Code blocks foreground `sleep`, so this loop fails if
+run as a normal foreground command there. Run it as a background command
+(`run_in_background`) and proceed when it completes, or use the harness's
+monitor/wait mechanism. Under harnesses that allow foreground sleep (e.g.
+Codex), run it directly as written.
+
 3. Wait for checks. If any fail, inspect logs, reproduce locally, fix, commit,
    and return to step 1. Do not request Copilot re-review while checks fail.
 
