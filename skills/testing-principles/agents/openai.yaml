@@ -1,4 +1,4 @@
 interface:
   display_name: "Testing Principles"
-  short_description: "Behaviour-focused testing guidance"
-  default_prompt: "Use $testing-principles to write or review behaviour-focused tests without coupling to implementation details."
+  short_description: "Behaviour-focused stable test guidance"
+  default_prompt: "Use $testing-principles to write, review, or stabilize behaviour-focused tests without skipping coverage."

@@ -43,6 +43,15 @@ After each fix is committed, change `- [ ]` to `- [x]` and add indented
 bullets summarising files touched and approach. Commit the checklist update
 with the fix.
 
+If a distinct issue appears while fixing, reviewing, or running quality gates,
+append it to the current checklist as a new unchecked bug with a concise
+description and the evidence that exposed it. This includes lint/test gates
+that fail for "unrelated", "pre-existing", or flaky reasons. Do not waive,
+ignore, skip, or quarantine the failure; process the added bug with the same
+fix → review → commit loop before treating the checklist as done. If the new
+bug blocks the current item's gates, solve the added bug before marking the
+current item complete.
+
 **Before starting a new bug, scan prior `.docs/bugfixes/*.md` checklists.**
 Their checked items define behaviour that must not regress. A new fix may
 only change a previously-fixed behaviour if that prior item is demonstrably
@@ -80,9 +89,11 @@ Brief an implementor subagent with:
 - Instruction: "Follow TDD and **testing-principles**. Add a behavioural
   regression test when testing-principles calls for one, then fix the code so
   it passes. Do not modify unrelated tests. Run the project's lint and test
-  commands; both must pass. Do not paper over, work around, or fake a fix (see
-  agent-conduct § Honesty About Blockers). If the bug cannot be fixed due to
-  an outside constraint, revert and report the blocker with reasoning and 1-3
+  commands; both must pass. If any gate fails for an unrelated, pre-existing,
+  or flaky reason, report it as a newly discovered bug for the checklist; do
+  not skip or quarantine it. Do not paper over, work around, or fake a fix (see
+  agent-conduct § Honesty About Blockers). If the bug cannot be fixed due to an
+  outside constraint, revert and report the blocker with reasoning and 1-3
   alternatives - do not commit code."
 
 If the subagent reports it cannot reproduce, cannot fix, or hits a
@@ -103,8 +114,9 @@ Brief a reviewer subagent with:
   minimal and correct; (c) no prior regression test was deleted, skipped, or
   weakened; (d) the project's lint and test commands pass (run them); (e) for
   UI bugs, a post-fix screenshot from the same fixture shows the issue resolved
-  with no visible regressions elsewhere. Return PASS or FAIL with specific
-  feedback."
+  with no visible regressions elsewhere. If any gate fails for an unrelated,
+  pre-existing, or flaky reason, return FAIL and identify it as a newly
+  discovered checklist bug. Return PASS or FAIL with specific feedback."
 
 **PASS →** step 4. **FAIL →** new implementor with feedback, then new
 reviewer. Max 5 cycles; if still failing, note the problem under the
