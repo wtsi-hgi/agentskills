@@ -1,6 +1,6 @@
 ---
 name: bugfix
-description: Orchestrates bug fixes via implementor and reviewer subagents using TDD. Handles one or many bugs sequentially, tracks them in a dated checklist, and auto-commits each fix.
+description: Orchestrates standalone or caller-batched bug fixes via implementor and reviewer subagents using TDD. Handles bugs and verified review findings sequentially, tracks them in a dated checklist, and commits each fix without disrupting a surrounding PR-resolution batch.
 ---
 
 # Bugfix Skill
@@ -16,10 +16,30 @@ bugfix-specific procedure.
 One or more bug descriptions. Parse into a numbered list of discrete issues.
 Same procedure whether one bug or many.
 
+An issue may come from the user, a failed quality gate, or a verified PR review
+finding. Preserve the original description and any source metadata supplied by
+the caller, such as a PR thread ID. Source metadata is bookkeeping only; verify
+and fix the underlying behaviour in the same way as any other bug.
+
 Interpret reports by intent, not literally. Separate **visual** complaints
 ("this box is ugly") from **layout** requirements: hiding an element
 visually is fine if it still serves sizing/layout. Don't delete structure
 that other things depend on.
+
+## Invocation mode
+
+- **Standalone:** Own the checklist and commits. Do not push unless the user
+  explicitly asked.
+- **Batched caller (for example, pr-resolver):** Own the checklist and commits,
+  but never push, reply to reviews, resolve threads, or wait on remote events.
+  Return control after the local queue is drained. The caller owns one batched
+  push and all remote state. Reuse one checklist for the caller's whole active
+  session; append later findings instead of starting another bugfix workflow.
+
+If the user reports another bug while this workflow is active, append it to the
+current queue and checklist. Finish the current fix-review-commit cycle, then
+process the new item before returning to the caller. Do not start a parallel
+bugfix workflow or push an incomplete batch.
 
 ## Discover Quality Gates (once, up front)
 
@@ -31,13 +51,17 @@ Subagents must run these gates, not invent their own.
 
 ## Checklist File
 
-Create `.docs/bugfixes/<YYMMDD>-<N>.md` (smallest `N` not already taken;
-create `.docs/bugfixes/` if missing). Write each bug verbatim:
+If a batched caller supplies its active checklist, append to it. Otherwise
+create `.docs/bugfixes/<YYMMDD>-<N>.md` (smallest `N` not already taken; create
+`.docs/bugfixes/` if missing). Write each bug verbatim:
 
 ```
 - [ ] <bug 1 description, verbatim>
 - [ ] <bug 2 description, verbatim>
 ```
+
+Put caller-supplied source metadata in an indented bullet under its item so a
+PR caller can map the resulting commit back to the review thread.
 
 After each fix is committed, change `- [ ]` to `- [x]` and add indented
 bullets summarising files touched and approach. Commit the checklist update
@@ -131,18 +155,21 @@ Update the checklist (`- [x]` plus indented summary). `git add` the changed
 files plus the checklist. Commit with a short imperative message
 (≤72 chars), e.g. `Fix off-by-one in batch size calculation`.
 
-Do not `git push` unless the user asked for it. Never push to `master`,
-`main`, or `develop`. Do NOT ask for confirmation — proceed to the next bug.
+In standalone mode, do not `git push` unless the user asked. In batched-caller
+mode, never push. Do NOT ask for confirmation — proceed to the next bug.
 
 ### After all bugs
 
-Report the checklist path and a summary of commits.
+Report the checklist path, each item's outcome, and its commit SHA. For a
+batched caller, also return the source metadata unchanged so it can reply to
+and resolve the correct review threads after pushing.
 
 ## Rules
 
 - Follow **subagents** rules (no direct implementation, always writable
   subagents, etc.).
 - Always create the dated checklist, even for one bug.
-- Do not `git push` unless the user asked for it. Never push to `master`,
-  `main`, or `develop`.
+- Do not `git push` unless the user asked for it and this is standalone. A
+  batched caller always owns pushing, even when the user's overall request
+  includes a push. Never push to `master`, `main`, or `develop`.
 - One fix-review-commit cycle at a time.

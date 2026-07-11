@@ -1,105 +1,229 @@
 ---
 name: pr-resolver
-description: Resolve GitHub PR review comments from humans and Copilot. Use when asked to address PR comments, distinguish required human change requests from questions or suggestions, evaluate invalid or low-value comments, reply and resolve threads, and run PR CI/Copilot loops.
+description: Resolve GitHub PR review comments from humans and Copilot, including reviews already auto-requested or in progress. Use for verified comment resolution, sequential bugfix batching, one-push CI/Copilot cycles, and SHA-aware waits that avoid stale-event loops.
 ---
 
 # PR Resolver Skill
 
-Read and follow **agent-conduct**. If code changes are needed, also read
-**testing-principles**, **subagents**, the project's **conventions** skill, and
-the matching implementor skill. This skill covers PR review comment resolution.
+Read and follow **agent-conduct**. Read **bugfix** before making any code
+change; it owns all fix-review-commit work. This skill owns PR state, review
+replies, batched pushes, checks, and Copilot review requests.
 
-## Core rule
+## Invariants
 
-For each comment, verify the concern against the current code before acting.
-Code changes are not always required.
+1. Verify every comment against the current code before acting.
+2. Route every valid code-changing finding through the full **bugfix**
+   workflow. Reply-only findings do not need bugfix.
+3. Finish work items sequentially and commit each one separately. Drain all
+   known local work before pushing once.
+4. After any pushed code change, explicitly request Copilot review, regardless
+   of whether the change came from Copilot, a human, CI, or a user-reported bug.
+5. Wait for predicates about an immutable target SHA, not for the next event
+   name. Re-read the complete PR snapshot before and during every wait.
 
-- Treat direct human requests for changes as requirements: implement them, or
-  report a blocker if they are impossible, unsafe, or conflict with other
-  requirements.
-- Treat human questions, hedged suggestions, "consider..." comments, and nits
-  like review input: answer, fix, or explain why no code change is needed.
-- Treat Copilot comments like review input: verify them before acting. Fix
-  valid issues; otherwise reply that the suggestion is invalid, stale,
-  non-actionable, duplicate, already covered, or would make the code worse.
+## Comment policy
 
-Resolve the thread after replying unless a direct human change request is
-blocked and needs a decision. Do not make churn-only code changes just to
-appease a reviewer.
+- Direct human change requests are requirements. Fix them or report a blocker
+  if they are impossible, unsafe, or conflict with another requirement.
+- Human questions, hedged suggestions, and nits are review input. Fix, answer,
+  or explain why no code change is appropriate.
+- Copilot comments are review input, not requirements. Fix valid current
+  issues. Otherwise explain that the comment is invalid, stale,
+  non-actionable, duplicate, already covered, or harmful.
 
-## Procedure
+Reply before resolving. Leave a blocked direct human request unresolved. Do
+not create churn-only changes to satisfy a reviewer.
 
-### 1. Confirm PR access
+## 1. Confirm access and identify the PR
 
-`gh` is mandatory. If it is missing or unauthenticated, stop and tell the user
-to install/authenticate GitHub CLI.
+`gh` is mandatory. Do not fall back to raw tokens, `curl`, editor integrations,
+or the web UI.
 
 ```bash
 command -v gh >/dev/null 2>&1
 gh auth status >/dev/null 2>&1
-gh pr view --json number,baseRefName,headRefName,url
+gh pr view --json number,baseRefName,headRefName,headRefOid,url
 ```
 
-Use `gh api`; do not use VS Code GitHub tools for PR comments because they can
-cap or misreport review-thread state.
+Stop if `gh` is unavailable or unauthenticated. Confirm that the checked-out
+branch is the PR head and is not `master`, `main`, or `develop` before any
+push. Never force-push unless the user explicitly asked.
 
-### 2. Find unresolved review threads
+## 2. Read one complete snapshot
 
-Copilot authors include `Copilot`, `copilot-pull-request-reviewer`,
-`copilot-pull-request-reviewer[bot]`, and `github-actions[bot]` when the body
-or surrounding event data clearly indicates Copilot.
+At entry and after every remote or local state change, refresh all of:
 
-Fetch review threads through GraphQL so `isResolved` is available. Paginate if
-the PR has more than 100 threads.
+- local `HEAD` and dirty status;
+- PR head SHA;
+- check rollup for that SHA;
+- all unresolved review threads, paginated, including thread node ID, first
+  comment database ID, author, path, line, body, associated review/commit SHA,
+  and resolution state;
+- all Copilot reviews, paginated, including review ID, `commit_id`, and
+  `submitted_at`;
+- current requested reviewers.
+
+Use GraphQL review threads because `isResolved` is required. Copilot authors
+include `Copilot`, `copilot-pull-request-reviewer`, and
+`copilot-pull-request-reviewer[bot]`; treat `github-actions[bot]` as Copilot
+only when the surrounding event/body proves it.
+
+Fetch review threads with an explicit cursor. `fullDatabaseId` is the numeric
+comment ID needed by the REST reply endpoint; the associated review commit is
+needed for target-SHA attribution.
 
 ```bash
-gh api graphql -f query='{
-  repository(owner: "{owner}", name: "{repo}") {
-    pullRequest(number: {number}) {
-      reviewThreads(last: 100) {
+gh api graphql \
+  -f owner='{owner}' \
+  -f name='{repo}' \
+  -F number={number} \
+  -F cursor=null \
+  -f query='
+query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100, after: $cursor) {
         nodes {
           id
           isResolved
           comments(first: 1) {
-            nodes { databaseId path line author { login } body }
+            nodes {
+              fullDatabaseId
+              path
+              line
+              author { login }
+              body
+              pullRequestReview {
+                id
+                submittedAt
+                commit { oid }
+              }
+            }
           }
         }
+        pageInfo { hasNextPage endCursor }
       }
     }
   }
 }'
 ```
 
-### 3. Triage each thread
+Use `-F cursor=null` on the first request. While `hasNextPage` is true, replace
+it with `-f cursor="$END_CURSOR"` using the returned `endCursor`; do not stop
+after the first 100 threads. Filter `isResolved == false` only after collecting
+every page.
 
-Read the current file and nearby tests before deciding. For each unresolved
-thread, choose exactly one outcome:
+Fetch completed reviews with REST pagination so `commit_id` and
+`submitted_at` are explicit:
 
-- **Fix:** The concern is valid and current code should change. Delegate to an
-  implementor subagent with the exact comment, file/line, surrounding context,
-  testing-principles skill path, and instructions to follow TDD and
-  testing-principles, run lint/tests, and avoid unrelated changes.
-- **Explain:** The concern does not warrant a code change. Reply in the review
-  thread with the concrete reason and resolve it.
-- **Already handled:** Current code or tests already address the concern.
-  Reply with the evidence and resolve it.
-- **Blocked:** A direct human change request is impossible, unsafe, or
-  conflicts with another requirement. Do not resolve it silently; report the
-  blocker and the needed decision.
+```bash
+gh api --paginate repos/{owner}/{repo}/pulls/{number}/reviews \
+  --jq '.[] | {id, author: .user.login, commit_id, submitted_at}'
+```
 
-After code fixes, verify the diff and the implementor's reported quality-gate
-results, then reply and resolve the relevant thread before committing. Commit
-code changes with a short imperative message. Comment-only resolutions do not
-need a commit.
+Never use the same endpoint without `--paginate`: its default first page can
+omit the newest Copilot review, including a no-comments review, and cause a
+false wait. GraphQL `pullRequest.reviews` is also valid only when traversed to
+completion with `pageInfo` cursors. `reviews(last: 20)` is a valid fast path:
+finding a target-SHA review is conclusive, but not finding one requires
+pagination before concluding it is absent.
 
-### 4. Reply and resolve
+Do not infer current state from a timeline event or an unpaginated REST page.
+Timeline events are advisory and never control a wait.
 
-Reply before resolving. Keep replies direct: `fixed - ...`,
-`not changing - ...`, or `already covered - ...`.
+## 3. Reconcile before waiting
+
+Always evaluate terminal facts first:
+
+1. If an active wait target differs from the PR head, abandon that wait, take a
+   new snapshot, and reconcile the new head.
+2. If unresolved threads exist, triage them now.
+3. If a Copilot review already exists for the current PR head SHA, its review
+   wait is complete, even if the request/start event was missed.
+4. If current requested-reviewer state lists Copilot and no review for that SHA
+   exists, wait for that review.
+5. Otherwise settle checks, then request Copilot instead of waiting for a
+   request or work-start event.
+
+This entry reconciliation is what handles a PR whose automatic Copilot review
+was requested immediately before pr-resolver started.
+
+## 4. Build and drain the local work queue
+
+For each unresolved thread, choose exactly one outcome:
+
+- **Fix:** Record the verbatim finding plus PR/thread/comment IDs as a bugfix
+  item.
+- **Explain:** Reply with a concrete reason and resolve the thread.
+- **Already handled:** Reply with current code/test evidence and resolve it.
+- **Blocked:** Report the required decision; do not silently resolve a direct
+  human request.
+
+Pass all queued fixes to **bugfix** in batched-caller mode. It must process
+them sequentially using its implementor-reviewer TDD cycle, update its dated
+checklist, and create one commit per item without pushing. Keep a mapping from
+each successful commit to its source thread.
+
+If the user reports a bug, a local gate exposes a bug, or CI feedback is
+already available while the queue is active, append it to the same bugfix
+queue. Finish the current item, then process the new item. Before pushing,
+refresh user input and PR threads once more and drain any newly known work.
+
+Do not reply `fixed` or resolve a fix thread yet; the commit is still local.
+
+## 5. Push the drained batch once
+
+If there are no local commits or other code changes to publish, skip the push.
+Otherwise run the full local quality gates once across the accumulated batch,
+then push all item commits together:
+
+```bash
+branch=$(git branch --show-current)
+case "$branch" in
+  master|main|develop|"") exit 1 ;;
+esac
+git push
+```
+
+Capture `TARGET_SHA=$(git rev-parse HEAD)` before the push. Poll with a bounded,
+interruptible harness monitor until the PR head equals `TARGET_SHA`. Do not use
+a long foreground shell loop: the user may add a bug while waiting. If that
+happens before `git push`, add it to the current batch. If it arrives after
+`git push` has completed, stop the monitor, process it through **bugfix**, and
+make the next unavoidable batched push; never pretend the completed push can
+still be enlarged.
+
+After GitHub sees `TARGET_SHA`, keep the source-thread mappings pending until
+checks pass. Do not claim a remote fix is complete before its target is green.
+
+## 6. Settle checks for the pushed SHA
+
+Evaluate checks only for `TARGET_SHA`. Allow a short registration grace period
+after the head becomes visible, then poll the check rollup with a bounded,
+interruptible monitor. At every poll, first test these state transitions:
+
+- PR head changed: abandon this target and reconcile the new snapshot;
+- user supplied new work: stop waiting and drain it;
+- any check failed: inspect its logs and annotations, reproduce locally, and
+  enqueue the verified defect through **bugfix**;
+- all observed checks are terminal and successful (or no checks registered by
+  the end of the grace period): checks are settled.
+
+Prefer `gh run view ... --log-failed` for Actions. If a run is still active,
+inspect the job endpoint and logs directly. For non-Actions checks, inspect
+check-run output and annotations. Never waive a failure as unrelated,
+pre-existing, or flaky; route it through **bugfix**. Drain and commit all such
+items locally, then return to the single-push step.
+
+Do not request Copilot while checks for the target SHA are failing.
+
+Once checks settle successfully, reply
+`fixed - <concise summary> (<commit>)` to each successfully fixed source thread
+and resolve it:
 
 ```bash
 gh api repos/{owner}/{repo}/pulls/{number}/comments \
-  -f body='not changing - <concise technical reason>' \
+  -f body='fixed - <concise summary> (<commit>)' \
   -F in_reply_to=<comment_id>
 
 gh api graphql -f query='mutation {
@@ -109,101 +233,32 @@ gh api graphql -f query='mutation {
 }'
 ```
 
-### 5. CI and Copilot loop
+## 7. Ensure Copilot reviews the exact head
 
-Run this loop after committed PR code changes, when PR checks fail, or when
-the user explicitly asks for a Copilot re-review. If every thread was resolved
-by explanation or "already handled" replies and checks already pass, do not
-push or request another review unless asked.
+### Existing or automatic request
 
-Track a cycle counter starting at 1.
+On initial entry with no locally pushed changes, set `TARGET_SHA` to the
+current PR head. If a Copilot review with `commit_id == TARGET_SHA` already
+exists, process its unresolved threads without waiting. If requested-reviewer
+state lists Copilot, go directly to the SHA-aware wait below. Otherwise settle
+checks for the initial head, then request a review.
 
-1. Confirm the current branch is safe to push, then push the PR branch.
+### After a push
 
-```bash
-branch=$(git branch --show-current)
-case "$branch" in
-  master|main|develop|"")
-    echo "Stop: never push $branch" >&2
-    exit 1
-    ;;
-esac
-git push
-```
+After checks settle for any pushed code changes, always request Copilot review
+for `TARGET_SHA`, even when automatic review-on-push is configured and even
+when none of the changes addressed a Copilot comment.
 
-This is allowed by **agent-conduct** only because this skill is working on a
-PR. Do not force-push unless the user explicitly asked.
-
-2. Wait until GitHub sees local `HEAD`:
+Record the current Copilot review IDs and `TARGET_SHA` immediately before
+requesting. Prefer:
 
 ```bash
-until [ "$(gh api repos/{owner}/{repo}/pulls/{number} --jq .head.sha)" = "$(git rev-parse HEAD)" ]; do
-  sleep 5
-done
-```
-
-Harness note: Claude Code blocks foreground `sleep`, so this loop fails if
-run as a normal foreground command there. Run it as a background command
-(`run_in_background`) and proceed when it completes, or use the harness's
-monitor/wait mechanism. Under harnesses that allow foreground sleep (e.g.
-Codex), run it directly as written.
-
-3. Wait for checks. If any fail, inspect logs, reproduce locally, fix, commit,
-   and return to step 1. Do not request Copilot re-review while checks fail.
-
-```bash
-gh pr checks {number} -R {owner}/{repo} --watch --fail-fast
-
-gh pr view {number} -R {owner}/{repo} \
-  --json headRefOid,statusCheckRollup \
-  --jq '.statusCheckRollup[] |
-    {name, workflowName, status, conclusion, state, detailsUrl}'
-```
-
-For a failed GitHub Actions job, first try the CLI log command:
-
-```bash
-gh run view {run_id} -R {owner}/{repo} --job {job_id} --log-failed
-```
-
-If the workflow run is still in progress, `gh run view` may refuse logs even
-for a completed failed job. Use the job API instead; get `{run_id}` and
-`{job_id}` from the `detailsUrl` like
-`.../actions/runs/{run_id}/job/{job_id}`.
-
-```bash
-gh api repos/{owner}/{repo}/actions/jobs/{job_id} \
-  --jq '{id, run_id, name, status, conclusion, html_url,
-         steps: [.steps[] |
-           select(.conclusion != "success" and .conclusion != "skipped")] }'
-
-gh api repos/{owner}/{repo}/actions/jobs/{job_id}/logs |
-  rg -n -i -C 3 '##\[error\]|error|fail|panic|traceback|make:|eslint|prettier'
-```
-
-For non-Actions check runs, inspect output and annotations:
-
-```bash
-gh api repos/{owner}/{repo}/commits/{head_sha}/check-runs \
-  --jq '.check_runs[] |
-    select(.conclusion != null and .conclusion != "success") |
-    {id, name, conclusion, details_url, output}'
-
-gh api repos/{owner}/{repo}/check-runs/{check_run_id}/annotations --paginate
-```
-
-4. When checks pass, request Copilot re-review if committed code changes
-   addressed Copilot comments or the user asked for it. Prefer `gh pr edit`;
-   fall back to GraphQL `requestReviews` with `botIds`. Do not treat the
-   generic REST `requested_reviewers` endpoint as proof that Copilot was
-   queued.
-
-```bash
-REQUEST_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-
-if ! gh pr edit {number} --add-reviewer @copilot; then
+if ! gh pr edit {number} -R {owner}/{repo} --add-reviewer @copilot; then
+  # First re-snapshot: if Copilot is already pending, wait instead of falling
+  # back. Otherwise use the GraphQL botIds mutation below.
   PR_ID=$(gh api repos/{owner}/{repo}/pulls/{number} --jq .node_id)
-  COPILOT_BOT_ID=$(gh api 'users/copilot-pull-request-reviewer%5Bbot%5D' --jq .node_id)
+  COPILOT_BOT_ID=$(gh api \
+    'users/copilot-pull-request-reviewer%5Bbot%5D' --jq .node_id)
 
   gh api graphql \
     -f pr="$PR_ID" \
@@ -217,38 +272,59 @@ mutation($pr: ID!, $bot: ID!) {
 fi
 ```
 
-5. Confirm a `review_requested` or `copilot_work_started` event appears after
-   `REQUEST_TIME`; time out after 2 minutes if neither appears.
-6. Poll up to 20 minutes for a new
-   `copilot-pull-request-reviewer[bot]` review submitted after `REQUEST_TIME`.
-   Use GraphQL `pullRequest.reviews(last: 20)` or the REST reviews endpoint
-   with `--paginate`; do not rely on an unpaginated
-   `gh api repos/{owner}/{repo}/pulls/{number}/reviews` response. PRs with
-   many review events can omit the newest Copilot review from the first REST
-   page, causing agents to keep waiting after Copilot has already submitted
-   "generated no new comments."
-7. Re-fetch unresolved review threads and checks. Continue the loop for any
-   failed check or new unresolved Copilot comment. End only when checks pass
-   and Copilot has no new unresolved comments.
+Do not treat the generic REST requested-reviewers response as proof that review
+completed. A successful request call is sufficient to start waiting. If GitHub
+reports that Copilot is already requested or working on `TARGET_SHA`, treat the
+request attempt as satisfied and wait; treat any other failure from both
+request methods as a blocker. Never wait separately for `review_requested` or
+`copilot_work_started`.
 
-If the cycle counter reaches 3, prepend implementor prompts with:
+### SHA-aware wait
 
-> Consider the problem holistically. The same area has attracted repeated
-> reviewer findings across multiple fix cycles. Rather than patching
-> individual comments, refactor the surrounding code so that reviewers do not
-> keep finding issues.
+Poll up to 20 minutes with an interruptible monitor. On every poll, fetch a
+fresh paginated snapshot and evaluate in this order:
 
-After 20 cycles, stop after any committed PR-branch work has been pushed and
-report that checks or Copilot keep failing and manual review is needed.
+1. PR head is no longer `TARGET_SHA` → abandon the stale wait and reconcile.
+2. New user work exists → stop waiting and run the batched bugfix workflow.
+3. A Copilot review exists with `commit_id == TARGET_SHA` (and, after an
+   explicit request, is not in the recorded review-ID baseline) → review is
+   complete; fetch threads immediately.
+4. New unresolved Copilot threads attributable to `TARGET_SHA` exist → review
+   is effectively complete; triage them immediately even if review metadata
+   lags.
+5. Deadline expired → report the timeout and the last full snapshot.
+6. Otherwise continue waiting.
+
+Never wait for an event merely because a previous event was observed. The
+state predicate for completion is a Copilot review or its threads for the
+target SHA.
+
+## 8. Repeat to convergence
+
+After a Copilot review completes, refresh threads and checks. Drain new fixes,
+push the next batch once, settle checks, and explicitly request review for the
+new head. End only when:
+
+- local `HEAD` equals the PR head and the worktree has no uncommitted workflow
+  changes;
+- checks for that head are settled and successful;
+- Copilot has completed a review of that head; and
+- no unresolved actionable review threads remain.
+
+Count cycles by distinct pushed target SHA, not by polling attempts or event
+transitions. From cycle 3 onward, tell bugfix implementors to consider whether
+repeated findings in the same area require a small cohesive refactor. After 20
+pushed-head cycles, push any completed local batch, stop, and report that
+manual review is needed.
 
 ## Rules
 
-- `gh` is mandatory; do not fall back to `curl`, raw tokens, VS Code GitHub
-  tools, or the web UI.
-- Do not skip review comments. Resolve each with a code fix, a no-code
-  explanation, or evidence that it is already handled. Report blocked direct
-  human change requests instead of silently resolving them.
-- Do not request Copilot re-review when only comment replies changed unless
-  the user asks.
-- Follow **agent-conduct** for pushes: never push `master`, `main`, or
-  `develop`; push other branches only when asked or while updating this PR.
+- Do not skip comments: fix, explain, show they are already handled, or report
+  a blocked direct human request.
+- Do not push for reply-only resolutions. Do not request another Copilot
+  review when only replies changed unless the user explicitly asks.
+- Once code changes are pushed, always request Copilot review of that exact
+  head.
+- Keep every network wait bounded, interruptible, and keyed to an immutable
+  SHA. Refresh state before sleeping and after waking.
+- Follow **agent-conduct**: never push `master`, `main`, or `develop`.
