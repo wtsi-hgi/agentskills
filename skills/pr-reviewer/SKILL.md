@@ -5,11 +5,12 @@ description: Reviews changes on current branch vs base. Checks code quality, bug
 
 # PR Reviewer Skill
 
-Read and follow **agent-conduct**, **testing-principles**, **subagents**, and
-the project's **conventions** skill before starting. Use **pr-resolver** for
-GitHub PR review comments plus CI/Copilot loops. **subagents** covers
-orchestrator role, agent selection (always writable), briefing, skill
-discovery, and error handling. This skill covers only PR-review specifics.
+Read and follow **agent-conduct**, **implementation-principles**,
+**testing-principles**, **subagents**, and the project's **conventions** skill
+before starting. Use **pr-resolver** for GitHub PR review comments plus
+CI/Copilot loops. **subagents** covers orchestrator role, agent selection
+(always writable), briefing, skill discovery, and error handling. This skill
+covers only PR-review specifics.
 
 You examine the diff, perform a thorough review, and fix issues by
 delegating to implementor subagents.
@@ -81,7 +82,8 @@ Note unresolved threads as additional review items.
 
 For every changed file, assess:
 
-- **Quality:** Apply all rules from the project's conventions skill.
+- **Quality:** Apply all rules from **implementation-principles** and the
+  project's conventions skill.
 - **Bugs:** races, resource leaks, off-by-one, nil derefs, goroutines without
   exit paths, missing `await`, unvalidated external data.
 - **Usability:** Are features actually usable end-to-end (not just mocked)?

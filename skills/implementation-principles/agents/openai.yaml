@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implementation Principles"
+  short_description: "Simple, reuse-first implementation workflow"
+  default_prompt: "Use $implementation-principles to deliver or review the smallest sufficient change with maximum semantic reuse and all relevant quality gates."

@@ -1,26 +1,22 @@
 ---
 name: nextflow-implementor
-description: Nextflow DSL 2 TDD implementation workflow. References nextflow-conventions and agent-conduct.
+description: Nextflow DSL 2 TDD implementation workflow. References implementation-principles, nextflow-conventions, testing-principles, and agent-conduct.
 context: fork
 ---
 
 # Nextflow Implementor Skill
 
-Read and follow **agent-conduct**, **testing-principles**, and
-**nextflow-conventions** before starting.
+Read and follow **agent-conduct**, **implementation-principles**,
+**testing-principles**, and **nextflow-conventions** before starting.
 
-## TDD Cycle
+## Nextflow TDD Steps
 
-For each acceptance test, follow every step:
-
-1. Write a failing nf-test in `modules/local/<tool>/tests/main.nf.test`.
-2. Run: `nf-test test modules/local/<tool>/tests/main.nf.test`
-3. Write minimal process/workflow to pass.
-4. Ensure the process emits `versions.yml` with tool version(s).
-5. Verify container is specified (prefer nf-core module, then Seqera Wave /
-   BioContainers, then Docker Hub).
-6. Run: `nf-core pipelines lint` and fix issues.
-7. Re-run nf-test to confirm it passes.
+- Test location: `modules/local/<tool>/tests/main.nf.test`.
+- Targeted test: `nf-test test modules/local/<tool>/tests/main.nf.test`
+- Ensure the process emits `versions.yml` with tool version(s).
+- Verify the container is specified (prefer nf-core module, then Seqera Wave /
+  BioContainers, then Docker Hub).
+- Run `nf-core pipelines lint` and fix issues.
 
 ## Module-per-Function Rule
 
@@ -49,12 +45,6 @@ For local modules without nf-core equivalents, find open-source containers:
 3. Fall back to Docker Hub / Quay.io official images.
 
 Specify both docker and singularity container paths.
-
-## Workflow
-
-Implement ONE item at a time: write nf-tests for the spec.md acceptance
-tests, then write implementation to make them pass, strictly following the
-TDD cycle above. Consult spec.md for full details.
 
 After all modules pass, ensure:
 

@@ -1,13 +1,13 @@
 ---
 name: python-reviewer
-description: Review Python implementations against spec acceptance tests. References python-conventions and agent-conduct.
+description: Review Python implementations against spec acceptance tests. References implementation-principles, python-conventions, testing-principles, and agent-conduct.
 context: fork
 ---
 
 # Python Reviewer Skill
 
-Read and follow **agent-conduct**, **testing-principles**, and
-**python-conventions** before starting.
+Read and follow **agent-conduct**, **implementation-principles**,
+**testing-principles**, and **python-conventions** before starting.
 
 You are a review subagent with clean context. Independently verify that code
 meets the spec and quality standards.
@@ -45,8 +45,9 @@ types, CLI commands, output formats, field names.
 
 ### 5. Verify code quality
 
-Apply all rules from python-conventions (typing, style, Python 3.14
-specifics, Pydantic v2, testing patterns, copyright boilerplate).
+Apply all rules from implementation-principles and python-conventions (typing,
+style, Python 3.14 specifics, Pydantic v2, testing patterns, copyright
+boilerplate).
 
 Key checks:
 

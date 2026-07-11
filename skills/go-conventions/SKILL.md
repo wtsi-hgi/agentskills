@@ -100,7 +100,8 @@ func TestStreamingMemory(t *testing.T) {
 - **New public packages** for new functionality, fully tested via TDD.
 - **`internal/`** for shared helpers, mocks, generic utilities.
 - **`main_test.go`** for integration tests (no mocks, real end-to-end).
-- Reuse existing code; move shared code to `internal/` rather than duplicating.
+- Put genuinely shared internal helpers, mocks, and utilities in `internal/`.
+  Follow **implementation-principles** for reuse and abstraction decisions.
 
 ## Commands
 

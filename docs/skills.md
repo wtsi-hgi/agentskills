@@ -28,6 +28,8 @@ These skills are tech-stack-agnostic and used across all projects:
 | Skill | Purpose |
 |---|---|
 | **agent-conduct** | Mandatory safety rules for all agents. Read before starting any work. |
+| **implementation-principles** | Shared cross-language delivery workflow for the simplest sufficient solution, maximum semantic reuse, and avoiding speculative abstractions. |
+| **testing-principles** | Shared guidance for behaviour-focused tests, regression coverage, and stable test design. |
 | **subagents** | Shared rules for orchestrating agents that delegate work to subagents. Referenced by orchestrator, bugfix, spec-writer, pr-reviewer, and pr-resolver. |
 | **bugfix** | Orchestrates bug fixes via implementor and reviewer subagents using TDD. Handles one or many bugs sequentially, tracks them in a dated checklist, and auto-commits each fix. |
 | **frontend-design** | Create distinctive, production-grade frontend interfaces that avoid generic AI aesthetics. Use when building web components, pages, dashboards, or styling web UI. |
@@ -48,8 +50,8 @@ Skills for Go projects using GoConvey testing:
 | Skill | Purpose |
 |---|---|
 | **go-conventions** | Shared conventions for Go projects. Copyright boilerplate, code quality, GoConvey testing, architecture, and commands. Referenced by go-implementor, go-reviewer, and workflow skills. |
-| **go-implementor** | Go TDD implementation workflow. References go-conventions and agent-conduct. |
-| **go-reviewer** | Review Go implementations against spec acceptance tests. References go-conventions and agent-conduct. |
+| **go-implementor** | Go TDD implementation workflow. References shared implementation and testing principles, go-conventions, and agent-conduct. |
+| **go-reviewer** | Review Go implementations against spec acceptance tests and shared implementation principles. |
 
 ### Nextflow
 
@@ -58,8 +60,8 @@ Skills for Nextflow DSL 2 workflows:
 | Skill | Purpose |
 |---|---|
 | **nextflow-conventions** | Shared conventions for Nextflow DSL 2 workflows. Project layout, modules, nf-test testing, config, containers, and commands. Referenced by nextflow-implementor, nextflow-reviewer, and workflow skills. |
-| **nextflow-implementor** | Nextflow DSL 2 TDD implementation workflow. References nextflow-conventions and agent-conduct. |
-| **nextflow-reviewer** | Review Nextflow DSL 2 implementations against spec acceptance tests. References nextflow-conventions and agent-conduct. |
+| **nextflow-implementor** | Nextflow DSL 2 TDD implementation workflow. References shared implementation and testing principles, nextflow-conventions, and agent-conduct. |
+| **nextflow-reviewer** | Review Nextflow DSL 2 implementations against spec acceptance tests and shared implementation principles. |
 
 ### Next.js + FastAPI
 
@@ -68,8 +70,8 @@ Skills for full-stack projects with Next.js 16 and FastAPI:
 | Skill | Purpose |
 |---|---|
 | **nextjs-fastapi-conventions** | Shared conventions for Next.js 16 + FastAPI full-stack projects. Architecture, code quality, testing, styling, and commands. Referenced by nextjs-fastapi-implementor and nextjs-fastapi-reviewer. |
-| **nextjs-fastapi-implementor** | Full-stack TDD implementation for Next.js 16 + FastAPI projects. References nextjs-fastapi-conventions and agent-conduct. |
-| **nextjs-fastapi-reviewer** | Review Next.js + FastAPI implementations against spec acceptance tests. References nextjs-fastapi-conventions and agent-conduct. |
+| **nextjs-fastapi-implementor** | Full-stack TDD implementation. References shared implementation and testing principles, stack conventions, and agent-conduct. |
+| **nextjs-fastapi-reviewer** | Review Next.js + FastAPI implementations against spec acceptance tests and shared implementation principles. |
 
 ### Python
 
@@ -78,8 +80,8 @@ Skills for modern Python projects:
 | Skill | Purpose |
 |---|---|
 | **python-conventions** | Shared conventions for modern Python 3.14 projects. Project layout, typing, linting, testing, and commands. Referenced by python-implementor, python-reviewer, and workflow skills. |
-| **python-implementor** | Python TDD implementation workflow. References python-conventions and agent-conduct. |
-| **python-reviewer** | Review Python implementations against spec acceptance tests. References python-conventions and agent-conduct. |
+| **python-implementor** | Python TDD implementation workflow. References shared implementation and testing principles, python-conventions, and agent-conduct. |
+| **python-reviewer** | Review Python implementations against spec acceptance tests and shared implementation principles. |
 
 ## How It Works
 
@@ -87,9 +89,11 @@ The skills form a layered system:
 
 1. **agent-conduct** provides universal safety rules that all other skills
    reference.
-2. **Conventions skills** define tech-stack-specific standards and commands.
-3. **Implementor/reviewer skills** provide TDD cycles and review checklists.
-4. **Workflow skills** coordinate multi-step processes using the appropriate
+2. **implementation-principles** and **testing-principles** provide shared,
+   cross-language implementation and test guidance.
+3. **Conventions skills** define tech-stack-specific standards and commands.
+4. **Implementor/reviewer skills** provide TDD cycles and review checklists.
+5. **Workflow skills** coordinate multi-step processes using the appropriate
    tech-stack skills.
 
 The workflow skills are generic. They discover which implementor, reviewer, and
@@ -102,9 +106,10 @@ To add support for a new tech stack:
 
 1. Create a `<stack>-conventions` skill with code quality standards, testing
    patterns, architecture principles, and commands.
-2. Create a `<stack>-implementor` skill with the TDD cycle, referencing the
-   conventions skill and agent-conduct.
+2. Create a `<stack>-implementor` skill with the TDD cycle, referencing
+   implementation-principles, testing-principles, the conventions skill, and
+   agent-conduct.
 3. Create a `<stack>-reviewer` skill with the review checklist, referencing the
-   conventions skill and agent-conduct.
+   same shared skills, conventions skill, and agent-conduct.
 
 The generic workflow skills will automatically work with the new stack.
