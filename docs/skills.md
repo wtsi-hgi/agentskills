@@ -172,6 +172,13 @@ Keep `display_name` matching the skill's h1, `short_description` under about
 `$<name>`. The spec allows any files beside `SKILL.md`, so these descriptors
 do not affect packaging.
 
+### Reference files
+
+Detail that only some runs need can live in a skill's own `references/`
+directory, reached by a relative link from its `SKILL.md`. Keep the link one
+level deep, and keep anything every run needs in the `SKILL.md` itself.
+**writing-for-agents** holds its frontmatter rules this way.
+
 ## Adding New Tech Stacks
 
 Write every new or edited skill against **writing-for-agents**, and apply

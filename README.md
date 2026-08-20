@@ -51,6 +51,7 @@ and guidance for adding new tech stacks.
 ```text
 skills/<name>/SKILL.md            agentskills.io skill definition
 skills/<name>/agents/openai.yaml  Codex interface descriptor
+skills/<name>/references/         detail linked from SKILL.md, loaded on demand
 docs/skills.md                    skill inventory and usage guide
 ```
 

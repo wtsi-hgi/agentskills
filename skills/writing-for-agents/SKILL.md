@@ -9,9 +9,9 @@ Every line an agent reads costs attention. This skill covers documents an
 agent reads and acts on: skill files, subagent briefings, `AGENTS.md` and
 `CLAUDE.md`, and repo docs a skill points at.
 
-Sentence-level tells in any markdown this repo writes are **unslop**'s job.
-This skill owns structure, triggers, and completion criteria. Both apply to a
-document an agent acts on.
+Sentences are **prose-principles**' job, and Markdown mechanics are
+**unslop**'s. This skill owns structure, triggers, and completion criteria.
+All three apply to a document an agent acts on.
 
 For skill creation or edits, read
 [frontmatter rules](references/skill-frontmatter.md).
@@ -57,7 +57,10 @@ Rank content by how immediately the agent needs it:
 1. **Steps** - what the agent does, in order. The primary tier.
 2. **In-file reference** - definitions, rules, and checklists consulted on
    demand. A flat set of peer rules is a fine shape, not a smell.
-3. **Another skill** - reference that several skills need, extracted once and
+3. **A reference file** - detail only some runs need, in this skill's own
+   `references/` directory, reached by a relative link. `references/` is where
+   this skill keeps its frontmatter rules.
+4. **Another skill** - reference that several skills need, extracted once and
    reached by name and path. **agent-conduct**,
    **implementation-principles**, **testing-principles**, and **subagents**
    exist for this reason.
