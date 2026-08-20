@@ -1,7 +1,6 @@
 ---
 name: spec-reviewer
 description: Reviews a spec against the feature description for completeness. Returns PASS or FAIL. Invoked by spec-writer, not directly.
-context: fork
 ---
 
 # Spec Reviewer Skill

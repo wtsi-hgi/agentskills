@@ -1,0 +1,4 @@
+interface:
+  display_name: "Unslop"
+  short_description: "Removes AI tells from markdown and summaries"
+  default_prompt: "Use $unslop before delivering a markdown document or a closing summary, to cut AI tells and hold the repo's markdown mechanics."

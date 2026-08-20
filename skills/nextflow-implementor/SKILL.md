@@ -1,13 +1,15 @@
 ---
 name: nextflow-implementor
-description: Nextflow DSL 2 TDD implementation workflow. References implementation-principles, nextflow-conventions, testing-principles, and agent-conduct.
-context: fork
+description: Nextflow DSL 2 TDD implementation workflow. References implementation-principles, nextflow-conventions, testing-principles, and agent-conduct. Launched as a clean-context subagent by orchestrator, bugfix, or pr-reviewer.
 ---
 
 # Nextflow Implementor Skill
 
 Read and follow **agent-conduct**, **implementation-principles**,
 **testing-principles**, and **nextflow-conventions** before starting.
+
+You are an implementation subagent with clean context. Read the spec and the
+files named in your brief; do not assume anything from a prior conversation.
 
 ## Nextflow TDD Steps
 

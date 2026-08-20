@@ -1,0 +1,4 @@
+interface:
+  display_name: "Go Reviewer"
+  short_description: "Go review against spec acceptance tests"
+  default_prompt: "Use $go-reviewer to verify a Go implementation against its spec acceptance tests and return PASS or FAIL with specific feedback."

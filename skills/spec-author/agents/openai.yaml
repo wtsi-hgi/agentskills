@@ -1,0 +1,4 @@
+interface:
+  display_name: "Spec Author"
+  short_description: "Writes specs with acceptance tests"
+  default_prompt: "Use $spec-author to write or revise a feature spec whose user stories and explicit acceptance tests are enough to implement from."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Spec Reviewer"
+  short_description: "Checks a spec covers the requested feature"
+  default_prompt: "Use $spec-reviewer to verify a spec covers every requirement in the feature description and return PASS or FAIL."

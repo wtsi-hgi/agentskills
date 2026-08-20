@@ -1,0 +1,4 @@
+interface:
+  display_name: "Next.js + FastAPI Reviewer"
+  short_description: "Full-stack review against acceptance tests"
+  default_prompt: "Use $nextjs-fastapi-reviewer to verify a Next.js and FastAPI implementation against its spec acceptance tests and architecture rules."

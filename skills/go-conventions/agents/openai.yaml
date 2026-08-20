@@ -1,0 +1,4 @@
+interface:
+  display_name: "Go Conventions"
+  short_description: "Go project standards and commands"
+  default_prompt: "Use $go-conventions for this project's Go layout, GoConvey testing patterns, copyright boilerplate, and quality gate commands."

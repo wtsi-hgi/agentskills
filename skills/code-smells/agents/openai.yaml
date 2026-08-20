@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code Smells"
+  short_description: "Named smell baseline for reviewing a diff"
+  default_prompt: "Use $code-smells to name the design problems in changed code that the linter cannot, as judgement calls rather than violations."

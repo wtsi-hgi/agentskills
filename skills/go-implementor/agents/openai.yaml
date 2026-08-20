@@ -1,0 +1,4 @@
+interface:
+  display_name: "Go Implementor"
+  short_description: "Go TDD implementation cycle"
+  default_prompt: "Use $go-implementor to implement a spec item in Go test-first, then run the project's tests, formatter, and linter."

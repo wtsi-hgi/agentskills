@@ -1,13 +1,15 @@
 ---
 name: python-implementor
-description: Python TDD implementation workflow. References implementation-principles, python-conventions, testing-principles, and agent-conduct.
-context: fork
+description: Python TDD implementation workflow. References implementation-principles, python-conventions, testing-principles, and agent-conduct. Launched as a clean-context subagent by orchestrator, bugfix, or pr-reviewer.
 ---
 
 # Python Implementor Skill
 
 Read and follow **agent-conduct**, **implementation-principles**,
 **testing-principles**, and **python-conventions** before starting.
+
+You are an implementation subagent with clean context. Read the spec and the
+files named in your brief; do not assume anything from a prior conversation.
 
 ## Python TDD Steps
 

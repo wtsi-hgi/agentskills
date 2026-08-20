@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Design"
+  short_description: "Distinctive production-grade web interfaces"
+  default_prompt: "Use $frontend-design to build a web interface with a committed aesthetic direction, then prove the perceptual result in a real browser."

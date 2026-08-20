@@ -1,0 +1,4 @@
+interface:
+  display_name: "Bugfix"
+  short_description: "Red-loop bug fixing via subagents"
+  default_prompt: "Use $bugfix to reproduce each bug with a red command, then fix and review it through implementor and reviewer subagents, one commit per bug."

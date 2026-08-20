@@ -1,0 +1,4 @@
+interface:
+  display_name: "PR Resolver"
+  short_description: "Resolves PR review comments to convergence"
+  default_prompt: "Use $pr-resolver to triage PR review threads, batch the fixes through bugfix, push once, and settle checks and Copilot review."

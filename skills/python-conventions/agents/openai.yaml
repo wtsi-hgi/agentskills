@@ -1,0 +1,4 @@
+interface:
+  display_name: "Python Conventions"
+  short_description: "Modern Python standards and commands"
+  default_prompt: "Use $python-conventions for this project's Python 3.14 layout, typing rules, pytest patterns, and quality gate commands."

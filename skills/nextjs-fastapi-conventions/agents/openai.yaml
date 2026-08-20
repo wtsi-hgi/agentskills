@@ -1,0 +1,4 @@
+interface:
+  display_name: "Next.js + FastAPI Conventions"
+  short_description: "Full-stack standards and commands"
+  default_prompt: "Use $nextjs-fastapi-conventions for this project's BFF architecture, Pydantic and Zod contracts, styling, and quality gate commands."

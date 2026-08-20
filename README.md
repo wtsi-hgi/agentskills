@@ -49,8 +49,9 @@ and guidance for adding new tech stacks.
 ## Repository Layout
 
 ```text
-skills/                  agentskills.io skill definitions (SKILL.md per skill)
-docs/skills.md           skill inventory and usage guide
+skills/<name>/SKILL.md            agentskills.io skill definition
+skills/<name>/agents/openai.yaml  Codex interface descriptor
+docs/skills.md                    skill inventory and usage guide
 ```
 
 ## License

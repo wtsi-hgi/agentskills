@@ -1,0 +1,4 @@
+interface:
+  display_name: "Spec Writer"
+  short_description: "Orchestrates spec and phase creation"
+  default_prompt: "Use $spec-writer to settle open decisions with the user, then author, review, and proofread a spec and its phase files via subagents."

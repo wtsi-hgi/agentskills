@@ -108,6 +108,55 @@ The workflow skills are generic. They discover which implementor, reviewer, and
 conventions skills to use based on project context, so the same workflow can
 drive Go, Nextflow, Next.js + FastAPI, or Python projects.
 
+## Skill File Conventions
+
+### Frontmatter
+
+Use only the six fields the [Agent Skills
+specification](https://agentskills.io/specification) allows: `name`,
+`description`, `license`, `compatibility`, `metadata`, and `allowed-tools`.
+Any other key is a hard error rather than an ignored field when a skill is
+packaged or uploaded to claude.ai, the Skills API, or a cloud session:
+
+```text
+Unexpected key(s) in SKILL.md frontmatter: argument-hint. Allowed properties
+are: allowed-tools, compatibility, description, license, metadata, name
+```
+
+Claude Code accepts extra fields of its own, such as `context`, `agent`, and
+`user-invocable`, but no other harness reads them and they break the paths
+above. Express the behaviour in the body instead, where every harness reads
+it. Validate a skill with `skills-ref validate skills/<name>` from the
+[agentskills reference library](https://github.com/agentskills/agentskills).
+
+### Context isolation
+
+Isolation comes from the orchestrating skill launching a subagent and passing
+this skill's path, which **subagents** documents per harness. A skill that
+runs that way says so in its description and in an opening body line, so the
+intent survives in every harness.
+
+`context: fork` is deliberately not used. It replaces the subagent's prompt
+with the SKILL.md body, so a forked reviewer loses the item it was meant to
+review, and a backgrounded fork runs with a narrower tool set than an
+implementor needs.
+
+### Codex descriptors
+
+Every skill carries an `agents/openai.yaml` naming how Codex surfaces it:
+
+```yaml
+interface:
+  display_name: "Go Reviewer"
+  short_description: "Go review against spec acceptance tests"
+  default_prompt: "Use $go-reviewer to verify a Go implementation against its spec acceptance tests and return PASS or FAIL with specific feedback."
+```
+
+Keep `display_name` matching the skill's h1, `short_description` under about
+45 characters, and `default_prompt` one sentence referencing the skill as
+`$<name>`. The spec allows any files beside `SKILL.md`, so these descriptors
+do not affect packaging.
+
 ## Adding New Tech Stacks
 
 Write every new or edited skill against **writing-for-agents**, and apply
@@ -122,6 +171,8 @@ To add support for a new tech stack:
    agent-conduct.
 3. Create a `<stack>-reviewer` skill with the review checklist, referencing the
    same shared skills, conventions skill, and agent-conduct.
+4. Add an `agents/openai.yaml` to each of the three, per the Codex descriptor
+   format above.
 
 The generic workflow skills will automatically work with the new stack.
 

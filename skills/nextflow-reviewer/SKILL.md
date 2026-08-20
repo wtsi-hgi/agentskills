@@ -1,7 +1,6 @@
 ---
 name: nextflow-reviewer
-description: Review Nextflow DSL 2 implementations against spec acceptance tests. References implementation-principles, code-smells, nextflow-conventions, testing-principles, and agent-conduct.
-context: fork
+description: Review Nextflow DSL 2 implementations against spec acceptance tests. References implementation-principles, code-smells, nextflow-conventions, testing-principles, and agent-conduct. Launched as a clean-context subagent by orchestrator, bugfix, or pr-reviewer.
 ---
 
 # Nextflow Reviewer Skill

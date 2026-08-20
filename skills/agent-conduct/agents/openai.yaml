@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Conduct"
+  short_description: "Mandatory safety rules for every agent"
+  default_prompt: "Use $agent-conduct to stay inside the workspace, keep git safe, and report blockers honestly rather than faking a result."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Orchestrator"
+  short_description: "Drives a phase plan through subagents"
+  default_prompt: "Use $orchestrator to complete a phase file: implement and review each item via subagents, drive the verify skill, then run PR review."

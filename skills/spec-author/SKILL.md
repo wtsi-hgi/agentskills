@@ -1,7 +1,6 @@
 ---
 name: spec-author
 description: Writes or revises feature specs with user stories and acceptance tests for TDD implementation. Invoked by spec-writer, not directly.
-context: fork
 ---
 
 # Spec Author Skill

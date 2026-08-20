@@ -1,0 +1,4 @@
+interface:
+  display_name: "Phase Creator"
+  short_description: "Builds phase files from a spec"
+  default_prompt: "Use $phase-creator to turn a spec's Implementation Order into one phase file per phase, with parallel batches and review checkboxes."

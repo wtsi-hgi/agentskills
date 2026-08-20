@@ -1,0 +1,4 @@
+interface:
+  display_name: "Nextflow Implementor"
+  short_description: "Nextflow DSL 2 TDD implementation cycle"
+  default_prompt: "Use $nextflow-implementor to implement a spec item as a Nextflow module test-first, with containers, versions, and nf-core reuse."

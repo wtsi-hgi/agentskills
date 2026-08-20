@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verification"
+  short_description: "Project-local skill that drives the real app"
+  default_prompt: "Use $verification to create, prove, or maintain a verify skill that drives this project's app as a user would and captures evidence."

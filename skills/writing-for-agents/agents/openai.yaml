@@ -1,0 +1,4 @@
+interface:
+  display_name: "Writing For Agents"
+  short_description: "Standards for documents agents act on"
+  default_prompt: "Use $writing-for-agents when editing a skill or wording a briefing, to keep pointers sharp, criteria checkable, and each rule in one place."
