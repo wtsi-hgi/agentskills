@@ -13,6 +13,9 @@ Sentence-level tells in any markdown this repo writes are **unslop**'s job.
 This skill owns structure, triggers, and completion criteria. Both apply to a
 document an agent acts on.
 
+For skill creation or edits, read
+[frontmatter rules](references/skill-frontmatter.md).
+
 ## Core Rule
 
 A line earns its place by changing behaviour. An instruction the agent already

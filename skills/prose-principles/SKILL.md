@@ -1,6 +1,8 @@
 ---
 name: prose-principles
-description: Sentence-level prose rules: words to replace, filler to cut, and weak constructions to fix. Use when writing or reviewing any prose.
+description: >-
+  Sentence-level prose rules: words to replace, filler to cut, and weak
+  constructions to fix. Use when writing or reviewing any prose.
 ---
 
 # Prose Principles
