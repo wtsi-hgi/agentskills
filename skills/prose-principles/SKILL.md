@@ -1,6 +1,10 @@
 ---
 name: prose-principles
-description: Sentence-level prose rules for every kind of writing this repo produces: words to replace, filler to cut, and the plain construction to use instead. Referenced by unslop for Markdown files and final-response for chat responses. Read it directly when writing or reviewing any prose.
+description: >-
+  Sentence-level prose rules for every kind of writing this repo produces:
+  words to replace, filler to cut, and the plain construction to use instead.
+  Referenced by unslop for Markdown files and final-response for chat
+  responses. Read it directly when writing or reviewing any prose.
 ---
 
 # Prose Principles

@@ -79,8 +79,10 @@ publishes; do not search elsewhere.
 ### 5. Phase completion
 
 When every checkbox is checked and every required drive is VERIFIED, commit
-with `Implement phase <N>`. Use targeted `git add` for the phase's source,
-tests, and the phase file.
+with `Implement phase <N>`. Use targeted `git add <path>` for every changed
+path that belongs to the phase, including the phase file. Inspect the staged
+diff before committing to confirm it contains the complete phase and no
+unrelated changes.
 
 Drive evidence is kept. Leave it where the verify skill puts it and cite that
 path in your report, so a reviewer can see the proof without re-running the

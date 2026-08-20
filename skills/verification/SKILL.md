@@ -11,9 +11,8 @@ that launches the real app, drives a named feature the way a user would, and
 captures evidence.
 
 Read and follow **agent-conduct**, **subagents**, and **writing-for-agents**
-before starting. **subagents** owns delegation, including the read-only
-subagents the maintenance pass fans out (see its Read-Only Subagents section).
-Apply **writing-for-agents** to the skill you generate: it will be read cold,
+before starting. **subagents** owns delegation. Apply
+**writing-for-agents** to the skill you generate: it will be read cold,
 mid-task, by an agent that has never seen the app.
 
 ## Output
@@ -68,7 +67,7 @@ Ground every section in what the interview found, with no placeholders left.
 - **Launch:** the exact command, and how to tell the app is ready (a log line,
   a port answering, a prompt). For a short-lived CLI, launch means build once,
   then start each drive in its own session.
-- **Doctor:** one read-only check that answers "is this instance worth
+- **Doctor:** one non-mutating check that answers "is this instance worth
   driving?" - process up, expected build, port owned by us, auth valid.
 - **Drive:** the recipe, with real selectors and commands from this repo.
   Prefer stable handles (ARIA labels, data attributes, prompt strings, route
@@ -128,10 +127,10 @@ on steps that used to work, or on whatever cadence the user asks for.
 
 1. **Index.** Read `features/README.md` and glob its siblings. Fix missing,
    duplicate, and dead entries.
-2. **Source.** One read-only subagent per feature file, launched
-   concurrently. Each answers "how does this feature work now?" from source,
-   flags likely drift with file and line citations, and returns one live
-   verification recipe.
+2. **Source.** Launch one normal subagent per feature file concurrently. Brief
+   each to inspect without editing. It answers "how does this feature work
+   now?" from source, flags likely drift with file and line citations, and
+   returns one live verification recipe.
 3. **Live.** Required even when source looks clean. Drive every feature at
    least once. Doctor before the first drive, on each fresh session, and again
    after any failed drive. A feature you cannot reach is unreachable only with
