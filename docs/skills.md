@@ -116,16 +116,10 @@ drive Go, Nextflow, Next.js + FastAPI, or Python projects.
 
 ### Frontmatter
 
-Every skill carries exactly two keys, `name` and `description`, the portable
-subset shared by OpenAI skills, Claude Code skills, and the Agent Skills
-specification. An unsupported key is a hard error rather than an ignored field
-when a skill is packaged or uploaded, so harness-specific settings go
-elsewhere: Codex interface and invocation policy in `agents/openai.yaml`,
+Every skill uses only `name` and `description`, following the [frontmatter
+rules](../skills/writing-for-agents/references/skill-frontmatter.md). Put Codex
+interface and invocation policy in `agents/openai.yaml`, and express
 orchestration in the skill body.
-
-The [frontmatter
-rules](../skills/writing-for-agents/references/skill-frontmatter.md) own the
-shape, the per-field constraints, the validation procedure, and the sources.
 
 ### Context isolation
 
