@@ -5,9 +5,8 @@ description: Remove AI tells and enforce repository Markdown mechanics in specs,
 
 # Unslop Skill
 
-Apply to Markdown you create or revise. Read and follow **final-response** for
-plain language, useful content, and sentence-level cleanup, then apply the
-document rules below.
+Apply to Markdown you create or revise. Read and follow **prose-principles**
+for the sentences, then apply the document rules below.
 
 Out of scope: code, code comments, test names, quoted text, and text you were
 not asked to change. Structure, pointers, and completion criteria in
@@ -17,7 +16,8 @@ agent-facing documents belong to **writing-for-agents**.
 
 1. Write it clean. A cleanup pass afterwards catches less than not generating
    the sentence in the first place.
-2. Before delivering, scan for the patterns below and fix what you find.
+2. Before delivering, apply every **prose-principles** rule to the sentences,
+   then the Formatting and Mechanics rules below to the file.
 3. Match the surrounding document: its heading case, its terminology, its
    formality. Local consistency beats this skill's preferences.
 

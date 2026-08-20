@@ -32,8 +32,9 @@ These skills are tech-stack-agnostic and used across all projects:
 | **testing-principles** | Shared guidance for behaviour-focused tests, regression coverage, perceptual requirements, and stable test design. |
 | **code-smells** | Named code smell baseline for reviewing changed code. Referenced by pr-reviewer and the per-stack reviewer skills. |
 | **writing-for-agents** | Standards for documents agents read and act on: skill files, subagent briefings, AGENTS.md/CLAUDE.md, and docs a skill points at. |
-| **final-response** | Removes filler, repetition, process narration, fake enthusiasm, and AI-sounding prose from every end-turn chat response. |
-| **unslop** | Applies final-response's prose rules plus repository Markdown mechanics to specs, phase plans, checklists, docs, and READMEs. |
+| **prose-principles** | Sentence-level prose rules shared by every kind of writing here: words to replace, filler to cut, plain constructions to use. |
+| **final-response** | Applies prose-principles to an end-turn chat response, and cuts filler, repetition, process narration, and fake enthusiasm. |
+| **unslop** | Applies prose-principles to a Markdown file, and adds repository Markdown mechanics for specs, phase plans, checklists, docs, and READMEs. |
 | **subagents** | Shared rules for orchestrating agents that delegate work to subagents. Referenced by orchestrator, bugfix, spec-writer, pr-reviewer, and pr-resolver. |
 | **bugfix** | Orchestrates bug fixes via implementor and reviewer subagents using TDD. Reproduces each bug with a red command before fixing it, handles bugs sequentially, tracks them in a dated checklist, and commits each fix. |
 | **frontend-design** | Create distinctive, production-grade frontend interfaces that avoid generic AI aesthetics. Use when building web components, pages, dashboards, or styling web UI. |
@@ -97,9 +98,11 @@ The skills form a layered system:
 2. **implementation-principles** and **testing-principles** provide shared,
    cross-language implementation and test guidance. **code-smells** provides
    the review vocabulary for design problems a linter cannot name.
-3. **final-response** governs end-turn chat. **writing-for-agents** governs
-   documents an agent acts on. **unslop** combines final-response's prose rules
-   with repository Markdown mechanics.
+3. **prose-principles** governs the sentences in any prose.
+   **final-response** adds what a chat turn owes its reader, and **unslop**
+   adds Markdown mechanics; both read prose-principles rather than restating
+   it. **writing-for-agents** covers a different axis: the structure of a
+   document an agent acts on.
 4. **Conventions skills** define tech-stack-specific standards and commands.
 5. **Implementor/reviewer skills** provide TDD cycles and review checklists.
 6. **Workflow skills** coordinate multi-step processes using the appropriate
@@ -193,9 +196,10 @@ The generic workflow skills will automatically work with the new stack.
 Some skills here started from other people's MIT-licensed collections and were
 rewritten for this repo's conventions and multi-harness workflow:
 
-- **final-response**, **unslop**, and **verification** derive from the `pstack`
-  plugin in
-  [cursor/plugins](https://github.com/cursor/plugins) (Lauren Tan).
+- **prose-principles**, **final-response**, **unslop**, and **verification**
+  derive from the `pstack` plugin in
+  [cursor/plugins](https://github.com/cursor/plugins) (Lauren Tan). Its
+  `unslop` skill is the source of the prose rules, now split by context.
   `verification` merges that plugin's `create-verification-skill` and
   `maintain-verification-skill`.
 - **writing-for-agents** derives from Matt Pocock's

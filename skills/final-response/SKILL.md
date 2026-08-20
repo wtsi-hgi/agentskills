@@ -7,6 +7,9 @@ description: Remove filler, repetition, process narration, fake enthusiasm, and 
 
 Write the response the user needs to read, then stop.
 
+Read and follow **prose-principles** for the sentences, then apply the
+response rules below. Markdown files are **unslop**'s job, not this skill's.
+
 Every sentence must do at least one job:
 
 - Answer the question.
@@ -77,25 +80,15 @@ Remove:
 - Restatements of the prompt or the response's own conclusion.
 - Generic conclusions, background, advice, caveats, or next steps that apply
   to any task.
-- Puffery and vague claims such as "robust", "seamless", "significant",
-  "production-ready", or "best practice" without concrete evidence.
-- Formulaic contrasts such as "not just X, but Y".
-- Superficial clauses such as "ensuring reliability" or "highlighting the
-  importance" when no mechanism follows.
-- Hedge stacks. Use one calibrated qualifier.
 - Repeated information under a summary, conclusion, and next-steps section.
 - Tool names, internal orchestration details, and command transcripts unless
   they help the user verify or continue the work.
 - Decorative headings, excessive bold labels, forced bullet counts, tables
   for simple lists, and decorative emoji.
 
-If a sentence could be pasted unchanged into an unrelated task, delete it or
-replace it with the concrete fact.
-
 ## Write Plainly
 
-- Use the user's terminology. Use one name for each thing.
-- Prefer concrete nouns, direct verbs, exact values, and named mechanisms.
+- Use the user's terminology.
 - Say "the tests passed", not "this should now work", when they passed.
 - Say "not verified" when it was not verified.
 - Prefer short sentences, but retain technical detail the user needs.

@@ -105,7 +105,25 @@ Code writable agent (`Agent` with `subagent_type: "general-purpose"` or
 Do NOT use VS Code `agentName: "Explore"` or Claude Code
 `subagent_type: "Explore"`/`"Plan"` for work that must change files, write
 specs, run tests, or verify fixes. Read-only agents return diagnoses but
-cannot complete the workflow, wasting a full cycle.
+cannot complete the workflow, wasting a full cycle. For the exception, see
+Read-Only Subagents below.
+
+## Read-Only Subagents
+
+A calling skill may state that a task is read-only: a source survey whose
+findings the parent acts on, or a fan-out of readers that must not touch the
+working tree. **verification**'s source wave is the current example. Launch one
+only when the calling skill says the task is read-only.
+
+- **VS Code:** `runSubagent` with `agentName: "Explore"`.
+- **Claude Code:** `Agent` with `subagent_type: "Explore"`.
+- **Codex:** no separate read-only agent type. Spawn a normal subagent and put
+  the constraint in the brief: read and report, change no files, run no
+  commands that write.
+
+State the constraint in the brief whatever the harness, because an agent type
+bounds the tools but not the intent. Ask for findings with file and line
+citations, and keep every write decision with the parent.
 
 ## Model Selection
 

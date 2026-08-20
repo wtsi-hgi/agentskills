@@ -1,0 +1,4 @@
+interface:
+  display_name: "Prose Principles"
+  short_description: "Plain-language rules for any prose"
+  default_prompt: "Use $prose-principles to replace AI vocabulary, filler, and weak constructions with plain, concrete sentences."

@@ -11,9 +11,10 @@ that launches the real app, drives a named feature the way a user would, and
 captures evidence.
 
 Read and follow **agent-conduct**, **subagents**, and **writing-for-agents**
-before starting. **subagents** owns delegation and read-only subagent
-selection. Apply **writing-for-agents** to the skill you generate: it will be
-read cold, mid-task, by an agent that has never seen the app.
+before starting. **subagents** owns delegation, including the read-only
+subagents the maintenance pass fans out (see its Read-Only Subagents section).
+Apply **writing-for-agents** to the skill you generate: it will be read cold,
+mid-task, by an agent that has never seen the app.
 
 ## Output
 

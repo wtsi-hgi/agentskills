@@ -25,7 +25,8 @@ purely on its own merits as a written document.
 - **Contradictions:** conflicting statements (e.g. type defined differently in
   two places).
 - **Undefined terms:** types, functions, packages used without definition.
-- **AI tells:** every pattern in **unslop**, applied to the spec's prose.
+- **AI tells:** every rule in **prose-principles**, applied to the spec's
+  prose.
 
 ### 3. Check structure and numbering
 

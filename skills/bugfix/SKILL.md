@@ -85,32 +85,41 @@ wrong; if so, note the reasoning in the new checklist entry.
 
 ## Evidence hygiene
 
-Sanitize evidence before writing it to the checklist, an artifact, a subagent
-briefing, or a commit:
+### Always
 
-- Capture output that may contain sensitive values into a permission-restricted,
-  ignored scratch file. Run a local redaction filter before displaying or
-  reading it through the harness; never stream the raw capture into the
-  terminal transcript. If it cannot be sanitized without first exposing it,
-  stop and request a safe reproduction or pre-sanitized artifact.
 - Redact credentials, tokens, cookies, personal data, private payload fields,
-  and unrelated environment values. Preserve the failure's meaning and mark
-  each replacement as `[REDACTED]`.
-- Record the command, exit status, and the smallest output excerpt that proves
-  the failure. Limit an excerpt to 80 lines and 8 KiB. Keep larger raw output
-  only in ignored scratch space, and delete it after the item is reviewed.
-- Reach visual states with synthetic or non-sensitive fixtures. Do not open an
-  untrusted screenshot through the harness until it is known to be sanitized.
-  Where the sensitive regions are known, create a masked copy with local tools
-  before opening it; otherwise reproduce the state with safe data or request a
-  pre-sanitized image.
-- Follow the project's evidence policy. If none exists, commit only the
-  sanitized before and after images needed to review a perceptual bug, each no
-  larger than 5 MiB. Record bounded text evidence in the checklist instead of
-  committing logs, traces, response bodies, or payloads.
+  and unrelated environment values from anything you write to the checklist, an
+  artifact, a subagent briefing, or a commit. Preserve the failure's meaning
+  and mark each replacement `[REDACTED]`. Evidence supplied by a caller is
+  verbatim after redaction, not before it.
+- Record the command, its exit status, and the smallest output excerpt that
+  proves the failure. Cap an excerpt at 80 lines and 8 KiB. Keep larger raw
+  output in ignored scratch space and delete it once the item is reviewed.
 
-Apply the same rules to evidence supplied by a caller. A source finding is
-verbatim after redaction, not before it.
+### When the failing path handles secrets or personal data
+
+Decide this once, from the quality-gate discovery pass: does the code under
+test read credentials, tokens, customer records, or another sensitive store?
+If not, run the red command normally per step 1 and apply the rules above to
+what you record.
+
+If it does, capture first, and this overrides "run it and record its output"
+in step 1. Send the output to a permission-restricted, ignored scratch file,
+run a local redaction filter, then read the sanitized copy. Keep the raw
+capture out of the terminal transcript. If it cannot be sanitized without
+being exposed first, stop and ask for a safe reproduction or a pre-sanitized
+artifact.
+
+Reach visual states with synthetic fixtures. Where a screenshot may show real
+data, mask it with local tools before opening it, or reproduce the state with
+safe data.
+
+### Committing evidence
+
+Follow the project's evidence policy. With none, commit only the sanitized
+before and after images needed to review a perceptual bug, each no larger than
+5 MiB. Record bounded text evidence in the checklist rather than committing
+logs, traces, response bodies, or payloads.
 
 ## Procedure
 
@@ -122,9 +131,9 @@ starting the next.
 #### 1. Build a red feedback loop
 
 Before any fix, you need one command that fails because of this bug. Name it,
-run it, and record it under the checklist item with its output. No red
-command, no fix. This is the step that decides whether the right bug gets
-fixed; spend the effort here.
+run it, and record it under the checklist item with its output, redacted per
+Evidence hygiene. No red command, no fix. This is the step that decides
+whether the right bug gets fixed; spend the effort here.
 
 The command must be:
 

@@ -79,7 +79,14 @@ publishes; do not search elsewhere.
 ### 5. Phase completion
 
 When every checkbox is checked and every required drive is VERIFIED, commit
-with `Implement phase <N>`.
+with `Implement phase <N>`. Use targeted `git add` for the phase's source,
+tests, and the phase file.
+
+Drive evidence is kept. Leave it where the verify skill puts it and cite that
+path in your report, so a reviewer can see the proof without re-running the
+drive. Whether it is committed follows the project's evidence policy; with
+none, leave it out of the phase commit rather than adding screenshots or logs
+to it.
 
 ### 6. Spec-aware PR review (after all phases)
 
