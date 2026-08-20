@@ -1,6 +1,6 @@
 ---
 name: bugfix
-description: Orchestrates standalone or caller-batched bug fixes via implementor and reviewer subagents using TDD. Handles bugs and verified review findings sequentially, tracks them in a dated checklist, and commits each fix without disrupting a surrounding PR-resolution batch.
+description: Orchestrates standalone or caller-batched bug fixes via implementor and reviewer subagents using TDD. Reproduces each bug with a red command before fixing it, handles bugs and verified review findings sequentially, tracks them in a dated checklist, and commits each fix without disrupting a surrounding PR-resolution batch.
 ---
 
 # Bugfix Skill
@@ -61,7 +61,10 @@ create `.docs/bugfixes/<YYMMDD>-<N>.md` (smallest `N` not already taken; create
 ```
 
 Put caller-supplied source metadata in an indented bullet under its item so a
-PR caller can map the resulting commit back to the review thread.
+PR caller can map the resulting commit back to the review thread. Record the
+red command from step 1 the same way, plus the before screenshot path for a UI
+bug, so the reviewer and any later reader can re-run it and compare against
+the same evidence.
 
 After each fix is committed, change `- [ ]` to `- [x]` and add indented
 bullets summarising files touched and approach. Commit the checklist update
@@ -88,31 +91,86 @@ starting the next.
 
 ### For each bug:
 
-#### 1. Reproduce first (UI bugs)
+#### 1. Build a red feedback loop
 
-If the bug is visual or interactive, brief an implementor subagent to:
+Before any fix, you need one command that fails because of this bug. Name it,
+run it, and record it under the checklist item with its output. No red
+command, no fix. This is the step that decides whether the right bug gets
+fixed; spend the effort here.
 
-- Extend the dev fixtures (e.g. `make dev-fixtures`) so the buggy state is
-  reachable.
-- Capture a screenshot demonstrating the issue.
-- Stop there and report the fixture changes and screenshot path.
+The command must be:
 
-Keep the screenshot for comparison. The fixture extension is part of the
-fix and should be committed with it.
+- **Red-capable:** it drives the real code path and asserts the symptom the
+  reporter described, so it fails now and passes once the bug is gone.
+  "Runs without erroring" is not a signal.
+- **Deterministic:** the same verdict every run. For an intermittent bug, a
+  pinned reproduction rate high enough to debug against.
+- **Fast:** seconds, not minutes.
+- **Agent-runnable:** it needs no human in the loop.
+
+Ways to build one, cheapest first:
+
+1. A failing test at whatever seam reaches the bug.
+2. A CLI invocation on a fixture input, diffed against known-good output.
+3. An HTTP request against a locally running service.
+4. A browser or PTY script that drives the app and asserts on what it shows.
+5. A replay of a captured payload, trace, or event log through the code path.
+6. A throwaway harness that calls the failing path directly.
+7. A loop over many repeated or randomised inputs, for "sometimes wrong" bugs.
+8. A differential run of two versions or configs, diffing the outputs.
+
+**Web UI, visual, and interactive bugs take route 4, and the red evidence is a
+screenshot.** Cheaper routes do not apply here: source CSS, class names, and
+isolated computed properties are not the symptom the user saw, so a passing
+unit test proves nothing about a perceptual bug. Drive the real app in a
+browser with the project's browser tooling (its Playwright or Puppeteer setup,
+or a CDP session against the running dev server), extend the project's dev
+fixtures (e.g. `make dev-fixtures`) until the buggy state is reachable, and
+capture a screenshot of it. Where the project has a verify skill (see
+**verification**), use its Drive recipe rather than inventing one.
+
+That screenshot is the before image. Keep it, record its path in the
+checklist, and hand it to the implementor and the reviewer so the after
+comparison is against the same fixture and the same viewport. The fixture
+extension is part of the fix: commit it with the change. Where the assertion
+can be made machine-checkable (pixel or contrast sampling, a bounding-box
+measurement), add that to the drive script as well, so the loop has a verdict
+and not only an image.
+
+Then tighten it. Cut setup, aim the assertion at the exact symptom, and remove
+nondeterminism by controlling clocks, randomness, ordering, and external
+services. A two-second deterministic loop is worth far more than a
+thirty-second flaky one. For an intermittent bug the goal is a higher
+reproduction rate, not a clean single run: loop the trigger, add load, narrow
+the timing window until the rate is high enough to debug against.
+
+Once it is red, shrink the scenario until every remaining element is
+load-bearing, so removing any one of them makes it pass. That minimal case is
+what the regression test encodes.
+
+If no loop can be built, that is a blocker, not a licence to guess. Per
+**agent-conduct**, stop, leave the item unchecked, record what you tried, and
+ask the user for the environment that reproduces it, a captured artifact, or
+the missing access. Do not brief an implementor to fix a bug nobody can
+observe failing.
 
 #### 2. Fix (implementor subagent)
 
 Brief an implementor subagent with:
 
 - Conventions, testing-principles, and implementor skill paths.
-- Bug description, repro steps, relevant paths, and the discovered quality
-  gate commands.
+- Bug description, the red command with its failing output, the minimal
+  repro, relevant paths, and the discovered quality gate commands. For a UI
+  bug, also the before screenshot path, the fixture command that reaches the
+  buggy state, and the viewport it was captured at.
 - Paths to prior bugfix checklists; instruction not to break, bypass, or
   weaken any existing regression test unless explicitly justified per the
   rule above.
-- Instruction: "Follow TDD and **testing-principles**. Add a behavioural
-  regression test when testing-principles calls for one, then fix the code so
-  it passes. Do not modify unrelated tests. Run the project's lint and test
+- Instruction: "Run the red command first and confirm it fails for the stated
+  reason. Follow TDD and **testing-principles**. Add a behavioural regression
+  test encoding the minimal repro when testing-principles calls for one, then
+  fix the cause so both the test and the red command pass. Do not modify
+  unrelated tests. Run the project's lint and test
   commands; both must pass. If any gate fails for an unrelated, pre-existing,
   or flaky reason, report it as a newly discovered bug for the checklist; do
   not skip or quarantine it. Do not paper over, work around, or fake a fix (see
@@ -131,16 +189,21 @@ harder" wording.
 Brief a reviewer subagent with:
 
 - Conventions, testing-principles, and reviewer skill paths.
-- Bug description, list of changed files, prior bugfix checklist paths, and
-  the quality gate commands.
+- Bug description, the red command, list of changed files, prior bugfix
+  checklist paths, and the quality gate commands.
 - Instruction: "Clean context. Read all changed source and test files.
-  Verify: (a) test strategy follows **testing-principles**; (b) the fix is
-  minimal and correct; (c) no prior regression test was deleted, skipped, or
-  weakened; (d) the project's lint and test commands pass (run them); (e) for
-  UI bugs, a post-fix screenshot from the same fixture shows the issue resolved
-  with no visible regressions elsewhere. If any gate fails for an unrelated,
-  pre-existing, or flaky reason, return FAIL and identify it as a newly
-  discovered checklist bug. Return PASS or FAIL with specific feedback."
+  Verify: (a) the recorded red command now passes (run it); (b) test strategy
+  follows **testing-principles** and the regression test encodes the minimal
+  repro; (c) the fix addresses the cause rather than suppressing the symptom,
+  and is minimal; (d) no prior regression test was deleted, skipped, or
+  weakened; (e) the project's lint and test commands pass (run them); (f) for
+  a web UI or otherwise visual bug, drive the app yourself from the same
+  fixture and viewport, capture a post-fix screenshot, and compare it against
+  the before image: the reported symptom is gone and nothing else visibly
+  regressed. A green test suite alone does not satisfy (f). If any gate fails
+  for an unrelated, pre-existing, or flaky reason, return FAIL and identify it
+  as a newly discovered checklist bug. Return PASS or FAIL with specific
+  feedback."
 
 **PASS →** step 4. **FAIL →** new implementor with feedback, then new
 reviewer. Max 5 cycles; if still failing, note the problem under the
@@ -169,6 +232,8 @@ and resolve the correct review threads after pushing.
 - Follow **subagents** rules (no direct implementation, always writable
   subagents, etc.).
 - Always create the dated checklist, even for one bug.
+- Always have a red command before briefing an implementor. A bug nobody can
+  reproduce is a blocker to report, not a fix to attempt.
 - Do not `git push` unless the user asked for it and this is standalone. A
   batched caller always owns pushing, even when the user's overall request
   includes a push. Never push to `master`, `main`, or `develop`.

@@ -1,13 +1,14 @@
 ---
 name: nextjs-fastapi-reviewer
-description: Review Next.js + FastAPI implementations against spec acceptance tests. References implementation-principles, nextjs-fastapi-conventions, testing-principles, and agent-conduct.
+description: Review Next.js + FastAPI implementations against spec acceptance tests. References implementation-principles, code-smells, nextjs-fastapi-conventions, testing-principles, and agent-conduct.
 context: fork
 ---
 
 # Next.js + FastAPI Reviewer Skill
 
 Read and follow **agent-conduct**, **implementation-principles**,
-**testing-principles**, and **nextjs-fastapi-conventions** before starting.
+**testing-principles**, **code-smells**, and **nextjs-fastapi-conventions**
+before starting.
 
 You are a review subagent with clean context. Independently verify that code
 meets the spec and quality standards.
@@ -50,6 +51,10 @@ Check against nextjs-fastapi-conventions architecture:
 
 Apply all rules from implementation-principles and nextjs-fastapi-conventions
 (Python and TypeScript sections).
+
+Match the changed code against **code-smells**. Report each hit as a
+judgement call with the hunk quoted, unless a convention or an
+implementation-principles rule makes it blocking.
 
 ### 6. Run linters
 

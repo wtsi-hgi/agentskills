@@ -1,6 +1,6 @@
 ---
 name: orchestrator
-description: Orchestrates implementation and review of phase plans via subagents. Use when given a phase MD file to complete.
+description: Orchestrates implementation and review of phase plans via subagents, and drives the real app through the project's verify skill when one exists. Use when given a phase MD file to complete.
 ---
 
 # Orchestrator Skill
@@ -61,7 +61,24 @@ until PASS.
 
 All checkboxes checked -> commit with `Implement phase <N>`.
 
-### 5. Spec-aware PR review (after all phases)
+### 5. Verify user-visible behaviour
+
+If the phase changed behaviour a user can observe, glob
+`.github/skills/verify-*/SKILL.md`. That is the contract **verification**
+publishes; do not search elsewhere.
+
+- **Found:** launch a subagent with the verify skill path, its feature map
+  path, and the features this phase touched. "Follow the skill: launch,
+  doctor, drive each named feature, capture evidence, clean up. Return
+  VERIFIED, NOT VERIFIED, or INCONCLUSIVE per feature, each with its evidence
+  path." Treat NOT VERIFIED or INCONCLUSIVE as a review failure: route it
+  through the fix-and-review cycle in step 3, then re-drive. A drive that
+  fails on stale skill steps is drift in the verify skill, not a product
+  failure; report it and let **verification** own the fix.
+- **Not found:** say so in your final report, and name **verification** as the
+  skill that creates one. Do not create one mid-phase.
+
+### 6. Spec-aware PR review (after all phases)
 
 Launch a **pr-reviewer** subagent with:
 
@@ -73,9 +90,9 @@ Launch a **pr-reviewer** subagent with:
 Follow fix-and-commit cycle. Repeat with fresh context until **2 consecutive
 clean passes**.
 
-### 6. Spec-free PR review
+### 7. Spec-free PR review
 
-Same as step 5 but **without** the spec document (focus on code quality and
+Same as step 6 but **without** the spec document (focus on code quality and
 usability only). Repeat until **2 consecutive clean passes**.
 
 ## Error Handling

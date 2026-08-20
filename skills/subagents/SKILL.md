@@ -134,6 +134,7 @@ include `testing-principles`.
 
 ## Briefing
 
+Word each briefing per **writing-for-agents** § Writing Subagent Briefings.
 Each subagent starts with clean context. Give it:
 
 - Skill names and absolute file paths to read.
@@ -153,6 +154,16 @@ Pass paths, not skill text.
 - **Blocker reported by subagent:** see agent-conduct § Honesty About
   Blockers. Do not relaunch with "try harder" wording. Route per the
   calling skill (bugfix / orchestrator / spec-writer).
+
+## Reporting To The User
+
+Your closing message is the part of the run the user actually reads. Write it
+through **unslop**: what changed, what was verified and by which command, what
+is still open, and the paths, verdicts, and commit SHAs that prove it.
+
+Describe the artifact, not the summary you were handed. A subagent reports
+what it intended; read the diff, run the tests, or list the files before
+repeating its claim.
 
 ## Liveness and Bounded Tool Calls
 
@@ -182,6 +193,8 @@ rather than wait forever on an unresponsive command.
   to your own orchestration artifacts (checklists, blocker files) are
   allowed.
 - NEVER check a progress marker until the subagent confirms success.
+- NEVER report a subagent's work from its summary alone. Check the diff, the
+  tests, or the files first.
 - NEVER embed skill contents in prompts - pass name + path.
 - NEVER leave Codex subagents open once they are no longer needed.
 - NEVER omit the `model` parameter on VS Code `runSubagent`; never set Codex

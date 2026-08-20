@@ -6,7 +6,7 @@ context: fork
 
 # Spec Proofreader Skill
 
-Read and follow **agent-conduct** before starting.
+Read and follow **agent-conduct** and **unslop** before starting.
 
 You have NO knowledge of the original feature description. Review the spec
 purely on its own merits as a written document.
@@ -27,6 +27,7 @@ purely on its own merits as a written document.
 - **Undefined terms:** types, functions, packages used without definition.
 - **Placeholder text:** TODO, TBD, incomplete sections.
 - **Cross-references:** all internal references resolve correctly.
+- **AI tells:** every pattern in **unslop**, applied to the spec's prose.
 
 ### 3. Check structure and numbering
 

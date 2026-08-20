@@ -6,7 +6,7 @@ context: fork
 
 # Spec Author Skill
 
-Read and follow **agent-conduct** before starting.
+Read and follow **agent-conduct** and **unslop** before starting.
 
 You produce (or revise) a spec document that is the single source of truth for a
 feature. If someone implements every acceptance test in it, the feature works.

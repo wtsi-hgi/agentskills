@@ -1,13 +1,13 @@
 ---
 name: go-reviewer
-description: Review Go implementations against spec acceptance tests. References implementation-principles, go-conventions, testing-principles, and agent-conduct.
+description: Review Go implementations against spec acceptance tests. References implementation-principles, code-smells, go-conventions, testing-principles, and agent-conduct.
 context: fork
 ---
 
 # Go Reviewer Skill
 
 Read and follow **agent-conduct**, **implementation-principles**,
-**testing-principles**, and **go-conventions** before starting.
+**testing-principles**, **code-smells**, and **go-conventions** before starting.
 
 You are a review subagent with clean context. Independently verify that code
 meets the spec and quality standards.
@@ -46,6 +46,10 @@ types, format strings, status values, field names.
 
 Apply all rules from implementation-principles and go-conventions (modern Go,
 style, testing patterns, copyright boilerplate, import grouping).
+
+Match the changed code against **code-smells**. Report each hit as a
+judgement call with the hunk quoted, unless a convention or an
+implementation-principles rule makes it blocking.
 
 ### 6. Run linter
 

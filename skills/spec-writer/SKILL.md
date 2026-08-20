@@ -21,38 +21,53 @@ spec-writing procedure.
 Save the feature description verbatim to `prompt.md` in the same directory as
 the target spec.md. This file is the evolving source of truth for requirements.
 
-### 2. Clarify requirements (subagent Q&A loop)
+### 2. Clarify requirements (subagent Q&A rounds)
 
-Repeat the following cycle until a subagent returns no questions:
+Work the open decisions as a tree: settling one unblocks the questions that
+depended on it. The **frontier** is every decision whose prerequisites are
+already settled. Ask the whole frontier in one round, then recompute it.
+
+Repeat until a subagent returns NONE:
 
 1. Launch a **fresh subagent** with: the conventions skill path, `prompt.md`
    path, and the instruction "Read the conventions skill. Read prompt.md.
-   Research the codebase to understand what exists. Produce 3-5 clarifying
-   questions (with suggested answer options) that must be answered before a spec
-   can be written. Return ONLY the questions. If prompt.md already addresses
-   everything, return NONE."
+   Research the codebase to understand what exists. Return every question on
+   the current frontier: each decision the spec needs that prompt.md does not
+   already settle and that does not depend on another question you are
+   returning now. Anything observable in the codebase, in project docs, or by
+   running a command is a fact, not a question: find it yourself and return it
+   as a finding. Ask only what is genuinely the user's to decide. Give each
+   question a short title, its options, and your recommended answer, numbered
+   so the user can answer by number. If nothing is left to decide, return
+   NONE."
 2. If the subagent returns NONE, the loop is done - proceed to
    "Note skill file paths".
-3. Use `ask_questions` to relay the subagent's questions to the user.
-4. For each answered question, append a concise instruction to a `## Notes`
-   section in `prompt.md` (create the section on first use). Convert each Q&A
-   pair into a direct statement of how the feature should work. Do NOT paste
-   raw questions or answers.
+3. Relay the questions with the harness's structured question tool
+   (`ask_questions`, `AskUserQuestion`, or equivalent), keeping each
+   recommended answer so the user can accept it as-is.
+4. Append each settled decision to a `## Notes` section in `prompt.md` (create
+   the section on first use) as a direct statement of how the feature should
+   work. Include the subagent's findings the user did not contradict. Do NOT
+   paste raw questions or answers.
 5. Go to step 2.1 (new subagent, fresh context, updated prompt).
 
-This keeps the parent agent's context lean - only `prompt.md` content and Q&A
-relay, never codebase research.
+A question whose answer depends on another question in the same round belongs
+to the next round, not this one. The loop ends when the frontier is empty, not
+after a fixed number of rounds.
+
+This keeps the parent agent's context lean - only `prompt.md` content and the
+question relay, never codebase research.
 
 ### 3. Note skill file paths
 
 Note paths for: conventions, spec-author, spec-reviewer, spec-proofreader,
-phase-creator, phase-reviewer. Do not read them.
+phase-creator, phase-reviewer, unslop. Do not read them.
 
 ### 4. Spec authoring
 
-Launch **spec-author** subagent with: spec-author + conventions skill paths,
-`prompt.md` path (not raw feature description), output path. "Read prompt.md
-for requirements. Research codebase, write spec."
+Launch **spec-author** subagent with: spec-author + conventions + unslop skill
+paths, `prompt.md` path (not raw feature description), output path. "Read
+prompt.md for requirements. Research codebase, write spec."
 
 ### 5. Feature coverage review cycle
 
@@ -66,8 +81,9 @@ Launch **spec-reviewer** subagent with: spec-reviewer + conventions skill paths,
 
 ### 6. Text quality proofreading cycle
 
-Launch **spec-proofreader** with: spec-proofreader skill path, spec path. Do NOT
-include feature description. "Fix errors directly, return PASS or FIXED."
+Launch **spec-proofreader** with: spec-proofreader + unslop skill paths, spec
+path. Do NOT include feature description. "Fix errors directly, return PASS or
+FIXED."
 
 - **PASS:** increment count. After 2nd consecutive PASS, go to step 7.
 - **FIXED:** reset count. Repeat with fresh proofreader.

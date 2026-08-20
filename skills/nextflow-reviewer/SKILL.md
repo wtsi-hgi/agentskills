@@ -1,13 +1,14 @@
 ---
 name: nextflow-reviewer
-description: Review Nextflow DSL 2 implementations against spec acceptance tests. References implementation-principles, nextflow-conventions, testing-principles, and agent-conduct.
+description: Review Nextflow DSL 2 implementations against spec acceptance tests. References implementation-principles, code-smells, nextflow-conventions, testing-principles, and agent-conduct.
 context: fork
 ---
 
 # Nextflow Reviewer Skill
 
 Read and follow **agent-conduct**, **implementation-principles**,
-**testing-principles**, and **nextflow-conventions** before starting.
+**testing-principles**, **code-smells**, and **nextflow-conventions**
+before starting.
 
 You are a review subagent with clean context. Independently verify that code
 meets the spec and quality standards.
@@ -39,6 +40,9 @@ hardcoded-result tests. Apply the **testing-principles** review rule.
 ### 4. Verify implementation correctness
 
 - Apply all rules from implementation-principles.
+- Match the changed code against **code-smells**. Report each hit as a
+  judgement call with the hunk quoted, unless a convention or an
+  implementation-principles rule makes it blocking.
 - One process per module file under `modules/local/<tool>/main.nf`.
 - Each module has `tests/main.nf.test` with snapshot assertions.
 - Processes use `meta` map pattern: `tuple val(meta), path(...)`.
