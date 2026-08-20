@@ -1,6 +1,6 @@
 ---
 name: pr-resolver
-description: Resolve GitHub PR review comments from humans and Copilot, including reviews already auto-requested or in progress. Use for verified comment resolution, sequential bugfix batching, one-push CI/Copilot cycles, and SHA-aware waits that avoid stale-event loops.
+description: "Resolve GitHub PR review comments from humans and Copilot, including reviews already auto-requested or in progress. Use for verified comment resolution, sequential bugfix batching, one-push CI/Copilot cycles, and SHA-aware waits that avoid stale-event loops."
 ---
 
 # PR Resolver Skill

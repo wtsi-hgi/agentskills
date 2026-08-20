@@ -1,6 +1,6 @@
 ---
 name: nextflow-implementor
-description: Nextflow DSL 2 TDD implementation workflow. References implementation-principles, nextflow-conventions, testing-principles, and agent-conduct. Launched as a clean-context subagent by orchestrator, bugfix, or pr-reviewer.
+description: "Nextflow DSL 2 TDD implementation workflow. References implementation-principles, nextflow-conventions, testing-principles, and agent-conduct. Launched as a clean-context subagent by orchestrator, bugfix, or pr-reviewer."
 ---
 
 # Nextflow Implementor Skill

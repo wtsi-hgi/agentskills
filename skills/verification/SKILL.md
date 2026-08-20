@@ -1,6 +1,6 @@
 ---
 name: verification
-description: Create, prove, and maintain a project-local skill that drives the real app the way a user does and captures evidence. Use when a project has no scripted way to prove user-visible behaviour, when an existing verify skill has gone stale, or when a workflow needs proof beyond tests and linters.
+description: "Create, prove, and maintain a project-local skill that drives the real app the way a user does and captures evidence. Use when a project has no scripted way to prove user-visible behaviour, when an existing verify skill has gone stale, or when a workflow needs proof beyond tests and linters."
 ---
 
 # Verification Skill

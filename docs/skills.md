@@ -116,22 +116,22 @@ drive Go, Nextflow, Next.js + FastAPI, or Python projects.
 
 ### Frontmatter
 
-Use only the six fields the [Agent Skills
-specification](https://agentskills.io/specification) allows: `name`,
-`description`, `license`, `compatibility`, `metadata`, and `allowed-tools`.
-Any other key is a hard error rather than an ignored field when a skill is
-packaged or uploaded to claude.ai, the Skills API, or a cloud session:
+This repository uses the portable subset shared by [OpenAI
+skills](https://learn.chatgpt.com/docs/build-skills), [Claude Code
+skills](https://code.claude.com/docs/en/skills), and the [Agent Skills
+specification](https://agentskills.io/specification):
 
-```text
-Unexpected key(s) in SKILL.md frontmatter: argument-hint. Allowed properties
-are: allowed-tools, compatibility, description, license, metadata, name
+```yaml
+---
+name: skill-name
+description: "State what the skill does. Use when its trigger applies."
+---
 ```
 
-Claude Code accepts extra fields of its own, such as `context`, `agent`, and
-`user-invocable`, but no other harness reads them and they break the paths
-above. Express the behaviour in the body instead, where every harness reads
-it. Validate a skill with `skills-ref validate skills/<name>` from the
-[agentskills reference library](https://github.com/agentskills/agentskills).
+Use only these two keys. Keep the description on one double-quoted physical
+line without angle brackets. The [frontmatter
+rules](../skills/writing-for-agents/references/skill-frontmatter.md) define the
+constraints, validation fallback, and placement of harness-specific settings.
 
 ### Context isolation
 
@@ -177,7 +177,6 @@ do not affect packaging.
 Detail that only some runs need can live in a skill's own `references/`
 directory, reached by a relative link from its `SKILL.md`. Keep the link one
 level deep, and keep anything every run needs in the `SKILL.md` itself.
-**writing-for-agents** holds its frontmatter rules this way.
 
 ## Adding New Tech Stacks
 

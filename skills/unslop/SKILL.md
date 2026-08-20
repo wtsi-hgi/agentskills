@@ -1,6 +1,6 @@
 ---
 name: unslop
-description: Remove AI tells and enforce repository Markdown mechanics in specs, phase plans, checklists, docs, and READMEs. Use when writing or revising a Markdown file. Do not use for chat responses; final-response owns those.
+description: "Remove AI tells and enforce repository Markdown mechanics in specs, phase plans, checklists, docs, and READMEs. Use when writing or revising a Markdown file. Do not use for chat responses; final-response owns those."
 ---
 
 # Unslop Skill
@@ -39,8 +39,9 @@ agent-facing documents belong to **writing-for-agents**.
 
 Every markdown file this repo writes:
 
-- Wraps Markdown prose at 80 columns. Code blocks are exempt, and so is
-  frontmatter, where a `description` is one string on one line.
+- Wraps Markdown prose at 80 columns. Code blocks and frontmatter are exempt.
+  Skill descriptions follow **writing-for-agents**' portable frontmatter
+  profile instead.
 - Carries no placeholder text: no TODO, no TBD, no unfinished section.
 - Has no trailing whitespace and no consecutive blank lines.
 - Names a language on every fenced code block.

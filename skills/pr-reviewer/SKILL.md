@@ -1,6 +1,6 @@
 ---
 name: pr-reviewer
-description: Reviews changes on current branch vs base. Checks code quality, bugs, usability, and optionally spec conformance. Fixes issues via implementor subagents.
+description: "Reviews changes on current branch vs base. Checks code quality, bugs, usability, and optionally spec conformance. Fixes issues via implementor subagents."
 ---
 
 # PR Reviewer Skill

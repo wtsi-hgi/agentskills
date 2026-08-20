@@ -1,6 +1,6 @@
 ---
 name: writing-for-agents
-description: Standards for documents agents read and act on - skill files, subagent briefings, AGENTS.md/CLAUDE.md, and repo docs a skill points at. Use when creating or editing a skill, wording a subagent briefing, or auditing agent-facing prose for bloat, duplication, weak triggers, or vague completion criteria.
+description: "Standards for documents agents read and act on - skill files, subagent briefings, AGENTS.md/CLAUDE.md, and repo docs a skill points at. Use when creating or editing a skill, wording a subagent briefing, or auditing agent-facing prose for bloat, duplication, weak triggers, or vague completion criteria."
 ---
 
 # Writing For Agents Skill
@@ -58,8 +58,7 @@ Rank content by how immediately the agent needs it:
 2. **In-file reference** - definitions, rules, and checklists consulted on
    demand. A flat set of peer rules is a fine shape, not a smell.
 3. **A reference file** - detail only some runs need, in this skill's own
-   `references/` directory, reached by a relative link. `references/` is where
-   this skill keeps its frontmatter rules.
+   `references/` directory, reached by a relative link.
 4. **Another skill** - reference that several skills need, extracted once and
    reached by name and path. **agent-conduct**,
    **implementation-principles**, **testing-principles**, and **subagents**

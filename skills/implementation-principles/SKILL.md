@@ -1,6 +1,6 @@
 ---
 name: implementation-principles
-description: Shared cross-language delivery workflow and guidance for implementing the simplest sufficient solution, maximizing reuse of existing code, fixing root causes, proving work against the real artifact, and avoiding speculative abstractions, dependencies, and refactors. Use when implementing or reviewing code in any language.
+description: "Shared cross-language delivery workflow and guidance for implementing the simplest sufficient solution, maximizing reuse of existing code, fixing root causes, proving work against the real artifact, and avoiding speculative abstractions, dependencies, and refactors. Use when implementing or reviewing code in any language."
 ---
 
 # Implementation Principles

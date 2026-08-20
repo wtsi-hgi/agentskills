@@ -1,6 +1,6 @@
 ---
 name: orchestrator
-description: Orchestrates implementation and review of phase plans via subagents, and drives the real app through the project's verify skill when one exists. Use when given a phase MD file to complete.
+description: "Orchestrates implementation and review of phase plans via subagents, and drives the real app through the project's verify skill when one exists. Use when given a phase MD file to complete."
 ---
 
 # Orchestrator Skill

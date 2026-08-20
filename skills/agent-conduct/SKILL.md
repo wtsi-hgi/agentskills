@@ -1,6 +1,6 @@
 ---
 name: agent-conduct
-description: Mandatory safety rules for all agents. Read before starting any work.
+description: "Mandatory safety rules for all agents. Read before starting any work."
 ---
 
 # Agent Conduct

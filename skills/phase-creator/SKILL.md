@@ -1,6 +1,6 @@
 ---
 name: phase-creator
-description: Creates phase plan documents from a spec.md Implementation Order. Invoked by spec-writer, not directly.
+description: "Creates phase plan documents from a spec.md Implementation Order. Invoked by spec-writer, not directly."
 ---
 
 # Phase Creator Skill

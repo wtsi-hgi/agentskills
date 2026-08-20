@@ -1,6 +1,6 @@
 ---
 name: testing-principles
-description: Shared guidance for behaviour-focused tests in TDD, regression fixes, acceptance-test implementation, perceptual and visual requirements, flaky test fixes, and test review. Use when writing, updating, stabilizing, or reviewing tests, or briefing another agent about tests, especially when deciding whether a cleanup/removal request needs a new test.
+description: "Shared guidance for behaviour-focused tests in TDD, regression fixes, acceptance-test implementation, perceptual and visual requirements, flaky test fixes, and test review. Use when writing, updating, stabilizing, or reviewing tests, or briefing another agent about tests, especially when deciding whether a cleanup/removal request needs a new test."
 ---
 
 # Testing Principles

@@ -1,6 +1,6 @@
 ---
 name: python-implementor
-description: Python TDD implementation workflow. References implementation-principles, python-conventions, testing-principles, and agent-conduct. Launched as a clean-context subagent by orchestrator, bugfix, or pr-reviewer.
+description: "Python TDD implementation workflow. References implementation-principles, python-conventions, testing-principles, and agent-conduct. Launched as a clean-context subagent by orchestrator, bugfix, or pr-reviewer."
 ---
 
 # Python Implementor Skill

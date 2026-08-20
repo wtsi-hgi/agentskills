@@ -1,6 +1,6 @@
 ---
 name: spec-proofreader
-description: Reviews spec documents for text quality issues without knowledge of the feature description. Fixes errors directly. Invoked by spec-writer, not directly.
+description: "Reviews spec documents for text quality issues without knowledge of the feature description. Fixes errors directly. Invoked by spec-writer, not directly."
 ---
 
 # Spec Proofreader Skill

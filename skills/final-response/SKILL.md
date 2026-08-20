@@ -1,6 +1,6 @@
 ---
 name: final-response
-description: Remove filler, repetition, process narration, fake enthusiasm, and AI-sounding prose from every end-turn chat response. Use before sending any final answer, including direct answers, explanations, reviews, recommendations, questions, blockers, and completion reports. Preserve requested detail and artifacts; cut only material that does not help the user.
+description: "Remove filler, repetition, process narration, fake enthusiasm, and AI-sounding prose from every end-turn chat response. Use before sending any final answer, including direct answers, explanations, reviews, recommendations, questions, blockers, and completion reports. Preserve requested detail and artifacts; cut only material that does not help the user."
 ---
 
 # Final Response Skill

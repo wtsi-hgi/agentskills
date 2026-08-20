@@ -2,50 +2,54 @@
 
 Use this check whenever creating or editing `SKILL.md`.
 
-## Write
+## Portable Profile
 
-Treat the opening block as YAML, not Markdown prose. Keep the description
-concise and put its trigger in the first clause: a crowded skill listing gets
-shortened to fit a character budget, and the text that goes first is the text
-that survives.
+This repository uses a subset of the Codex, Claude Code, and Agent Skills
+formats. It is deliberately narrower than any one format so the same skill
+passes their validators and presents the same name and description to each
+harness.
 
-Use a plain scalar only when it has no YAML-significant punctuation. Quote a
-short description otherwise. To wrap a longer one while retaining one string,
-use a folded scalar:
+Write exactly this shape:
 
 ```yaml
-description: >-
-  Describe what the skill does and when to use it.
+---
+name: skill-name
+description: "State what the skill does. Use when its trigger applies."
+---
 ```
 
-Never leave `: ` or ` #` inside a plain scalar. The first invalidates the YAML,
-and the second starts a comment.
-
-Angle brackets are legal but inert. Claude Code escapes them in text that
-reaches the model, so the description cannot imitate the harness's own
-formatting. Write plain words rather than depending on markup.
+- Use only `name` and `description`. Put Codex interface and invocation policy
+  in `agents/openai.yaml`. Express orchestration in the body rather than with
+  Claude-only frontmatter.
+- Make `name` match the directory. Limit it to 64 lowercase ASCII letters,
+  digits, and single hyphens, with no hyphen at either edge.
+- Write `description` as one non-empty, double-quoted physical line of at most
+  1024 characters. Escape a literal `"` or `\` using YAML double-quoted scalar
+  syntax.
+- Put the action and trigger first. Keep the description concise because
+  Codex may shorten descriptions when the skill list reaches its context
+  budget.
+- Use plain text without angle brackets. Codex's bundled validator rejects
+  them, and Claude Code escapes them in synced skill descriptions.
 
 ## Validate
 
-Run the available skill validator after changing a skill. If none exists,
-parse the opening block with any installed YAML parser and check:
+Run every available skill validator after changing a skill. A skill that uses
+this profile should not need a validator-specific exception.
 
-- It is a mapping whose keys are drawn from `name`, `description`, `license`,
-  `compatibility`, `metadata`, and `allowed-tools`. Any other key fails
-  packaging and upload with a hard error; `docs/skills.md` under Skill File
-  Conventions quotes the message.
-- `name` and `description` each occur once as non-empty strings.
-- `name` matches the skill directory, is at most 64 characters, uses lowercase
-  letters, digits, and single hyphens, and has no edge hyphen.
-- `description` is at most 1024 characters.
-
-If no YAML parser is available, use a quoted or folded description, check both
-`---` delimiters and indentation, and report that parser validation was
+If an agent has no validator, parse the opening block with an installed YAML
+parser and check every Portable Profile rule. If it also has no YAML parser,
+check the two `---` delimiters, the two keys, the quoted one-line description,
+and the name constraints by inspection. Report that parser validation was
 unavailable.
 
 ## Sources
 
-- Frontmatter fields, the escaping of angle brackets, and the skill listing
-  budget: https://code.claude.com/docs/en/skills
-- The six spec-allowed keys and the per-field constraints:
+- OpenAI documents `name` and `description` as required, recommends concise
+  front-loaded descriptions, and puts Codex policy in `agents/openai.yaml`:
+  https://learn.chatgpt.com/docs/build-skills
+- Claude Code documents the same base fields, its optional extensions, and
+  angle-bracket escaping for synced skill descriptions:
+  https://code.claude.com/docs/en/skills
+- The Agent Skills specification defines the common format and field limits:
   https://agentskills.io/specification

@@ -1,6 +1,6 @@
 ---
 name: frontend-design
-description: Create distinctive, production-grade frontend interfaces that avoid generic AI aesthetics. Use when building web components, pages, dashboards, or styling web UI.
+description: "Create distinctive, production-grade frontend interfaces that avoid generic AI aesthetics. Use when building web components, pages, dashboards, or styling web UI."
 ---
 
 # Frontend Design Skill

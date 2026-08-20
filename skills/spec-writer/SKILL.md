@@ -1,6 +1,6 @@
 ---
 name: spec-writer
-description: Orchestrates spec creation and review via subagents. Use when designing a new feature or writing a spec.
+description: "Orchestrates spec creation and review via subagents. Use when designing a new feature or writing a spec."
 ---
 
 # Spec Writer Skill

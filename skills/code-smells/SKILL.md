@@ -1,6 +1,6 @@
 ---
 name: code-smells
-description: Named code smell baseline for reviewing changed code, from Fowler's Refactoring chapter 3. Referenced by pr-reviewer and the per-stack reviewer skills. Use when reviewing a diff for design problems the linter cannot name.
+description: "Named code smell baseline for reviewing changed code, from Fowler's Refactoring chapter 3. Referenced by pr-reviewer and the per-stack reviewer skills. Use when reviewing a diff for design problems the linter cannot name."
 ---
 
 # Code Smells Skill

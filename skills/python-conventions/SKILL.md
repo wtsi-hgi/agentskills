@@ -1,6 +1,6 @@
 ---
 name: python-conventions
-description: Shared conventions for modern Python 3.14 projects. Project layout, typing, linting, testing, and commands. Referenced by python-implementor, python-reviewer, and workflow skills.
+description: "Shared conventions for modern Python 3.14 projects. Project layout, typing, linting, testing, and commands. Referenced by python-implementor, python-reviewer, and workflow skills."
 ---
 
 # Python Conventions

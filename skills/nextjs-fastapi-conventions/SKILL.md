@@ -1,6 +1,6 @@
 ---
 name: nextjs-fastapi-conventions
-description: Shared conventions for Next.js 16 + FastAPI full-stack projects. Architecture, code quality, testing, styling, and commands. Referenced by nextjs-fastapi-implementor and nextjs-fastapi-reviewer.
+description: "Shared conventions for Next.js 16 + FastAPI full-stack projects. Architecture, code quality, testing, styling, and commands. Referenced by nextjs-fastapi-implementor and nextjs-fastapi-reviewer."
 ---
 
 # Next.js + FastAPI Conventions

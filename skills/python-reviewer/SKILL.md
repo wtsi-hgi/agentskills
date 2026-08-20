@@ -1,6 +1,6 @@
 ---
 name: python-reviewer
-description: Review Python implementations against spec acceptance tests. References implementation-principles, code-smells, python-conventions, testing-principles, and agent-conduct. Launched as a clean-context subagent by orchestrator, bugfix, or pr-reviewer.
+description: "Review Python implementations against spec acceptance tests. References implementation-principles, code-smells, python-conventions, testing-principles, and agent-conduct. Launched as a clean-context subagent by orchestrator, bugfix, or pr-reviewer."
 ---
 
 # Python Reviewer Skill

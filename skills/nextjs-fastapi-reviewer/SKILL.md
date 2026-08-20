@@ -1,6 +1,6 @@
 ---
 name: nextjs-fastapi-reviewer
-description: Review Next.js + FastAPI implementations against spec acceptance tests. References implementation-principles, code-smells, nextjs-fastapi-conventions, testing-principles, and agent-conduct. Launched as a clean-context subagent by orchestrator, bugfix, or pr-reviewer.
+description: "Review Next.js + FastAPI implementations against spec acceptance tests. References implementation-principles, code-smells, nextjs-fastapi-conventions, testing-principles, and agent-conduct. Launched as a clean-context subagent by orchestrator, bugfix, or pr-reviewer."
 ---
 
 # Next.js + FastAPI Reviewer Skill

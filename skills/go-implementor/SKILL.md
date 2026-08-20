@@ -1,6 +1,6 @@
 ---
 name: go-implementor
-description: Go TDD implementation workflow. References implementation-principles, go-conventions, testing-principles, and agent-conduct. Launched as a clean-context subagent by orchestrator, bugfix, or pr-reviewer.
+description: "Go TDD implementation workflow. References implementation-principles, go-conventions, testing-principles, and agent-conduct. Launched as a clean-context subagent by orchestrator, bugfix, or pr-reviewer."
 ---
 
 # Go Implementor Skill

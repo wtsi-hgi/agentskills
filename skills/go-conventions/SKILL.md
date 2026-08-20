@@ -1,6 +1,6 @@
 ---
 name: go-conventions
-description: Shared conventions for Go projects. Copyright boilerplate, code quality, GoConvey testing, architecture, and commands. Referenced by go-implementor, go-reviewer, and workflow skills.
+description: "Shared conventions for Go projects. Copyright boilerplate, code quality, GoConvey testing, architecture, and commands. Referenced by go-implementor, go-reviewer, and workflow skills."
 ---
 
 # Go Conventions

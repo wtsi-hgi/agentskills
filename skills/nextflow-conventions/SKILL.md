@@ -1,6 +1,6 @@
 ---
 name: nextflow-conventions
-description: Shared conventions for Nextflow DSL 2 workflows. Project layout, modules, nf-test testing, config, containers, and commands. Referenced by nextflow-implementor, nextflow-reviewer, and workflow skills.
+description: "Shared conventions for Nextflow DSL 2 workflows. Project layout, modules, nf-test testing, config, containers, and commands. Referenced by nextflow-implementor, nextflow-reviewer, and workflow skills."
 ---
 
 # Nextflow Conventions

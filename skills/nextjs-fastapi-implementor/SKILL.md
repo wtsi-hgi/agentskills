@@ -1,6 +1,6 @@
 ---
 name: nextjs-fastapi-implementor
-description: Full-stack TDD implementation for Next.js 16 + FastAPI projects. References implementation-principles, nextjs-fastapi-conventions, testing-principles, and agent-conduct. Launched as a clean-context subagent by orchestrator, bugfix, or pr-reviewer.
+description: "Full-stack TDD implementation for Next.js 16 + FastAPI projects. References implementation-principles, nextjs-fastapi-conventions, testing-principles, and agent-conduct. Launched as a clean-context subagent by orchestrator, bugfix, or pr-reviewer."
 ---
 
 # Next.js + FastAPI Implementor Skill

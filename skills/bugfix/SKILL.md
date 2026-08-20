@@ -1,6 +1,6 @@
 ---
 name: bugfix
-description: Orchestrates standalone or caller-batched bug fixes via implementor and reviewer subagents using TDD. Reproduces each bug with a red command before fixing it, handles bugs and verified review findings sequentially, tracks them in a dated checklist, and commits each fix without disrupting a surrounding PR-resolution batch.
+description: "Orchestrates standalone or caller-batched bug fixes via implementor and reviewer subagents using TDD. Reproduces each bug with a red command before fixing it, handles bugs and verified review findings sequentially, tracks them in a dated checklist, and commits each fix without disrupting a surrounding PR-resolution batch."
 ---
 
 # Bugfix Skill
