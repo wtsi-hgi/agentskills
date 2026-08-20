@@ -39,7 +39,8 @@ agent-facing documents belong to **writing-for-agents**.
 
 Every markdown file this repo writes:
 
-- Wraps prose at 80 columns, with code blocks exempt.
+- Wraps prose at 80 columns. Code blocks are exempt, and so is frontmatter:
+  a `description` is one string, so keep it on one line however long it runs.
 - Carries no placeholder text: no TODO, no TBD, no unfinished section.
 - Has no trailing whitespace and no consecutive blank lines.
 - Names a language on every fenced code block.

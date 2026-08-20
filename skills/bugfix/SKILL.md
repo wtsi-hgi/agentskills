@@ -177,7 +177,7 @@ observe failing.
 Brief an implementor subagent with:
 
 - Conventions, testing-principles, and implementor skill paths.
-- Bug description, the red command with its bounded, sanitized failing output,
+- Bug description, the red command with its bounded failing output,
   the minimal repro, relevant paths, and the discovered quality gate commands.
   For a UI bug, also the before screenshot path, the fixture command that
   reaches the buggy state, and the viewport it was captured at.
@@ -207,7 +207,7 @@ harder" wording.
 Brief a reviewer subagent with:
 
 - Conventions, testing-principles, and reviewer skill paths.
-- Bug description, the red command and its bounded, sanitized evidence, list
+- Bug description, the red command and its bounded evidence, list
   of changed files, prior bugfix checklist paths, and the quality gate
   commands.
 - Instruction: "Clean context. Read all changed source and test files.
