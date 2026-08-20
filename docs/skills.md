@@ -116,22 +116,16 @@ drive Go, Nextflow, Next.js + FastAPI, or Python projects.
 
 ### Frontmatter
 
-This repository uses the portable subset shared by [OpenAI
-skills](https://learn.chatgpt.com/docs/build-skills), [Claude Code
-skills](https://code.claude.com/docs/en/skills), and the [Agent Skills
-specification](https://agentskills.io/specification):
+Every skill carries exactly two keys, `name` and `description`, the portable
+subset shared by OpenAI skills, Claude Code skills, and the Agent Skills
+specification. An unsupported key is a hard error rather than an ignored field
+when a skill is packaged or uploaded, so harness-specific settings go
+elsewhere: Codex interface and invocation policy in `agents/openai.yaml`,
+orchestration in the skill body.
 
-```yaml
----
-name: skill-name
-description: "State what the skill does. Use when its trigger applies."
----
-```
-
-Use only these two keys. Keep the description on one double-quoted physical
-line without angle brackets. The [frontmatter
-rules](../skills/writing-for-agents/references/skill-frontmatter.md) define the
-constraints, validation fallback, and placement of harness-specific settings.
+The [frontmatter
+rules](../skills/writing-for-agents/references/skill-frontmatter.md) own the
+shape, the per-field constraints, the validation procedure, and the sources.
 
 ### Context isolation
 

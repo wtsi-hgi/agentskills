@@ -40,8 +40,8 @@ agent-facing documents belong to **writing-for-agents**.
 Every markdown file this repo writes:
 
 - Wraps Markdown prose at 80 columns. Code blocks and frontmatter are exempt.
-  Skill descriptions follow **writing-for-agents**' portable frontmatter
-  profile instead.
+  A skill description follows the Portable Profile in **writing-for-agents**'
+  frontmatter rules instead.
 - Carries no placeholder text: no TODO, no TBD, no unfinished section.
 - Has no trailing whitespace and no consecutive blank lines.
 - Names a language on every fenced code block.

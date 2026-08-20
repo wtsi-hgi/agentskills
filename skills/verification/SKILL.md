@@ -95,9 +95,9 @@ one convenient entry point is incomplete while the map lists others.
 
 ### 4. Prove the skill before handing it over
 
-Validate the generated skill with the available Agent Skills validator, such
-as `skills-ref validate <skill-directory>` or `quick_validate.py
-<skill-directory>`. Fix every validation error.
+Validate the generated skill's frontmatter by the procedure in
+**writing-for-agents**, under its frontmatter rules reference. Fix every
+error it reports.
 
 Run its own instructions end to end once: launch, doctor, drive one mapped
 feature, capture evidence, clean up. Then confirm the evidence still exists
