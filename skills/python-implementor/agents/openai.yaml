@@ -2,3 +2,5 @@ interface:
   display_name: "Python Implementor"
   short_description: "Python TDD implementation cycle"
   default_prompt: "Use $python-implementor to implement a spec item in Python test-first, then run pytest, ruff, and pyright."
+policy:
+  allow_implicit_invocation: false

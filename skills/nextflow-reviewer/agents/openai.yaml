@@ -2,3 +2,5 @@ interface:
   display_name: "Nextflow Reviewer"
   short_description: "Nextflow review against spec acceptance tests"
   default_prompt: "Use $nextflow-reviewer to verify a Nextflow implementation against its spec acceptance tests, containers, versions, and config."
+policy:
+  allow_implicit_invocation: false

@@ -2,3 +2,5 @@ interface:
   display_name: "Next.js + FastAPI Implementor"
   short_description: "Full-stack TDD implementation cycle"
   default_prompt: "Use $nextjs-fastapi-implementor to implement a spec item across FastAPI and Next.js test-first, keeping both schema contracts in step."
+policy:
+  allow_implicit_invocation: false

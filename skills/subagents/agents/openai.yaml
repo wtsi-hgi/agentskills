@@ -2,3 +2,5 @@ interface:
   display_name: "Subagents"
   short_description: "Rules for delegating work to subagents"
   default_prompt: "Use $subagents to pick, brief, and verify subagents in the active harness, and to report a run honestly to the user."
+policy:
+  allow_implicit_invocation: false

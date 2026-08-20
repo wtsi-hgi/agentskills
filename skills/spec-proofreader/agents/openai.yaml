@@ -2,3 +2,5 @@ interface:
   display_name: "Spec Proofreader"
   short_description: "Checks spec text without the feature brief"
   default_prompt: "Use $spec-proofreader to fix repetition, contradictions, numbering, and AI tells in a spec, judged only as a written document."
+policy:
+  allow_implicit_invocation: false

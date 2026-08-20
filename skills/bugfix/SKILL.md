@@ -51,7 +51,8 @@ Subagents must run these gates, not invent their own.
 
 If a batched caller supplies its active checklist, append to it. Otherwise
 create `.docs/bugfixes/<YYMMDD>-<N>.md` (smallest `N` not already taken; create
-`.docs/bugfixes/` if missing). Write each bug verbatim:
+`.docs/bugfixes/` if missing). Write each bug verbatim except for secret or
+personal-data redactions:
 
 ```
 - [ ] <bug 1 description, verbatim>
@@ -81,6 +82,35 @@ current item complete.
 Their checked items define behaviour that must not regress. A new fix may
 only change a previously-fixed behaviour if that prior item is demonstrably
 wrong; if so, note the reasoning in the new checklist entry.
+
+## Evidence hygiene
+
+Sanitize evidence before writing it to the checklist, an artifact, a subagent
+briefing, or a commit:
+
+- Capture output that may contain sensitive values into a permission-restricted,
+  ignored scratch file. Run a local redaction filter before displaying or
+  reading it through the harness; never stream the raw capture into the
+  terminal transcript. If it cannot be sanitized without first exposing it,
+  stop and request a safe reproduction or pre-sanitized artifact.
+- Redact credentials, tokens, cookies, personal data, private payload fields,
+  and unrelated environment values. Preserve the failure's meaning and mark
+  each replacement as `[REDACTED]`.
+- Record the command, exit status, and the smallest output excerpt that proves
+  the failure. Limit an excerpt to 80 lines and 8 KiB. Keep larger raw output
+  only in ignored scratch space, and delete it after the item is reviewed.
+- Reach visual states with synthetic or non-sensitive fixtures. Do not open an
+  untrusted screenshot through the harness until it is known to be sanitized.
+  Where the sensitive regions are known, create a masked copy with local tools
+  before opening it; otherwise reproduce the state with safe data or request a
+  pre-sanitized image.
+- Follow the project's evidence policy. If none exists, commit only the
+  sanitized before and after images needed to review a perceptual bug, each no
+  larger than 5 MiB. Record bounded text evidence in the checklist instead of
+  committing logs, traces, response bodies, or payloads.
+
+Apply the same rules to evidence supplied by a caller. A source finding is
+verbatim after redaction, not before it.
 
 ## Procedure
 
@@ -156,10 +186,10 @@ observe failing.
 Brief an implementor subagent with:
 
 - Conventions, testing-principles, and implementor skill paths.
-- Bug description, the red command with its failing output, the minimal
-  repro, relevant paths, and the discovered quality gate commands. For a UI
-  bug, also the before screenshot path, the fixture command that reaches the
-  buggy state, and the viewport it was captured at.
+- Bug description, the red command with its bounded, sanitized failing output,
+  the minimal repro, relevant paths, and the discovered quality gate commands.
+  For a UI bug, also the before screenshot path, the fixture command that
+  reaches the buggy state, and the viewport it was captured at.
 - Paths to prior bugfix checklists; instruction not to break, bypass, or
   weaken any existing regression test unless explicitly justified per the
   rule above.
@@ -186,8 +216,9 @@ harder" wording.
 Brief a reviewer subagent with:
 
 - Conventions, testing-principles, and reviewer skill paths.
-- Bug description, the red command, list of changed files, prior bugfix
-  checklist paths, and the quality gate commands.
+- Bug description, the red command and its bounded, sanitized evidence, list
+  of changed files, prior bugfix checklist paths, and the quality gate
+  commands.
 - Instruction: "Clean context. Read all changed source and test files.
   Verify: (a) the recorded red command now passes (run it); (b) test strategy
   follows **testing-principles** and the regression test encodes the minimal

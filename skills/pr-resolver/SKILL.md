@@ -152,8 +152,8 @@ was requested immediately before pr-resolver started.
 
 For each unresolved thread, choose exactly one outcome:
 
-- **Fix:** Record the verbatim finding plus PR/thread/comment IDs as a bugfix
-  item.
+- **Fix:** Redact secret or personal data from the finding, then record the
+  remaining text plus PR/thread/comment IDs as a bugfix item.
 - **Explain:** Reply with a concrete reason and resolve the thread.
 - **Already handled:** Reply with current code/test evidence and resolve it.
 - **Blocked:** Report the required decision; do not silently resolve a direct

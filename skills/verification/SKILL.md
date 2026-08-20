@@ -10,9 +10,10 @@ user can do the thing. This skill produces a project-local **verify skill**
 that launches the real app, drives a named feature the way a user would, and
 captures evidence.
 
-Read and follow **agent-conduct** before starting. Apply
-**writing-for-agents** to the skill you generate: it will be read cold,
-mid-task, by an agent that has never seen the app.
+Read and follow **agent-conduct**, **subagents**, and **writing-for-agents**
+before starting. **subagents** owns delegation and read-only subagent
+selection. Apply **writing-for-agents** to the skill you generate: it will be
+read cold, mid-task, by an agent that has never seen the app.
 
 ## Output
 
@@ -53,9 +54,11 @@ Answer these from the codebase. Ask the user only what cannot be observed.
   profiles)? If not, record that refusing to drive a shared instance is the
   correct behaviour.
 
-If the checkout does not build or start, fix that first or report it as a
-blocker per **agent-conduct**. A skill written against a broken base teaches
-wrong steps.
+If the checkout does not build or start, report it as a blocker per
+**agent-conduct**. Repair product code only when the caller explicitly asked
+for that repair; verification alone authorizes changes only to the verify
+skill and its feature map. A skill written against a broken base teaches wrong
+steps.
 
 ### 2. Write the skill
 
@@ -91,6 +94,10 @@ The map is the maintained record of what needs proving. A proof that drives
 one convenient entry point is incomplete while the map lists others.
 
 ### 4. Prove the skill before handing it over
+
+Validate the generated skill with the available Agent Skills validator, such
+as `skills-ref validate <skill-directory>` or `quick_validate.py
+<skill-directory>`. Fix every validation error.
 
 Run its own instructions end to end once: launch, doctor, drive one mapped
 feature, capture evidence, clean up. Then confirm the evidence still exists

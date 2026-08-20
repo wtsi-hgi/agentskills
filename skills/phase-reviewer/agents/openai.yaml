@@ -2,3 +2,5 @@ interface:
   display_name: "Phase Reviewer"
   short_description: "Checks phase files against the spec"
   default_prompt: "Use $phase-reviewer to verify a phase file's story references, numbering, and text quality against its spec, fixing errors directly."
+policy:
+  allow_implicit_invocation: false

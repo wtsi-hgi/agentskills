@@ -56,11 +56,7 @@ Launch a reviewer subagent with:
 **FAIL:** launch new implementor with feedback, then fresh reviewer. Repeat
 until PASS.
 
-### 4. Phase completion
-
-All checkboxes checked -> commit with `Implement phase <N>`.
-
-### 5. Verify user-visible behaviour
+### 4. Verify user-visible behaviour
 
 If the phase changed behaviour a user can observe, glob
 `.github/skills/verify-*/SKILL.md`. That is the contract **verification**
@@ -70,12 +66,20 @@ publishes; do not search elsewhere.
   path, and the features this phase touched. "Follow the skill: launch,
   doctor, drive each named feature, capture evidence, clean up. Return
   VERIFIED, NOT VERIFIED, or INCONCLUSIVE per feature, each with its evidence
-  path." Treat NOT VERIFIED or INCONCLUSIVE as a review failure: route it
-  through the fix-and-review cycle in step 3, then re-drive. A drive that
-  fails on stale skill steps is drift in the verify skill, not a product
-  failure; report it and let **verification** own the fix.
+  path." Treat NOT VERIFIED or INCONCLUSIVE as a review failure: uncheck the
+  affected item's `reviewed` marker, route it through the fix-and-review cycle
+  in step 3, then re-drive before restoring the marker. A drive that fails on
+  stale skill steps is drift in the verify skill, not a product failure.
+  Launch a subagent with the **verification** skill path and verify skill
+  directory in maintenance mode to repair only the verify skill, then re-drive
+  the affected feature.
 - **Not found:** say so in your final report, and name **verification** as the
   skill that creates one. Do not create one mid-phase.
+
+### 5. Phase completion
+
+When every checkbox is checked and every required drive is VERIFIED, commit
+with `Implement phase <N>`.
 
 ### 6. Spec-aware PR review (after all phases)
 

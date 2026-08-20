@@ -49,22 +49,22 @@ Use the active harness's vocabulary and constraints.
 
 ### Codex Harness
 
-- Launch with `multi_agent_v1.spawn_agent`.
+- Use the collaboration tools exposed by the active Codex harness and follow
+  their live schemas. The common operations are `spawn_agent`, `wait_agent`,
+  `send_message`, `followup_task`, `interrupt_agent`, and `list_agents`; tool
+  namespaces and parameters may vary by release.
 - If Codex tool metadata says subagents require an explicit request, this
   repo's invoked orchestrating skill is that explicit request when its
   procedure says to use subagents.
-- Use `agent_type: "worker"` for implementors, reviewers, spec authors,
-  proofreaders, phase creators, phase reviewers, PR reviewers, and any
-  subagent expected to edit files, write artifacts, run tests, or verify work.
-- Avoid `agent_type: "explorer"` for orchestrated writing/review workflows.
-  It is only appropriate for a clearly read-only codebase question when the
-  calling skill explicitly allows read-only exploration.
+- Codex subagents inherit the available workspace tools. Do not invent an
+  `agent_type` parameter when the active `spawn_agent` schema has none.
 - Omit `model` unless the user explicitly asks for a different model or there
   is a clear task-specific reason. Codex subagents inherit the parent model by
   default.
-- Use `wait_agent` when the orchestration step needs the result, `send_input`
-  to refine an existing live subagent, and `close_agent` when a subagent is no
-  longer needed.
+- Use `wait_agent` when the orchestration step needs a result. Use
+  `send_message` to add context without starting a turn, and `followup_task`
+  to give an idle agent more work and start a turn. Use `interrupt_agent` only
+  to stop work that is still running and no longer needed.
 - For parallel batches, spawn all independent workers first, then wait for
   completion as needed.
 
@@ -98,14 +98,14 @@ Use the active harness's vocabulary and constraints.
 Every subagent launched from an orchestrating skill must be able to edit
 files and run tests unless the calling skill explicitly says the task is
 read-only. Use the writable/default agent in VS Code (`runSubagent` without
-`agentName`), a Codex worker (`spawn_agent` with `agent_type: "worker"`), or a
-Claude Code writable agent (`Agent` with `subagent_type: "general-purpose"` or
+`agentName`), a Codex subagent with the inherited workspace tools, or a Claude
+Code writable agent (`Agent` with `subagent_type: "general-purpose"` or
 `"claude"`).
 
-Do NOT use VS Code `agentName: "Explore"`, Codex `agent_type: "explorer"`, or
-Claude Code `subagent_type: "Explore"`/`"Plan"` for work that must change
-files, write specs, run tests, or verify fixes. Read-only agents return
-diagnoses but cannot complete the workflow, wasting a full cycle.
+Do NOT use VS Code `agentName: "Explore"` or Claude Code
+`subagent_type: "Explore"`/`"Plan"` for work that must change files, write
+specs, run tests, or verify fixes. Read-only agents return diagnoses but
+cannot complete the workflow, wasting a full cycle.
 
 ## Model Selection
 
@@ -158,8 +158,9 @@ Pass paths, not skill text.
 ## Reporting To The User
 
 Your closing message is the part of the run the user actually reads. Write it
-through **unslop**: what changed, what was verified and by which command, what
-is still open, and the paths, verdicts, and commit SHAs that prove it.
+through **final-response**: what changed, what was verified and by which
+command, what is still open, and the paths, verdicts, and commit SHAs that
+prove it.
 
 Describe the artifact, not the summary you were handed. A subagent reports
 what it intended; read the diff, run the tests, or list the files before
@@ -178,12 +179,11 @@ rather than wait forever on an unresponsive command.
 ### Codex Harness
 
 - Send concise progress updates while long-running subagents are active.
-- Track spawned agent IDs. Call `close_agent` promptly when a Codex subagent is
-  no longer needed, including after its result has been integrated, after the
-  task is canceled, or after the workflow changes direction. This prevents
-  later turns from burning time rediscovering a subagent limit.
-- Before final response, ensure all subagents needed for the request have
-  completed or have been explicitly closed.
+- Track spawned agent IDs. Completed agents need no cleanup when the harness
+  exposes no close operation. Interrupt an agent that is still running after
+  its work becomes irrelevant.
+- Before the final response, ensure every subagent needed for the request has
+  completed, or interrupt it and report the incomplete work.
 
 ## Rules
 
@@ -196,7 +196,7 @@ rather than wait forever on an unresponsive command.
 - NEVER report a subagent's work from its summary alone. Check the diff, the
   tests, or the files first.
 - NEVER embed skill contents in prompts - pass name + path.
-- NEVER leave Codex subagents open once they are no longer needed.
+- NEVER leave an unneeded Codex subagent running.
 - NEVER omit the `model` parameter on VS Code `runSubagent`; never set Codex
   `spawn_agent.model` or Claude Code `Agent.model` without an explicit user
   request or clear task-specific reason.

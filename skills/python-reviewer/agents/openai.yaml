@@ -2,3 +2,5 @@ interface:
   display_name: "Python Reviewer"
   short_description: "Python review against spec acceptance tests"
   default_prompt: "Use $python-reviewer to verify a Python implementation against its spec acceptance tests, typing rules, and lint gates."
+policy:
+  allow_implicit_invocation: false
