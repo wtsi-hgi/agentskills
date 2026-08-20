@@ -21,12 +21,11 @@ purely on its own merits as a written document.
 
 ### 2. Check for text errors
 
-- **Repetition:** same thing said in different words; redundant acceptance tests.
+- **Repetition:** the same thing in different words, or redundant acceptance
+  tests.
 - **Contradictions:** conflicting statements (e.g. type defined differently in
   two places).
 - **Undefined terms:** types, functions, packages used without definition.
-- **Placeholder text:** TODO, TBD, incomplete sections.
-- **Cross-references:** all internal references resolve correctly.
 - **AI tells:** every pattern in **unslop**, applied to the spec's prose.
 
 ### 3. Check structure and numbering
@@ -40,10 +39,9 @@ purely on its own merits as a written document.
 
 ### 4. Check formatting
 
-- 80-column wrap (code blocks exempt). ASCII only (no em dashes, smart quotes,
-  special chars outside code blocks).
-- Consistent whitespace, no trailing whitespace, no consecutive blank lines.
-- Code blocks specify language. Proper heading hierarchy.
+Apply **unslop** § Mechanics, which covers wrapping, placeholder text,
+whitespace, code fences, headings, and cross-references. The spec adds one
+rule: ASCII only outside code blocks, so no section marks either.
 
 ### 5. Fix errors directly. Keep fixes minimal. Check codebase only to resolve
 

@@ -20,9 +20,9 @@ Read and follow **agent-conduct**, **implementation-principles**,
 
 ## Module-per-Function Rule
 
-Split each tool/function into its own module under `modules/local/<tool>/main.nf`
-with a corresponding `tests/main.nf.test`. One process per file, one test file
-per module.
+Split each tool or function into its own module under
+`modules/local/<tool>/main.nf` with a corresponding `tests/main.nf.test`. One
+process per file, one test file per module.
 
 ## nf-core Module Re-use
 

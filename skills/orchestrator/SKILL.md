@@ -6,10 +6,9 @@ description: Orchestrates implementation and review of phase plans via subagents
 # Orchestrator Skill
 
 Read and follow **agent-conduct**, **testing-principles**, and **subagents**
-before starting.
-**subagents** covers orchestrator role, agent selection (always writable),
-briefing, skill discovery, and error handling. This skill covers only the
-orchestrator-specific procedure.
+before starting. **subagents** owns delegation: agent choice, briefing, skill
+discovery, and error handling. This skill covers only the orchestrator
+procedure.
 
 Use skills named in the phase file's Instructions section if specified;
 otherwise follow the skill-discovery procedure in **subagents**.

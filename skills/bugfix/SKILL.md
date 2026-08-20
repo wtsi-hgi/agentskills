@@ -6,10 +6,8 @@ description: Orchestrates standalone or caller-batched bug fixes via implementor
 # Bugfix Skill
 
 Read and follow **agent-conduct**, **testing-principles**, and **subagents**
-before starting.
-**subagents** covers orchestrator role, agent selection (always writable),
-briefing, skill discovery, and error handling. This skill covers only the
-bugfix-specific procedure.
+before starting. **subagents** owns delegation: agent choice, briefing, skill
+discovery, and error handling. This skill covers only the bugfix procedure.
 
 ## Input
 
@@ -75,7 +73,7 @@ append it to the current checklist as a new unchecked bug with a concise
 description and the evidence that exposed it. This includes lint/test gates
 that fail for "unrelated", "pre-existing", or flaky reasons. Do not waive,
 ignore, skip, or quarantine the failure; process the added bug with the same
-fix → review → commit loop before treating the checklist as done. If the new
+fix -> review -> commit loop before treating the checklist as done. If the new
 bug blocks the current item's gates, solve the added bug before marking the
 current item complete.
 
@@ -86,7 +84,7 @@ wrong; if so, note the reasoning in the new checklist entry.
 
 ## Procedure
 
-Process each bug **sequentially**. Complete fix → review → commit before
+Process each bug **sequentially**. Complete fix -> review -> commit before
 starting the next.
 
 ### For each bug:
@@ -120,9 +118,8 @@ Ways to build one, cheapest first:
 8. A differential run of two versions or configs, diffing the outputs.
 
 **Web UI, visual, and interactive bugs take route 4, and the red evidence is a
-screenshot.** Cheaper routes do not apply here: source CSS, class names, and
-isolated computed properties are not the symptom the user saw, so a passing
-unit test proves nothing about a perceptual bug. Drive the real app in a
+screenshot.** A cheaper route cannot prove a perceptual symptom, per
+**testing-principles** § Perceptual Requirements. Drive the real app in a
 browser with the project's browser tooling (its Playwright or Puppeteer setup,
 or a CDP session against the running dev server), extend the project's dev
 fixtures (e.g. `make dev-fixtures`) until the buggy state is reachable, and
@@ -205,7 +202,7 @@ Brief a reviewer subagent with:
   as a newly discovered checklist bug. Return PASS or FAIL with specific
   feedback."
 
-**PASS →** step 4. **FAIL →** new implementor with feedback, then new
+**PASS ->** step 4. **FAIL ->** new implementor with feedback, then new
 reviewer. Max 5 cycles; if still failing, note the problem under the
 checklist item (unchecked), revert, move on.
 
@@ -216,10 +213,10 @@ brief the next implementor explicitly on which behaviours must coexist.
 
 Update the checklist (`- [x]` plus indented summary). `git add` the changed
 files plus the checklist. Commit with a short imperative message
-(≤72 chars), e.g. `Fix off-by-one in batch size calculation`.
+(max 72 chars), e.g. `Fix off-by-one in batch size calculation`.
 
 In standalone mode, do not `git push` unless the user asked. In batched-caller
-mode, never push. Do NOT ask for confirmation — proceed to the next bug.
+mode, never push. Do NOT ask for confirmation. Proceed to the next bug.
 
 ### After all bugs
 

@@ -6,10 +6,10 @@ context: fork
 
 # Phase Reviewer Skill
 
-Read and follow **agent-conduct** before starting.
+Read and follow **agent-conduct** and **unslop** before starting.
 
 You proofread phase plan documents, verifying internal consistency, correct spec
-references, and absence of LLM-typical text errors.
+references, and the text quality **unslop** defines.
 
 ## Input
 
@@ -31,16 +31,17 @@ sections.
 
 ### 3. Check for text errors
 
-Repetition, contradictions, undefined terms, placeholder text (TODO/TBD),
-internal consistency of batch/item numbers and cross-references.
+Apply every **unslop** pattern. Then check what is specific to a phase file:
+repetition, contradictions, undefined terms, and consistent batch and item
+numbering across cross-references.
 
 ### 4. Check formatting
 
 - Item numbering: `<phase>.<sequence>`, continuous.
 - Parallel batches correctly identify independent items with dependencies noted.
 - Every item has both `- [ ] implemented` and `- [ ] reviewed`.
-- ASCII only (no em dashes, no smart quotes). Wrap at 80 columns.
-- Consistent whitespace, no trailing whitespace, no consecutive blank lines.
+- Everything in **unslop** § Mechanics holds, and the file is ASCII only
+  outside code blocks.
 
 ### 5. Fix errors directly
 

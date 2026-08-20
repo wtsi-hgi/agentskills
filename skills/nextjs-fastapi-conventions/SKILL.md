@@ -81,7 +81,7 @@ Every FastAPI response is validated on the frontend with Zod:
   classes.
 - Semantic tokens from `@theme`, not raw colour values.
 - Mobile-first responsive (`sm:`, `md:`, `lg:`).
-- CVA for component variants. Sonner for toasts. next-themes for theme switching.
+- CVA for component variants. Sonner for toasts. next-themes for theming.
 
 ### Tailwind v4 Runtime Theming
 

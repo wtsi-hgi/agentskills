@@ -284,15 +284,15 @@ request methods as a blocker. Never wait separately for `review_requested` or
 Poll up to 20 minutes with an interruptible monitor. On every poll, fetch a
 fresh paginated snapshot and evaluate in this order:
 
-1. PR head is no longer `TARGET_SHA` → abandon the stale wait and reconcile.
-2. New user work exists → stop waiting and run the batched bugfix workflow.
+1. PR head is no longer `TARGET_SHA` -> abandon the stale wait and reconcile.
+2. New user work exists -> stop waiting and run the batched bugfix workflow.
 3. A Copilot review exists with `commit_id == TARGET_SHA` (and, after an
-   explicit request, is not in the recorded review-ID baseline) → review is
+   explicit request, is not in the recorded review-ID baseline) -> review is
    complete; fetch threads immediately.
-4. New unresolved Copilot threads attributable to `TARGET_SHA` exist → review
+4. New unresolved Copilot threads attributable to `TARGET_SHA` exist -> review
    is effectively complete; triage them immediately even if review metadata
    lags.
-5. Deadline expired → report the timeout and the last full snapshot.
+5. Deadline expired -> report the timeout and the last full snapshot.
 6. Otherwise continue waiting.
 
 Never wait for an event merely because a previous event was observed. The

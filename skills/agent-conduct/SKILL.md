@@ -20,8 +20,8 @@ These rules apply to ALL agents regardless of skill.
 - Use language-appropriate test temp dirs (`t.TempDir()`, `tmp_path`, etc.).
 - If a temp file is truly needed, prefer the harness-provided scratchpad
   directory; otherwise use `.tmp/agent/` in the repo and clean up.
-- Do NOT create stray source files (`.go`, `.py`, etc.) outside proper packages
-  - they confuse tooling.
+- Put every new source file in an existing package. A stray `.go` or `.py`
+  outside one confuses tooling.
 
 ## Terminal Safety
 

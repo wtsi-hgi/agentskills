@@ -1,6 +1,6 @@
 ---
 name: testing-principles
-description: Shared guidance for behaviour-focused tests in TDD, regression fixes, acceptance-test implementation, flaky test fixes, and test review. Use when writing, updating, stabilizing, or reviewing tests, or briefing another agent about tests, especially when deciding whether a cleanup/removal request needs a new test.
+description: Shared guidance for behaviour-focused tests in TDD, regression fixes, acceptance-test implementation, perceptual and visual requirements, flaky test fixes, and test review. Use when writing, updating, stabilizing, or reviewing tests, or briefing another agent about tests, especially when deciding whether a cleanup/removal request needs a new test.
 ---
 
 # Testing Principles
@@ -11,6 +11,18 @@ Use tests to declare desired behaviour and prove the system has that
 behaviour. Prefer supported boundaries: public APIs, CLI output, HTTP
 contracts, rendered UI, persisted state, emitted files, errors, or other
 effects visible to users, callers, or downstream steps.
+
+## Perceptual Requirements
+
+When the requirement is perceptual (colour, contrast, spacing, a focus ring, a
+selection state, an animation end state), the supported boundary is the
+rendered result in a real browser. Source CSS, class names, and jsdom computed
+styles do not prove it.
+
+Assert on a screenshot, or on sampled pixels and measured geometry, through the
+same theming mechanism production uses. Compare the element against its own
+fill and nearby surfaces rather than against token names. This holds for a
+test, for a review, and for a bug's red command alike.
 
 ## Avoid
 

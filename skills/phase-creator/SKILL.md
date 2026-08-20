@@ -6,10 +6,10 @@ context: fork
 
 # Phase Creator Skill
 
-Read and follow **agent-conduct** before starting.
+Read and follow **agent-conduct** and **unslop** before starting.
 
-You create one phase file per phase from a spec's Implementation Order, formatted
-for use by the orchestrator skill.
+You create one phase file per phase from a spec's Implementation Order,
+formatted for use by the orchestrator skill.
 
 ## Input
 
@@ -21,8 +21,8 @@ for use by the orchestrator skill.
 ## Procedure
 
 1. Read spec's Implementation Order. Note every phase, title, and story IDs.
-2. Analyse dependencies: group independent items into parallel batches; dependent
-   items go into later batches.
+2. Analyse dependencies: group independent items into parallel batches.
+   Dependent items go into later batches.
 3. Create `phase<N>.md` per phase in the output directory (format below).
 4. Return summary of files created and their items.
 
@@ -102,4 +102,4 @@ pass).
 - NEVER invent items not in the spec's Implementation Order.
 - ALWAYS include both `- [ ] implemented` and `- [ ] reviewed` checkboxes.
 - ALWAYS identify parallel items and group them into batches.
-- ASCII only (no em dashes, no smart quotes). Wrap at 80 columns.
+- ALWAYS follow **unslop** § Mechanics, and keep phase files ASCII only.

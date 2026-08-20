@@ -6,9 +6,8 @@ description: Orchestrates spec creation and review via subagents. Use when desig
 # Spec Writer Skill
 
 Read and follow **agent-conduct** and **subagents** before starting.
-**subagents** covers orchestrator role, agent selection (always writable),
-briefing, skill discovery, and error handling. This skill covers only the
-spec-writing procedure.
+**subagents** owns delegation: agent choice, briefing, skill discovery, and
+error handling. This skill covers only the spec-writing procedure.
 
 ## Input
 
@@ -76,8 +75,8 @@ Launch **spec-reviewer** subagent with: spec-reviewer + conventions skill paths,
 
 - **PASS:** increment consecutive pass count. After 2nd consecutive PASS, go to
   step 6.
-- **FAIL:** reset count. Launch new spec-author with reviewer feedback. Re-launch
-  fresh reviewer. Repeat.
+- **FAIL:** reset count. Launch new spec-author with reviewer feedback, then
+  re-launch a fresh reviewer. Repeat.
 
 ### 6. Text quality proofreading cycle
 

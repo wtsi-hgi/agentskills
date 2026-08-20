@@ -98,10 +98,10 @@ suitable nf-core module exists. Do not hand-edit files under `modules/nf-core/`.
 
 Every process must specify a container. Preference order:
 
-1. **nf-core module** — container defined by the module already.
-2. **Seqera Wave / BioContainers** — find at https://seqera.io/wave/ or
+1. **nf-core module:** container defined by the module already.
+2. **Seqera Wave / BioContainers:** find at https://seqera.io/wave/ or
    https://biocontainers.pro/. Prefer multi-tool BioContainers if available.
-3. **Docker Hub / Quay.io official images** — for common tools.
+3. **Docker Hub / Quay.io official images:** for common tools.
 
 Specify both docker and singularity in the process or config:
 
@@ -136,7 +136,7 @@ Collect all versions into a single `versions.yml` in the main workflow using
 
 ## Configuration
 
-### `nextflow.config` — default params
+### `nextflow.config`: default params
 
 ```groovy
 params {
@@ -167,7 +167,7 @@ profiles {
 }
 ```
 
-### `conf/base.config` — default resources
+### `conf/base.config`: default resources
 
 ```groovy
 process {

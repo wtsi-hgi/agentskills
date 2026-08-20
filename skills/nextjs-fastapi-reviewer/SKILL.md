@@ -42,10 +42,10 @@ Check against nextjs-fastapi-conventions architecture:
 - **Frontend:** `useActionState` (not `useFormState`). Tailwind v4 semantic
   tokens. Runtime theme handling matches the project's Tailwind v4 setup
   (`@theme`, `@theme inline`, `@custom-variant dark`, and next-themes).
-- **Visual regressions:** reject tests that only read source CSS, class names,
-  or isolated computed properties when the requirement is perceptual. Require a
-  browser-rendered assertion such as screenshot or pixel/contrast sampling
-  against the real app stylesheet and the production dark-mode mechanism.
+- **Visual regressions:** apply **testing-principles** § Perceptual
+  Requirements. Reject a perceptual claim proven only from source CSS, class
+  names, or isolated computed properties. The real app stylesheet and the
+  production dark-mode mechanism are part of what the assertion must exercise.
 
 ### 5. Verify code quality
 

@@ -70,14 +70,29 @@ sentence-level tells in both.
 
 ## Formatting
 
-- **No em dashes.** Use a period or a comma. Reaching for parentheses instead
-  trades one tell for another. ASCII only: straight quotes, `-`, `...`.
+- **Plain characters.** No em dash, en dash, curly quote, or ellipsis
+  character: typography is the clearest tell there is. Write `-`, straight
+  quotes, `...`, and `->` for an arrow. Reaching for parentheses in place of an
+  em dash trades one tell for another, so end the sentence or use a comma. A
+  section mark in a cross-reference (`agent-conduct § Git Safety`) is fine.
 - **Colons.** Fine before a list or an example. Not as a mid-sentence
   connector.
 - **Bold sparingly.** Not on every proper noun. A bold label that names an
   item and is followed by new detail is fine. A label that restates the line
   after it is the tell.
 - **No decorative emoji.**
+
+## Mechanics
+
+Every markdown file this repo writes:
+
+- Wraps prose at 80 columns, with code blocks exempt.
+- Carries no placeholder text: no TODO, no TBD, no unfinished section.
+- Has no trailing whitespace and no consecutive blank lines.
+- Names a language on every fenced code block.
+- Has one h1, no skipped heading levels, and internal references that resolve.
+
+Specs and phase plans are stricter still: ASCII only, per **spec-author**.
 
 ## Chat Summaries
 

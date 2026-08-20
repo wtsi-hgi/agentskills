@@ -81,8 +81,8 @@ No errors for modified files.
 
 ### 9. Verdict
 
-- **PASS** — optionally note minor non-blocking suggestions.
-- **FAIL** — specific, actionable feedback: missing tests, unmet spec
+- **PASS** - optionally note minor non-blocking suggestions.
+- **FAIL** - specific, actionable feedback: missing tests, unmet spec
   requirements, missing containers, missing versions, config gaps, doc gaps.
 
 ## Batch Reviews

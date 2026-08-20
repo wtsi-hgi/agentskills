@@ -96,9 +96,9 @@ As a <role>, I want <capability>, so that <benefit>.
 
 ### Formatting
 
-- 80-column wrap. ASCII only (`-` not em dash, straight quotes, `...` not
-  ellipsis).
-- Code blocks specify language. Use 4-column TSV for data format examples.
+- Follow **unslop** § Mechanics. Specs are stricter: ASCII only, so `-` not em
+  dash, straight quotes, `...` not ellipsis, and no section marks.
+- Use 4-column TSV for data format examples.
 - Prefer terse bullet lists over prose. Omit articles and filler where meaning
   is preserved.
 - Never repeat information already in signatures or test expectations.

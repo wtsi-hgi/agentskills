@@ -8,9 +8,9 @@ description: Reviews changes on current branch vs base. Checks code quality, bug
 Read and follow **agent-conduct**, **implementation-principles**,
 **testing-principles**, **code-smells**, **subagents**, and the project's
 **conventions** skill before starting. Use **pr-resolver** for GitHub PR
-review comments plus CI/Copilot loops. **subagents** covers orchestrator role,
-agent selection (always writable), briefing, skill discovery, and error
-handling. This skill covers only PR-review specifics.
+review comments plus CI/Copilot loops. **subagents** owns delegation: agent
+choice, briefing, skill discovery, and error handling. This skill covers only
+the PR-review procedure.
 
 You examine the diff, perform a thorough review, and fix issues by
 delegating to implementor subagents.

@@ -30,7 +30,8 @@ Read and follow **agent-conduct**, **implementation-principles**,
 ### Contract Tests
 
 When adding/modifying an endpoint, follow the contract flow from
-nextjs-fastapi-conventions (Pydantic -> Zod -> contract test -> `backendJson()`).
+nextjs-fastapi-conventions: Pydantic, then Zod, then contract test, then
+`backendJson()`.
 Ensure both schemas agree on field names, types, and constraints.
 
 ### Frontend Design
