@@ -1,6 +1,6 @@
 ---
 name: testing-principles
-description: "Shared guidance for behaviour-focused tests in TDD, regression fixes, acceptance-test implementation, perceptual and visual requirements, flaky test fixes, and test review. Use when writing, updating, stabilizing, or reviewing tests, or briefing another agent about tests, especially when deciding whether a cleanup/removal request needs a new test."
+description: "Shared guidance for behaviour-focused tests in TDD, regression fixes, acceptance-test implementation, perceptual and visual requirements, property and generated-input coverage, flaky test fixes, and test review. Use when writing, updating, stabilizing, or reviewing tests, or briefing another agent about tests, especially when deciding whether a cleanup/removal request needs a new test."
 ---
 
 # Testing Principles
@@ -30,6 +30,31 @@ Do not write tests whose only claim is an implementation detail: private
 helpers, source layout, filenames, imports, CSS classes, deleted files,
 removed functions, removed routes, removed modules/processes, or the mere
 absence of an old feature.
+
+## Properties and Generated Input
+
+A worked example the spec names earns a table test. A claim that must hold
+across a whole domain earns generated input as well: overflow safety over a
+numeric range, a round-trip that must return the original, a parser that must
+never panic on any input.
+
+Name the property before generating anything. Four shapes carry most cases:
+
+- **Oracle.** A slower obviously-correct version agrees with the fast one.
+- **Round-trip.** Decoding an encoded value returns the input.
+- **Invariant.** Output stays in range, a total is conserved, nothing panics.
+- **Two paths agree.** A cached or optimised path matches the plain one.
+
+Assert the property, never a second copy of the implementation. Generated
+input that recomputes the code the same way proves only self-consistency.
+
+Generated input supplements the spec's worked examples and never replaces
+them. A named example is a requirement; a generator that happens to reach it
+today may not tomorrow.
+
+Keep the generator deterministic, seeded from a fixed value, so a failure
+reproduces. A failing generated case is a finding, not flakiness: pin that
+exact input as a permanent regression case, then fix the code.
 
 ## Flaky Tests
 
@@ -61,4 +86,6 @@ prove old artifacts are absent. Accept a cleanup/removal with no new test only
 when the implementor explicitly justifies that no supported behaviour changed
 and the existing behavioural tests and quality gates pass. Reject flaky-test
 changes that merely skip, quarantine, delete, or weaken the check instead of
-preserving its behavioural intent.
+preserving its behavioural intent. Reject generated-input tests whose
+assertion re-implements the code under test, and reject a generated failure
+that is silenced or re-seeded away instead of pinned as a regression case.

@@ -29,7 +29,7 @@ These skills are tech-stack-agnostic and used across all projects:
 |---|---|
 | **agent-conduct** | Mandatory safety rules for all agents. Read before starting any work. |
 | **implementation-principles** | Shared cross-language delivery workflow for the simplest sufficient solution, maximum semantic reuse, and avoiding speculative abstractions. |
-| **testing-principles** | Shared guidance for behaviour-focused tests, regression coverage, perceptual requirements, and stable test design. |
+| **testing-principles** | Shared guidance for behaviour-focused tests, regression coverage, perceptual requirements, property and generated-input coverage, and stable test design. |
 | **code-smells** | Named code smell baseline for reviewing changed code. Referenced by pr-reviewer and the per-stack reviewer skills. |
 | **writing-for-agents** | Standards for documents agents read and act on: skill files, subagent briefings, AGENTS.md/CLAUDE.md, and docs a skill points at. |
 | **prose-principles** | Sentence-level prose rules shared by every kind of writing here: words to replace, filler to cut, plain constructions to use. |
@@ -55,7 +55,7 @@ Skills for Go projects using GoConvey testing:
 
 | Skill | Purpose |
 |---|---|
-| **go-conventions** | Shared conventions for Go projects. Copyright boilerplate, code quality, GoConvey testing, architecture, and commands. Referenced by go-implementor, go-reviewer, and workflow skills. |
+| **go-conventions** | Shared conventions for Go projects. Copyright boilerplate, code quality, GoConvey and fuzz testing, architecture, and commands. Referenced by go-implementor, go-reviewer, and workflow skills. |
 | **go-implementor** | Go TDD implementation workflow. References shared implementation and testing principles, go-conventions, and agent-conduct. |
 | **go-reviewer** | Review Go implementations against spec acceptance tests and shared implementation principles. |
 

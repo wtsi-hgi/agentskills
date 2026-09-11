@@ -1,6 +1,6 @@
 ---
 name: go-conventions
-description: "Shared conventions for Go projects. Copyright boilerplate, code quality, GoConvey testing, architecture, and commands. Referenced by go-implementor, go-reviewer, and workflow skills."
+description: "Shared conventions for Go projects. Copyright boilerplate, code quality, GoConvey and fuzz testing, architecture, and commands. Referenced by go-implementor, go-reviewer, and workflow skills."
 ---
 
 # Go Conventions
@@ -71,6 +71,46 @@ All new source files must start with:
 - Every spec.md acceptance test MUST have a corresponding GoConvey test. No
   stubs, no hardcoded results, no swallowed failures, no build-tag exclusions.
 
+### Fuzzing
+
+Reach for a fuzz target when a claim must hold across a whole input domain
+rather than at the worked examples a spec names: overflow and rounding safety
+over a numeric range, a round-trip through an encoder, a parser that must
+never panic. **testing-principles** decides when one is owed and what property
+to assert; this section covers the Go mechanics.
+
+```go
+func FuzzScale(f *testing.F) {
+    f.Add(int64(0), int64(1), int64(1))
+    f.Add(int64(math.MaxInt64), int64(2), int64(2))
+
+    f.Fuzz(func(t *testing.T, value, num, den int64) {
+        if den == 0 {
+            return // the documented panic has its own Convey test
+        }
+
+        got, want := mathx.Scale(value, num, den), slowExactScale(value, num, den)
+        if got != want {
+            t.Fatalf("Scale(%d,%d,%d) = %d, want %d", value, num, den, got, want)
+        }
+    })
+}
+```
+
+- Assert with plain `if` and `t.Fatalf` inside `f.Fuzz`, not `So()`. The body
+  runs millions of times, so the loop rule above applies.
+- `f.Add` every boundary, zero and sign combination. Without `-fuzz`, `go
+  test` runs the seed corpus and nothing else, so the seeds are what CI
+  executes and they must stand on their own as a table test.
+- Assert a property, never a second copy of the implementation. A target that
+  recomputes the function the same way proves only self-consistency.
+- Constrain the domain in the target and leave documented panics and sentinel
+  errors to their Convey tests.
+- Commit the crasher. A failure writes its input to
+  `<pkg>/testdata/fuzz/FuzzX/<hash>`, beside the package and not at the module
+  root. That file is the regression test: it then runs under plain `go test`,
+  so `git add` it with the fix.
+
 ### Memory-Bounded Test Pattern
 
 ```go
@@ -108,6 +148,9 @@ func TestStreamingMemory(t *testing.T) {
 ```bash
 # Tests
 CGO_ENABLED=1 go test -tags netgo --count 1 ./<path> -v -run <TestFunc>
+
+# Fuzz exploration (bounded; without -fuzz only the seed corpus runs)
+go test ./<path> -fuzz <FuzzFunc> -fuzztime 60s
 
 # Linter (check + autofix)
 golangci-lint run --fix
