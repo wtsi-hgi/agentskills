@@ -203,3 +203,7 @@ rewritten for this repo's conventions and multi-harness workflow:
 - The red feedback loop in **bugfix** and the frontier rounds in
   **spec-writer** come from that collection's `diagnosing-bugs` and `grilling`
   skills.
+- The escalation ladder, the shared-function root cause, and the
+  do-not-economize carve-out in **implementation-principles** come from the
+  `ponytail` skill in
+  [DietrichGebert/ponytail](https://github.com/dietrichgebert/ponytail).

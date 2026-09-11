@@ -1,6 +1,6 @@
 ---
 name: implementation-principles
-description: "Shared cross-language delivery workflow and guidance for implementing the simplest sufficient solution, maximizing reuse of existing code, fixing root causes, proving work against the real artifact, and avoiding speculative abstractions, dependencies, and refactors. Use when implementing or reviewing code in any language."
+description: "Shared cross-language delivery workflow and guidance for implementing the simplest sufficient solution, maximizing reuse of existing code, fixing root causes, proving work against the real artifact, avoiding speculative abstractions, dependencies, and refactors, and never trading away validation, error handling, security, or accessibility to shorten a diff. Use when implementing or reviewing code in any language."
 ---
 
 # Implementation Principles
@@ -17,6 +17,28 @@ Search the relevant call paths, modules, types, helpers, configuration, tests,
 and dependencies. Identify what can be called, composed, or extended before
 designing anything new. Check whether configuration or a small change to an
 existing responsibility already expresses the required behaviour.
+
+## Escalation Order
+
+Climb only as far as the behaviour needs, and stop at the first step that
+holds:
+
+1. No code at all, because the behaviour is already there or was never asked
+   for.
+2. Existing code in this repository: the helper, pattern, or extension point
+   already written.
+3. The standard library.
+4. A native platform or framework feature.
+5. A dependency the project already has.
+6. New code, as the smallest thing that satisfies the behaviour.
+
+Climb after understanding the problem, not instead of it. The smallest change
+in the wrong place is a second defect, not a shorter diff. When two options at
+the same step cost the same, take the one that handles the edge cases: less
+code does not mean the flimsier algorithm.
+
+When a request is more elaborate than the need it names, say what would cover
+that need with less, and let the requester choose.
 
 ## Domain Shape
 
@@ -55,6 +77,11 @@ hides the defect and outlives it: a nil check around a value that should never
 be nil, a retry around a deterministic failure, a widened type, a tolerance
 loosened until the assertion stops firing.
 
+One wrong line can have many callers. When it sits in a shared function, fix
+it there and check every caller: one correction in the shared function is a
+smaller change than one per call site, and repairing only the path the report
+names leaves its siblings broken.
+
 When the cause is genuinely outside the current scope, make the smallest
 in-scope fix and report the rest. Do not paper over it (see **agent-conduct**
 on blockers).
@@ -70,12 +97,10 @@ reviewer can re-run the same comparison instead of taking your word for it.
 
 ## Prefer
 
-- Reuse existing code and established extension points.
 - Compose existing operations before adding another abstraction.
 - Keep changes local and preserve stable interfaces unless the requirement
   demands otherwise.
-- Use straightforward control flow, the standard library, and dependencies
-  already in the project.
+- Use straightforward control flow.
 - Consolidate duplicated business rules so there is one authoritative path.
 
 ## Avoid
@@ -92,12 +117,26 @@ reviewer can re-run the same comparison instead of taking your word for it.
   responsibility. Reuse semantics; do not couple unrelated concepts merely to
   reduce line count.
 
+## Do Not Economize On
+
+The smallest sufficient change is still a complete one. Keep, at full
+strength:
+
+- Input validation at trust boundaries.
+- Error handling that prevents data loss or corruption.
+- Security.
+- Accessibility.
+
 ## Comments
 
 Keep the comment that carries a non-obvious why: the constraint, the bug it
 works around, the reason the obvious approach fails. Write the code so
 anything else is unnecessary, rather than writing narration and deleting it
 later.
+
+A ceiling accepted on purpose is one of those whys. When the simple approach
+carries a known limit, such as a global lock, a quadratic scan, or a naive
+heuristic, the comment names the limit and what would lift it.
 
 Narration to leave unwritten: a restatement of the next line, a phase label
 above a block, a note about what the code used to do, a description of the
