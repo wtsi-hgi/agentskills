@@ -31,7 +31,25 @@ Every spec.md acceptance test must have a corresponding GoConvey test. Apply
 the **testing-principles** review rule. Reject missing, stubbed, circumvented,
 or hardcoded-result tests.
 
-### 4. Verify implementation correctness
+### 4. Prove the tests catch defects (triggered, not routine)
+
+Escalate to **go-test-strength** when any of these holds:
+
+- The spec section carries a clause of the form "cannot pass", "asserted
+  absent", "so a naive X", or "asserted side by side". Reading the tests
+  cannot verify one: the requirement is that a named wrong implementation
+  fails, so build that implementation and watch the suite fail.
+- The spec or architecture doc calls the package foundational, in words like
+  "the single definition of" or "every derivation flows through it".
+- A test looks like it would still pass against a broken implementation.
+
+Scope the sweep to the functions the trigger names, not the whole package. A
+surviving non-equivalent mutant is a FAIL, reported with the input that
+exposes it and the assertion the suite is missing.
+
+When nothing triggers, skip this step and say so in the verdict.
+
+### 5. Verify implementation correctness
 
 Confirm implementation matches spec: packages, files, function signatures,
 types, format strings, status values, field names.
@@ -41,7 +59,7 @@ types, format strings, status values, field names.
 - Mock-based tests: mock implements interface correctly.
 - Filesystem tests: permissions, GID, symlinks, atomicity as specified.
 
-### 5. Verify code quality
+### 6. Verify code quality
 
 Apply all rules from implementation-principles and go-conventions (modern Go,
 style, testing patterns, copyright boilerplate, import grouping).
@@ -50,7 +68,7 @@ Match the changed code against **code-smells**. Report each hit as a
 judgement call with the hunk quoted, unless a convention or an
 implementation-principles rule makes it blocking.
 
-### 6. Run linter
+### 7. Run linter
 
 ```
 golangci-lint run
@@ -58,11 +76,12 @@ golangci-lint run
 
 No issues for modified files.
 
-### 7. Verdict
+### 8. Verdict
 
 - **PASS** - optionally note minor non-blocking suggestions.
-- **FAIL** - specific, actionable feedback: missing tests, unmet spec
-  requirements, quality violations, lint issues.
+- **FAIL** - specific, actionable feedback: missing tests, tests that tolerate
+  an injected defect, unmet spec requirements, quality violations, lint
+  issues.
 
 ## Batch Reviews
 

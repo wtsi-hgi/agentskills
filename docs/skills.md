@@ -57,7 +57,7 @@ Skills for Go projects using GoConvey testing:
 |---|---|
 | **go-conventions** | Shared conventions for Go projects. Copyright boilerplate, code quality, GoConvey and fuzz testing, architecture, and commands. Referenced by go-implementor, go-reviewer, and workflow skills. |
 | **go-implementor** | Go TDD implementation workflow. References shared implementation and testing principles, go-conventions, and agent-conduct. |
-| **go-reviewer** | Review Go implementations against spec acceptance tests and shared implementation principles. |
+| **go-reviewer** | Review Go implementations against spec acceptance tests and shared implementation principles. Escalates to go-test-strength when a spec clause names an implementation that must fail. |
 | **go-test-strength** | Prove a Go suite catches defects by injecting faults one at a time and requiring it to fail. Reached from go-reviewer on trigger, or invoked directly to audit a suite or compare two implementations of one spec. |
 
 ### Nextflow
@@ -105,7 +105,11 @@ The skills form a layered system:
    it. **writing-for-agents** covers a different axis: the structure of a
    document an agent acts on.
 4. **Conventions skills** define tech-stack-specific standards and commands.
-5. **Implementor/reviewer skills** provide TDD cycles and review checklists.
+5. **Implementor/reviewer skills** provide TDD cycles and review checklists. A
+   reviewer may escalate to a deeper skill on a stated trigger rather than on
+   every run, which is how **go-reviewer** reaches **go-test-strength**. The
+   trigger lives in the reviewer; the deep skill stays out of context until it
+   fires, and stays directly invocable on its own.
 6. **Workflow skills** coordinate multi-step processes using the appropriate
    tech-stack skills.
 

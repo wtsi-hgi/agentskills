@@ -129,7 +129,8 @@ Identify the tech stack from the codebase and use the matching triplet:
 `go-conventions`, `python-implementor`). Available stacks are in your system
 prompt. Override with any skills named in the task input (phase file
 Instructions, caller arguments). For tasks that write or review tests, also
-include `testing-principles`.
+include `testing-principles`. Give a reviewer the path to `go-test-strength`
+too; that skill's own trigger decides whether it gets read.
 
 ## Briefing
 
