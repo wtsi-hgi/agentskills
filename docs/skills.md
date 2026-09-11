@@ -2,8 +2,8 @@
 
 A collection of [agentskills.io](https://agentskills.io/) skills for AI coding
 agents. These skills provide structured workflows for specification writing, TDD
-implementation, code review, PR review, PR comment resolution, and bug fixing
-across multiple tech stacks.
+implementation, code review, test-suite verification, PR review, PR comment
+resolution, and bug fixing across multiple tech stacks.
 
 ## Setup
 
@@ -58,6 +58,7 @@ Skills for Go projects using GoConvey testing:
 | **go-conventions** | Shared conventions for Go projects. Copyright boilerplate, code quality, GoConvey and fuzz testing, architecture, and commands. Referenced by go-implementor, go-reviewer, and workflow skills. |
 | **go-implementor** | Go TDD implementation workflow. References shared implementation and testing principles, go-conventions, and agent-conduct. |
 | **go-reviewer** | Review Go implementations against spec acceptance tests and shared implementation principles. |
+| **go-test-strength** | Prove a Go suite catches defects by injecting faults one at a time and requiring it to fail. Reached from go-reviewer on trigger, or invoked directly to audit a suite or compare two implementations of one spec. |
 
 ### Nextflow
 
@@ -166,6 +167,11 @@ Detail that only some runs need can live in a skill's own `references/`
 directory, reached by a relative link from its `SKILL.md`. Keep the link one
 level deep, and keep anything every run needs in the `SKILL.md` itself.
 
+An executable helper belongs there too when a procedure's discipline is easier
+to enforce in code than in prose, as `go-test-strength/references/mutate.sh`
+does. Commit it with the executable bit set and have the `SKILL.md` invoke it
+by its relative path.
+
 ## Adding New Tech Stacks
 
 Write every new or edited skill against **writing-for-agents**, and apply
@@ -184,6 +190,10 @@ To add support for a new tech stack:
    format above.
 
 The generic workflow skills will automatically work with the new stack.
+
+Skills beyond the triplet are optional and stack-specific. **go-test-strength**
+is one: the method generalises to any language, but its commands and its
+mutation driver do not, so a new stack that wants it needs its own.
 
 ## Credits
 

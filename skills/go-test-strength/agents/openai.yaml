@@ -1,0 +1,6 @@
+interface:
+  display_name: "Go Test Strength"
+  short_description: "Mutation-driven proof that a Go suite catches defects"
+  default_prompt: "Use $go-test-strength to inject defects into a Go package and report which ones its tests fail to catch."
+policy:
+  allow_implicit_invocation: false

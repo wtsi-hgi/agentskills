@@ -2,8 +2,9 @@
 
 This repository contains [agentskills.io](https://agentskills.io/) skills for
 AI coding agents. The skills provide structured workflows for specification
-writing, TDD implementation, code review, PR review, PR comment resolution, and
-bug fixing across Go, Nextflow, Next.js + FastAPI, and Python projects.
+writing, TDD implementation, code review, test-suite verification, PR review,
+PR comment resolution, and bug fixing across Go, Nextflow, Next.js + FastAPI,
+and Python projects.
 
 ## Quick Start
 
