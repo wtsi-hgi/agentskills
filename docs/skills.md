@@ -28,7 +28,7 @@ These skills are tech-stack-agnostic and used across all projects:
 | Skill | Purpose |
 |---|---|
 | **agent-conduct** | Mandatory safety rules for all agents. Read before starting any work. |
-| **implementation-principles** | Shared cross-language delivery workflow for the simplest sufficient solution, maximum semantic reuse, and avoiding speculative abstractions. |
+| **implementation-principles** | Shared cross-language delivery workflow for the simplest sufficient solution, maximum semantic reuse, scoping costly mechanisms to the case that needs them, and avoiding speculative abstractions. |
 | **testing-principles** | Shared guidance for behaviour-focused tests, regression coverage, perceptual requirements, property and generated-input coverage, and stable test design. |
 | **code-smells** | Named code smell baseline for reviewing changed code. Referenced by pr-reviewer and the per-stack reviewer skills. |
 | **writing-for-agents** | Standards for documents agents read and act on: skill files, subagent briefings, AGENTS.md/CLAUDE.md, and docs a skill points at. |

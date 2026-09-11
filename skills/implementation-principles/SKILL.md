@@ -1,6 +1,6 @@
 ---
 name: implementation-principles
-description: "Shared cross-language delivery workflow and guidance for implementing the simplest sufficient solution, maximizing reuse of existing code, fixing root causes, proving work against the real artifact, avoiding speculative abstractions, dependencies, and refactors, and never trading away validation, error handling, security, or accessibility to shorten a diff. Use when implementing or reviewing code in any language."
+description: "Shared cross-language delivery workflow and guidance for implementing the simplest sufficient solution, maximizing reuse of existing code, fixing root causes, proving work against the real artifact, scoping a costly mechanism to the case that needs it, avoiding speculative abstractions, dependencies, and refactors, and never trading away validation, error handling, security, or accessibility to shorten a diff. Use when implementing or reviewing code in any language."
 ---
 
 # Implementation Principles
@@ -39,6 +39,26 @@ code does not mean the flimsier algorithm.
 
 When a request is more elaborate than the need it names, say what would cover
 that need with less, and let the requester choose.
+
+## Scope The Mechanism
+
+The escalation order says where code may come from. Within a step, take the
+narrowest mechanism that meets the constraint, and scope it to the case that
+needs it.
+
+One hard case does not set the strategy for its neighbours: unbounded-precision
+arithmetic belongs in the function whose width is unbounded, not in the other
+eight; a mutex covers the path that is concurrent, not the package; a cache
+wraps the call that is expensive, not every call; reflection serves the case
+whose type is unknown. Read the constraint as written, since "must not wrap" is
+narrower than "arbitrary precision", and the narrower reading often has a
+fixed-width answer already in the standard library.
+
+For a primitive every caller routes through, per-call cost is part of the
+contract rather than a tuning detail, because it multiplies by every call site.
+Settle it once from a measurement, not an assumption. This is not the premature
+optimization the Avoid list names: that rule excludes work unrelated to the
+current requirement, and a shared primitive's cost is part of its requirement.
 
 ## Domain Shape
 
