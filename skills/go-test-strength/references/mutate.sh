@@ -6,7 +6,8 @@
 #
 # <old.txt> holds the exact source text to replace and <new.txt> its
 # replacement. Both are matched literally, so Go punctuation cannot be mangled
-# by a pattern. The target file is always restored, including on failure.
+# by a pattern. The target file — and any testdata/ fixtures, which a mutant
+# running in update mode can rewrite — are always restored, including on failure.
 #
 # Prints "<VERDICT>  <label>":
 #
@@ -35,7 +36,19 @@ command -v python3 >/dev/null 2>&1 || {
 
 backup=$(mktemp)
 cp "$target" "$backup"
-trap 'cp "$backup" "$target"; rm -f "$backup"' EXIT
+# Snapshot testdata/ too: a mutant that runs tests in update mode rewrites the
+# package's golden fixtures, and later mutants must not run against poisoned
+# state. rm -rf + re-copy (not in-place restore) so files a mutant deleted come back.
+tdata=""
+if [ -d "$work/$pkg/testdata" ]; then
+    tdata=$(mktemp -d)
+    cp -R "$work/$pkg/testdata/." "$tdata/"
+fi
+trap 'cp "$backup" "$target"; rm -f "$backup"
+      if [ -n "$tdata" ]; then
+          rm -rf "$work/$pkg/testdata" && cp -R "$tdata/." "$work/$pkg/testdata/"
+          rm -rf "$tdata"
+      fi' EXIT
 
 verdict() { printf '%-9s %s\n' "$1" "$label"; exit 0; }
 
