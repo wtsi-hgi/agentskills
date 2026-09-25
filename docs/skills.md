@@ -33,7 +33,7 @@ These skills are tech-stack-agnostic and used across all projects:
 | **code-smells** | Named code smell baseline for reviewing changed code. Referenced by pr-reviewer and the per-stack reviewer skills. |
 | **writing-for-agents** | Standards for documents agents read and act on: skill files, subagent briefings, AGENTS.md/CLAUDE.md, and docs a skill points at. |
 | **prose-principles** | Sentence-level prose rules shared by every kind of writing here: words to replace, filler to cut, plain constructions to use. |
-| **final-response** | Applies prose-principles to an end-turn chat response, and cuts filler, repetition, process narration, and fake enthusiasm. |
+| **final-response** | Applies prose-principles to every chat message, including progress updates, cuts filler, repetition, process narration, and fake enthusiasm, and ends each message with the user's next action. |
 | **unslop** | Applies prose-principles to a Markdown file, and adds repository Markdown mechanics for specs, phase plans, checklists, docs, and READMEs. |
 | **subagents** | Shared rules for orchestrating agents that delegate work to subagents. Referenced by orchestrator, bugfix, spec-writer, pr-reviewer, and pr-resolver. |
 | **bugfix** | Orchestrates bug fixes via implementor and reviewer subagents using TDD. Reproduces each bug with a red command before fixing it, handles bugs sequentially, tracks them in a dated checklist, and commits each fix. |

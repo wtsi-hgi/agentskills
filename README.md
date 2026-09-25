@@ -42,6 +42,20 @@ Start a new Claude Code session and the skills are available. Skills update in
 place because they are symlinked, so a `git pull` in `~/.agents` is all it takes
 to get the latest versions.
 
+### Every Chat Message
+
+A skill applies only once the agent loads it, so an agent can skip
+**final-response** on some turns. To apply it to every message, including
+progress updates on long tasks, add this line to your global instructions:
+`~/.claude/CLAUDE.md` for Claude Code, `~/.codex/AGENTS.md` for Codex.
+
+```markdown
+- Before sending any chat message, including progress updates, read and follow `~/.agents/skills/final-response/SKILL.md`. End every message with a `**Your next action:**` line that restates any open blocker.
+```
+
+Every message then ends with what the user must do next, so a pending blocker
+never hides in the scrollback.
+
 ## Documentation
 
 See [docs/skills.md](docs/skills.md) for the full skill inventory, setup notes,

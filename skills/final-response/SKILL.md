@@ -1,11 +1,14 @@
 ---
 name: final-response
-description: "Remove filler, repetition, process narration, fake enthusiasm, and AI-sounding prose from every end-turn chat response. Use before sending any final answer, including direct answers, explanations, reviews, recommendations, questions, blockers, and completion reports. Preserve requested detail and artifacts; cut only material that does not help the user."
+description: "Remove filler, repetition, process narration, fake enthusiasm, and AI-sounding prose from every chat message, and end each one with a \"Your next action\" line. Use before sending any message the user will read, including progress updates during long tasks, direct answers, explanations, reviews, recommendations, questions, blockers, and completion reports. Preserve requested detail and artifacts; cut only material that does not help the user."
 ---
 
 # Final Response Skill
 
 Write the response the user needs to read, then stop.
+
+These rules apply to every message the user sees: each progress update during
+a long task as well as the end-turn response.
 
 Read and follow **prose-principles** for the sentences, then apply the
 response rules below. Markdown files are **unslop**'s job, not this skill's.
@@ -19,6 +22,29 @@ Every sentence must do at least one job:
 - State a decision or action the user must take.
 
 Delete sentences that do none of these.
+
+## End With Your Next Action
+
+End every message with one line, in this exact form, so the user can read only
+the last line of the latest message and know whether anything waits on them:
+
+```text
+**Your next action:** <what the user must do, or "Nothing">
+```
+
+- **Working:** `Nothing - I'm continuing.` when no input is needed.
+- **Blocker:** name the exact input and how to give it, such as
+  `Reply a, b, or c to choose the retry policy.`
+- **Done:** `Nothing - done.`, or the one follow-up only the user can do,
+  such as `Review and merge the PR.`
+- **Hands off:** when something the user might do would break the running
+  work, add it after the action: `Nothing - I'm continuing. Leave the
+  feature branch alone until I report the push.`
+
+Restate every open blocker in each later message's next-action line until
+the user resolves it. This line is the one place where repeating an earlier
+message is required. Keep it to one sentence, or two when a hands-off warning
+applies.
 
 ## Lead With The Answer
 
@@ -65,8 +91,9 @@ every touched file or narrate routine implementation steps.
 ### Partial Or Blocked Work
 
 State what is complete, the exact blocker, and what input or external change
-is needed. Do not disguise partial completion as success. Do not bury the
-blocker after a long progress summary.
+is needed, and repeat that input in the next-action line. Do not disguise
+partial completion as success. Do not bury the blocker after a long progress
+summary.
 
 ## Cut Chat Bullshit
 
@@ -128,5 +155,7 @@ Before sending, ask:
 3. Is any fact stated twice?
 4. Is any paragraph present mainly to sound helpful, careful, or complete?
 5. Can the response end one sentence earlier?
+6. Does the last line state the user's next action, including every blocker
+   still open?
 
 Cut until every remaining sentence earns the user's attention.

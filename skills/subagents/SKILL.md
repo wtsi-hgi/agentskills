@@ -178,7 +178,8 @@ rather than wait forever on an unresponsive command.
 
 ### Codex Harness
 
-- Send concise progress updates while long-running subagents are active.
+- Send concise progress updates through **final-response** while long-running
+  subagents are active.
 - Track spawned agent IDs. Completed agents need no cleanup when the harness
   exposes no close operation. Interrupt an agent that is still running after
   its work becomes irrelevant.

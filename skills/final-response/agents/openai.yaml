@@ -1,4 +1,4 @@
 interface:
   display_name: "Final Response"
-  short_description: "Cuts filler from every final chat response"
-  default_prompt: "Use $final-response before sending the final answer, to keep only concrete, useful, and verified content."
+  short_description: "Cuts filler and ends every chat message with the user's next action"
+  default_prompt: "Use $final-response before sending any chat message, including progress updates, to keep only concrete, useful, and verified content and end with the user's next action."
