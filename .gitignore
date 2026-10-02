@@ -1,2 +1,5 @@
 # Agent scratch files
 .tmp/
+
+# Automatically synced skills
+/skills/synced/
