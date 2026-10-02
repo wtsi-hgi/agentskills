@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deliver"
+  short_description: "Track every branch through review and merge"
+  default_prompt: "Use $deliver to complete this change and guide every resulting PR, including incidental fixes, through review and my merges until all merges are verified."
+policy:
+  allow_implicit_invocation: false

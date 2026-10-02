@@ -37,6 +37,7 @@ These skills are tech-stack-agnostic and used across all projects:
 | **unslop** | Applies prose-principles to a Markdown file, and adds repository Markdown mechanics for specs, phase plans, checklists, docs, and READMEs. |
 | **subagents** | Shared rules for orchestrating agents that delegate work to subagents. Referenced by orchestrator, bugfix, spec-writer, pr-reviewer, and pr-resolver. |
 | **bugfix** | Orchestrates bug fixes via implementor and reviewer subagents using TDD. Reproduces each bug with a red command before fixing it, handles bugs sequentially, tracks them in a dated checklist, and commits each fix. |
+| **deliver** | Explicit workflow through review and verified user merges. |
 | **frontend-design** | Create distinctive, production-grade frontend interfaces that avoid generic AI aesthetics. Use when building web components, pages, dashboards, or styling web UI. |
 | **orchestrator** | Orchestrates implementation and review of phase plans via subagents, and drives the real app through the project's verify skill when one exists. Use when given a phase MD file to complete. |
 | **verification** | Creates, proves, and maintains a project-local skill that drives the real app the way a user does and captures evidence. Use when a project has no scripted way to prove user-visible behaviour. |
@@ -125,6 +126,27 @@ The workflow skills are generic. They discover which implementor, reviewer, and
 conventions skills to use based on project context, so the same workflow can
 drive Go, Nextflow, Next.js + FastAPI, or Python projects.
 
+### Deliver a Change Through Merge
+
+Explicitly invoke [deliver](../skills/deliver/SKILL.md) to complete a change,
+push, open a PR, and run **pr-resolver**. The same invocation covers every
+branch created during the work, including incidental fixes. All must complete
+the workflow. The agent asks you to merge each ready PR and report back,
+verifies the merge, then rebases and rechecks the next branch. Delivery is
+complete only when every PR is verified merged; merging stays with you.
+While a branch waits on you, review, or CI, the agent continues on an unblocked
+branch. It pauses only when no queued work can advance.
+
+```text
+$deliver Fix the crash when importing an empty CSV.
+$deliver Implement .docs/phases/phase-3.md.
+$deliver Take the completed work on this branch through PR resolution.
+```
+
+Use `/deliver` in harnesses that expose skills as slash commands. Ordinary
+feature and bugfix requests do not activate this workflow. It uses the existing
+skills' quality gates and reports blockers or timeouts as incomplete delivery.
+
 ## Skill File Conventions
 
 ### Frontmatter
@@ -166,7 +188,8 @@ policy:
 
 This keeps stack implementors and reviewers, spec and phase workers, and the
 delegation helper out of implicit routing. Public workflow skills and directly
-useful conventions keep the default implicit policy.
+useful conventions keep the default implicit policy, except explicit-only
+workflows such as **deliver**.
 
 Keep `display_name` matching the skill's h1, `short_description` under about
 45 characters, and `default_prompt` one sentence referencing the skill as
