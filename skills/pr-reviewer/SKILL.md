@@ -13,12 +13,14 @@ choice, briefing, skill discovery, and error handling. This skill covers only
 the PR-review procedure.
 
 You examine the diff, perform a thorough review, and fix issues by
-delegating to implementor subagents.
+delegating to implementor subagents. Establish the outermost queue owner using
+[bugfix routing](../bugfix/references/incidental-issues.md) before starting;
+inherit a caller's owner when nested.
 
 ## Input
 
 - **Base reference** (optional): branch/SHA. Resolution order: caller-provided
-  -> active PR `base.ref` -> fallback `develop`.
+  -> active PR `base.ref` -> **agent-conduct** Git Safety fallback.
 - **Spec document** (optional): path for conformance checking.
 - **Focus areas** (optional): specific files or concerns.
 
@@ -52,7 +54,8 @@ Lock the review base before any diff/lint/test:
 
 1. Caller-provided base, OR
 2. PR `base.ref` (query via `gh pr view --json baseRefName` if needed), OR
-3. `develop` (only if no PR exists and no caller base).
+3. With no PR or caller base, use the fetched base selected by
+   [agent-conduct Git Safety](../agent-conduct/SKILL.md#git-safety).
 
 **Hard rules:** Never use repo default branch when a PR exists. Never diff
 before base is resolved. Emit `Review base resolved: <base>`. If PR exists but
@@ -107,12 +110,15 @@ Use commands from the conventions skill. Note failures.
 ### 6. Compile findings
 
 Numbered list ordered by severity (bugs > quality > style). Each finding:
-file/lines, category, description, suggested fix. If no findings, report clean
-and stop.
+file/lines, category, description, suggested fix. Apply
+[bugfix routing](../bugfix/references/incidental-issues.md) to every finding;
+record independent issues before continuing and keep required gate blockers
+in the current work. If no current-branch findings remain, continue at step 8
+for PR thread handling before completion.
 
 ### 7. Fix issues
 
-For each finding:
+For each finding routed to the current branch:
 
 **a.** Launch an implementor subagent with: implementor + conventions +
 testing-principles skill paths, the specific finding (file, lines,
@@ -136,11 +142,18 @@ replies, resolution, and CI/Copilot push handling. Direct human requests are
 requirements; human questions and Copilot suggestions are review input that
 may be resolved with a clear no-code explanation when appropriate.
 
+### 9. Complete or return to caller
+
+After current-branch fixes and required PR work succeed, apply
+[queue completion](../bugfix/references/incidental-issues.md#finish-or-stop).
+A nested review returns pending references without processing them; the
+outermost owner drains them. A blocked review reports the pending references.
+
 ## Rules
 
 - Follow the rules in **subagents** (no direct fixes, no read-only agents
   for work that must change files or run tests).
-- NEVER skip findings.
+- Route every finding; recorded independent handoffs are not review failures.
 - One fix per commit (cosmetic batches excepted).
 - Reply+resolve PR threads before committing fixes that address them.
 - `gh` is mandatory. If it is not installed or authenticated, stop, with

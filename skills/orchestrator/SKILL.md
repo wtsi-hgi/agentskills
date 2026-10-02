@@ -8,7 +8,10 @@ description: "Orchestrates implementation and review of phase plans via subagent
 Read and follow **agent-conduct**, **testing-principles**, and **subagents**
 before starting. **subagents** owns delegation: agent choice, briefing, skill
 discovery, and error handling. This skill covers only the orchestrator
-procedure.
+procedure. Establish the outermost queue owner using
+[bugfix routing](../bugfix/references/incidental-issues.md) before starting;
+inherit a caller's owner when nested. Route incidental findings returned by
+implementation, review, and verification before resuming phase work.
 
 Use skills named in the phase file's Instructions section if specified;
 otherwise follow the skill-discovery procedure in **subagents**.
@@ -107,6 +110,14 @@ clean passes**.
 Same as step 6 but **without** the spec document (focus on code quality and
 usability only). Repeat until **2 consecutive clean passes**.
 
+### 8. Complete or return to caller
+
+After all requested phases and required reviews succeed, apply
+[queue completion](../bugfix/references/incidental-issues.md#finish-or-stop).
+Nested workflows return pending references without processing them. Only the
+outermost owner drains deferred branches. Report pending references with any
+blocker or stopped phase.
+
 ## Error Handling
 
 - **Transient failures:** see **subagents**.
@@ -133,4 +144,4 @@ usability only). Repeat until **2 consecutive clean passes**.
 - NEVER check a checkbox until the subagent confirms success.
 - NEVER skip or reorder items unless the phase file allows parallel execution.
 - Follow **agent-conduct** Git Safety for push authorization, rebasing feature
-  branches on updated `develop`, and force-pushing with a lease.
+  branches on the resolved base, and force-pushing with a lease.

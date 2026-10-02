@@ -113,6 +113,12 @@ The skills form a layered system:
 6. **Workflow skills** coordinate multi-step processes using the appropriate
    tech-stack skills.
 
+[Bugfix routing](../skills/bugfix/references/incidental-issues.md) keeps task
+regressions and blocking issues on the current branch. Independent incidental
+issues get a separate worktree branch and committed checklist entry at
+discovery. The outermost workflow processes that queue after its requested
+current-branch work succeeds; nested workflows return pending references.
+
 The workflow skills are generic. They discover which implementor, reviewer, and
 conventions skills to use based on project context, so the same workflow can
 drive Go, Nextflow, Next.js + FastAPI, or Python projects.

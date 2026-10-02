@@ -141,7 +141,12 @@ Each subagent starts with clean context. Give it:
 - The specific task (item, spec section, file list, bug, finding).
 - Expected output (e.g. "Follow TDD cycle and testing-principles, run tests
   and linter"; "Return PASS or FAIL with specific feedback").
-- Caller constraints (phase instructions, focus areas).
+- Caller constraints (phase instructions, focus areas), queue owner identity
+  and branch-owned checklist when supplied. Workers return distinct incidental
+  findings and evidence for caller routing before editing incidental code.
+  Child workflows inherit the owner and return deferred branch/entry
+  references without draining them; see
+  [bugfix routing](../bugfix/references/incidental-issues.md).
 
 Pass paths, not skill text.
 

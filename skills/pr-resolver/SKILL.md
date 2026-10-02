@@ -7,15 +7,18 @@ description: "Resolve GitHub PR review comments from humans and Copilot, includi
 
 Read and follow **agent-conduct**. Read **bugfix** before making any code
 change; it owns all fix-review-commit work. This skill owns PR state, review
-replies, batched pushes, checks, and Copilot review requests.
+replies, batched pushes, checks, and Copilot review requests. Establish the
+outermost queue owner using
+[bugfix routing](../bugfix/references/incidental-issues.md); inherit an existing
+owner when called by another workflow.
 
 ## Invariants
 
 1. Verify every comment against the current code before acting.
 2. Route every valid code-changing finding through the full **bugfix**
    workflow. Reply-only findings do not need bugfix.
-3. Finish work items sequentially and commit each one separately. Drain all
-   known local work before pushing once.
+3. Finish current-branch items sequentially and commit each separately. Drain
+   that local queue before pushing once; independent issues follow routing.
 4. After any pushed code change, explicitly request Copilot review, regardless
    of whether the change came from Copilot, a human, CI, or a user-reported bug.
 5. Wait for predicates about an immutable target SHA, not for the next event
@@ -47,7 +50,7 @@ gh pr view --json number,baseRefName,headRefName,headRefOid,url
 
 Stop if `gh` is unavailable or unauthenticated. Confirm that the checked-out
 branch is the PR head and is not `master`, `main`, or `develop` before any
-push. Follow **agent-conduct** Git Safety for rebasing on updated `develop`
+push. Follow **agent-conduct** Git Safety for rebasing on the resolved base
 and the standing authorization to force-push the feature branch with a lease.
 
 ## 2. Read one complete snapshot
@@ -153,8 +156,11 @@ was requested immediately before pr-resolver started.
 
 For each unresolved thread, choose exactly one outcome:
 
-- **Fix:** Redact secret or personal data from the finding, then record the
-  remaining text plus PR/thread/comment IDs as a bugfix item.
+- **Fix:** Redact secret or personal data, preserve PR/thread/comment IDs, and
+  apply [bugfix routing](../bugfix/references/incidental-issues.md). Requested
+  changes and required gate blockers stay on this branch. For an independent
+  incidental finding, record the durable handoff, reply with its branch/entry
+  reference, and resolve the thread without claiming the bug is fixed.
 - **Explain:** Reply with a concrete reason and resolve the thread.
 - **Already handled:** Reply with current code/test evidence and resolve it.
 - **Blocked:** Report the required decision; do not silently resolve a direct
@@ -167,17 +173,19 @@ each successful commit to its source thread.
 
 If the user reports a bug, a local gate exposes a bug, or CI feedback is
 already available while the queue is active, append it to the same bugfix
-queue. Finish the current item, then process the new item. Before pushing,
-refresh user input and PR threads once more and drain any newly known work.
+queue after routing it. Handle a blocker before completing the affected
+item; independent handoffs stay with the owner. Before pushing, refresh user
+input and PR threads and drain newly known current-branch work.
 
-Do not reply `fixed` or resolve a fix thread yet; the commit is still local.
+For current-branch fixes, do not reply `fixed` or resolve the thread yet; the
+commit is still local.
 
 ## 5. Push the drained batch once
 
 First apply **agent-conduct** Git Safety to fetch and rebase the PR branch
-when `develop` has advanced. Update the source-thread commit mappings after
-rebasing. If there are no local changes or rebased commits to publish, skip
-the push. Otherwise run the full local quality gates across the accumulated
+when the resolved base has advanced. Update the source-thread commit mappings
+after rebasing. If there are no local changes or rebased commits to publish,
+skip the push. Otherwise run the full local quality gates across the accumulated
 batch on the resulting head, then push all item commits together.
 
 Confirm that the checked-out branch is the PR head and that the destination
@@ -317,12 +325,18 @@ repeated findings in the same area require a small cohesive refactor. After 20
 pushed-head cycles, push any completed local batch, stop, and report that
 manual review is needed.
 
+After convergence, apply
+[queue completion](../bugfix/references/incidental-issues.md#finish-or-stop).
+Only the outermost owner drains deferred branches; a nested resolver returns
+them to its caller. On timeout, cycle cap, or blocker, report pending branch
+references and leave them for resume.
+
 ## Rules
 
 - Do not skip comments: fix, explain, show they are already handled, or report
   a blocked direct human request.
 - Replies alone do not require a push or another Copilot review. A rebase
-  required by updated `develop` still follows the push and review workflow.
+  required by an updated base still follows the push and review workflow.
   Also request review when the user explicitly asks.
 - Once code changes are pushed, always request Copilot review of that exact
   head.

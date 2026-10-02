@@ -9,11 +9,13 @@ These rules apply to ALL agents regardless of skill.
 
 ## Workspace Boundary
 
-- Do NOT write files outside the repository directory, except a
-  harness-provided scratchpad/temp directory if one exists. Redirecting
-  command output to `/dev/null` is fine.
-- Before any file-writing command, confirm the target path is inside the
-  repo or the harness scratchpad.
+- Write only inside the repository, a designated Git worktree of the same
+  repository, or a harness-provided scratchpad/temp directory. Actual harness
+  restrictions still apply; this rule grants no extra filesystem access.
+  Redirecting command output to `/dev/null` is fine.
+- Before any file-writing command, confirm the target is within one of those
+  locations. Create worktrees with normal Git commands, not clones or edits
+  to `.git/` internals.
 
 ## Scratch Work
 
@@ -35,8 +37,12 @@ Avoid triggering VS Code modal confirmation prompts:
 
 - NEVER push to `master`, `main`, or `develop` branches, including normal and
   force pushes. Check the destination ref, not just the checked-out branch.
-- Keep the task's feature branch rebased on the latest remote `develop`.
-  Fetch before checking whether it is current. When `develop` has advanced,
+- Keep the task's feature branch rebased on the latest remote `develop`,
+  unless the caller or PR specifies another base. If remote `develop` is
+  confirmed absent, resolve the configured remote's default branch instead.
+  A failed fetch is a blocker, not evidence that a branch is absent. Retain
+  the resolved base throughout the task, including deferred bugfix branches.
+  Fetch before checking whether it is current. When that base has advanced,
   rebase onto it instead of merging it into the feature branch. Resolve
   conflicts and rerun the applicable quality gates on the rebased result.
 - After those gates pass, push the rebased feature branch with
@@ -55,6 +61,13 @@ Avoid triggering VS Code modal confirmation prompts:
 
 - Do NOT install system packages.
 - Do NOT modify files outside the current task's scope.
+
+## Discovered Issues
+
+When a distinct issue appears during implementation, review, or verification,
+read [bugfix routing](../bugfix/references/incidental-issues.md). Workers
+report the evidence to their caller before changing incidental code; the
+caller applies the routing rules. A directly invoked agent is its own caller.
 
 ## Honesty About Blockers
 
