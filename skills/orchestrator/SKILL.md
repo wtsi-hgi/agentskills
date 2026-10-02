@@ -28,7 +28,10 @@ A phase MD file containing items with `- [ ] implemented` and
 ### 2. Process items in order
 
 - **Sequential items:** one at a time.
-- **Parallel batch:** one implementation subagent per item concurrently.
+- **Parallel batch:** apply
+  [shared concurrency limits](../subagents/SKILL.md#concurrency).
+  Run overlapping or uncertain work sequentially; admit at most two heavy
+  workers for independent items authorized to run in parallel.
 - Complete and review each batch before starting the next.
 
 ### 3. For each item (or batch)

@@ -30,6 +30,25 @@ acting on them, and you MAY edit your own orchestration artifacts
 (checklists, blocker files, `prompt.md` notes). You do not read skill
 files yourself either - pass names and paths to subagents.
 
+## Concurrency
+
+Default to one heavy worker across the full workflow tree, including the
+owner's own implementation, review, and test runs. Nested workflows inherit
+that budget; an idle coordinator or light status polling consumes no heavy
+slot. Keep implementation, review, and checks sequential unless parallel
+work is explicitly authorized by the user or supplied plan.
+
+Authorized parallel work may use at most two heavy workers. First check
+actual and planned changed files and dependencies for both tasks. Run them
+serially if they overlap or independence is uncertain; separate worktrees
+alone do not establish independence. Schedule larger batches in bounded
+waves within this limit. Brief children on occupied slots and their assigned
+files so nested delegation cannot exceed the shared budget.
+
+On a usage limit or reset, preserve edits, evidence, and branch/checklist
+references before stopping or retrying. After capacity returns, restart one
+worker at a time and check its state before launching more work.
+
 ## Harness Adapters
 
 Use the active harness's vocabulary and constraints.
@@ -65,8 +84,8 @@ Use the active harness's vocabulary and constraints.
   `send_message` to add context without starting a turn, and `followup_task`
   to give an idle agent more work and start a turn. Use `interrupt_agent` only
   to stop work that is still running and no longer needed.
-- For parallel batches, spawn all independent workers first, then wait for
-  completion as needed.
+- For authorized parallel batches, spawn only workers admitted by the
+  shared concurrency limit, then wait before scheduling the next wave.
 
 ### Claude Code Harness
 
@@ -81,10 +100,10 @@ Use the active harness's vocabulary and constraints.
 - Omit `model` by default so the subagent inherits the parent model. When you
   do set it, use a tier keyword: `"opus"`, `"sonnet"`, `"haiku"`, or
   `"fable"` (not a full model id).
-- For parallel batches, emit all independent `Agent` calls in a single
-  response so they run concurrently; the runtime returns each result when it
-  finishes. Use `run_in_background: true` for long work you do not need to
-  block on - you are notified when it completes.
+- For authorized parallel batches, emit only calls admitted by the shared
+  concurrency limit in one response. Wait before scheduling the next wave.
+  Use `run_in_background: true` for long work you do not need to block on;
+  background work still counts against the shared limit.
 - Each `Agent` result ends with an `agentId`. To continue that subagent with
   its context intact, use `SendMessage` (`to: "<agentId>"`) **if the harness
   exposes it**. `SendMessage` is not always available; when it is absent,

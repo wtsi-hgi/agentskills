@@ -28,6 +28,8 @@ that other things depend on.
 
 - **Standalone:** Own the checklist and commits. Do not push unless the user
   explicitly asked or **agent-conduct**'s standing rebase authorization applies.
+  A dependency publication hold in [routing](references/incidental-issues.md)
+  keeps the branch local even under that standing authorization.
 - **Batched caller (for example, pr-resolver):** Own the checklist and commits,
   but never push, reply to reviews, resolve threads, or wait on remote events.
   Return control after the local queue is drained. The caller owns one batched
@@ -63,9 +65,11 @@ independently generated random ID, such as `uuid.uuid4().hex`. Generate the
 name once and retain it on resume. Never choose a next-free number.
 
 Record `Branch`, resolved `Base` ref and SHA, and queue owner branch/checklist
-in the header. Use repository-relative paths in committed metadata and
-evidence, never absolute workspace paths. Write each bug verbatim except for
-secret or personal-data redactions:
+in the header. For a dependent local branch, include the dependency and
+publication hold metadata from [routing](references/incidental-issues.md).
+Use repository-relative paths in committed metadata and evidence, never
+absolute workspace paths. Write each bug verbatim except for secret or
+personal-data redactions:
 
 ```markdown
 - [ ] <bug description, verbatim>

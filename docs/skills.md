@@ -115,9 +115,11 @@ The skills form a layered system:
 
 [Bugfix routing](../skills/bugfix/references/incidental-issues.md) keeps task
 regressions and blocking issues on the current branch. Independent incidental
-issues get a separate worktree branch and committed checklist entry at
-discovery. The outermost workflow processes that queue after its requested
-current-branch work succeeds; nested workflows return pending references.
+issues get committed entries and durable handoffs at discovery, reusing
+existing fixes or a compatible pending theme branch. Routing also covers
+urgent notification, dependency publication holds, and worktree cleanup.
+The outermost workflow processes its queue at completed-task or converged-PR
+boundaries; nested workflows return pending references.
 
 The workflow skills are generic. They discover which implementor, reviewer, and
 conventions skills to use based on project context, so the same workflow can

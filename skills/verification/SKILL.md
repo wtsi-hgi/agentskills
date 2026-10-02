@@ -127,10 +127,13 @@ on steps that used to work, or on whatever cadence the user asks for.
 
 1. **Index.** Read `features/README.md` and glob its siblings. Fix missing,
    duplicate, and dead entries.
-2. **Source.** Launch one normal subagent per feature file concurrently. Brief
-   each to inspect without editing. It answers "how does this feature work
-   now?" from source, flags likely drift with file and line citations, and
-   returns one live verification recipe.
+2. **Source.** Launch one normal subagent per feature file, sequentially by
+   default. Follow
+   [shared concurrency limits](../subagents/SKILL.md#concurrency)
+   for explicitly authorized parallel work in bounded independent waves.
+   Brief each to inspect without editing. It answers "how does this feature
+   work now?" from source, flags likely drift with file and line citations,
+   and returns one live verification recipe.
 3. **Live.** Required even when source looks clean. Drive every feature at
    least once. Doctor before the first drive, on each fresh session, and again
    after any failed drive. A feature you cannot reach is unreachable only with

@@ -41,13 +41,17 @@ Avoid triggering VS Code modal confirmation prompts:
   unless the caller or PR specifies another base. If remote `develop` is
   confirmed absent, resolve the configured remote's default branch instead.
   A failed fetch is a blocker, not evidence that a branch is absent. Retain
-  the resolved base throughout the task, including deferred bugfix branches.
+  the resolved base throughout the task. Deferred branches with an unmerged
+  dependency follow the base transition and publication hold in
+  [routing](../bugfix/references/incidental-issues.md#dependent-local-branches).
   Fetch before checking whether it is current. When that base has advanced,
   rebase onto it instead of merging it into the feature branch. Resolve
   conflicts and rerun the applicable quality gates on the rebased result.
 - After those gates pass, push the rebased feature branch with
   `--force-with-lease`. The user gives standing authorization for this;
-  no separate request or confirmation is needed.
+  no separate request or confirmation is needed. Deferred branches held for
+  recording or dependency merge remain local under
+  [bugfix routing](../bugfix/references/incidental-issues.md).
   Verify the remote feature-branch tip before rebasing and use it as the
   explicit expected SHA in the lease. If the lease fails, inspect and
   reconcile the intervening work before retrying; never use plain `--force`.
