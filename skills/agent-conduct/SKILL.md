@@ -60,6 +60,17 @@ Avoid triggering VS Code modal confirmation prompts:
   or the push applies the standing rebase authorization above.
 - Do NOT modify `.git/` internals.
 - Use targeted `git add <file>` over `git add .`.
+- Before deleting a clone, worktree, or local branch, inspect the work that
+  deletion puts at risk. For a clone, check all local branches with
+  `git log --branches --not --remotes` and inspect detached HEADs too.
+  Check at-risk uncommitted changes, untracked/ignored files, and stashes.
+  Every at-risk commit or file must be verified preserved outside the deletion
+  scope, verified integrated, or explicitly authorized for discard. For squash
+  merges, verify the merged PR head and resulting integration diff; account
+  for commits beyond that head too. Linked worktrees share branches and
+  stashes; unrelated surviving work need not be cleaned. Report what was
+  checked and how at-risk work was accounted for. Retain unaccounted-for work.
+  These checks do not authorize deletion.
 
 ## General
 

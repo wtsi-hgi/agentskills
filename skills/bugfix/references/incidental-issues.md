@@ -198,17 +198,8 @@ entries and branches available for resume.
 ## Worktree Cleanup
 
 Remove a deferred worktree only after verifying its fix merged into the
-intended integration base and checking that it is clean with no unpushed or
-unmirrored work. Inspect untracked and ignored artifacts as well as tracked
-changes; preserve evidence and any local work before cleanup. Confirm the
-merged PR head and local tip match, or account for every additional commit.
-Check for task-attributable stashes too: linked worktrees share the stash
-list, so an unrelated stash alone does not block cleanup.
-For squash merges, use the PR's merged state and merged head plus the
-resulting integration diff; an ancestry-only check cannot prove that work
-was lost or remains unmerged.
-
-If any work is unaccounted for, retain the worktree and report it. Otherwise
-use normal `git worktree remove <worktree-path>` without force. Worktree
+intended integration base and applying
+[Git Safety deletion checks](../../agent-conduct/SKILL.md#git-safety).
+Use normal `git worktree remove <worktree-path>` without force. Worktree
 cleanup does not authorize branch deletion; delete a branch only when the
 user or caller has authorized it.

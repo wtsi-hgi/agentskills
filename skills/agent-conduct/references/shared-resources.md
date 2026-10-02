@@ -3,6 +3,7 @@
 For heavy work on shared or quota-constrained machines, use project-approved
 storage and check available space where builds, caches, and artifacts will
 grow. Choose concurrency and scheduling priority for the available capacity.
+Pass selected cache and storage settings to subagents running those workloads.
 
 Keep performance measurements comparable, including competing load. Arrange
 an isolated measurement window or report interference; do not perturb someone
