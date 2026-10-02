@@ -23,6 +23,12 @@ Every sentence must do at least one job:
 
 Delete sentences that do none of these.
 
+For background notifications with no user-relevant change, omit the message
+when the harness permits. Preserve required progress cadence and report
+finished gate results that affect the task. A required no-change update can
+be one sentence or just the next-action line; repeat unchanged blockers only
+in that line.
+
 ## End With Your Next Action
 
 End every message with one line, in this exact form, so the user can read only

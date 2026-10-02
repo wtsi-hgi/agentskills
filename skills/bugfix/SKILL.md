@@ -52,12 +52,10 @@ owner without processing them.
 Before fixing anything, read `README.md`, `Makefile`/`justfile`/`package.json`
 scripts, and any CONTRIBUTING doc to identify the project's lint, test, and
 fixture/dev commands (e.g. `make lint`, `make test`, `make dev-fixtures`,
-`npm run lint`). Discover performance commands and applicability using
+`npm run lint`). Include project performance policy using
 [gate policy](../implementation-principles/references/performance-gates.md).
-Record exact commands, scope, policy, and base evidence and pass them with
-that reference to every implementor and reviewer. Reassess applicability as
-the diff or base changes. Subagents must run applicable project gates, not
-invent their own; required performance regressions remain current work.
+Pass applicable commands and policy to each implementor and reviewer;
+subagents must run these gates, not invent their own.
 
 ## Checklist File
 
@@ -227,12 +225,11 @@ Brief a reviewer subagent with:
   follows **testing-principles** and the regression test encodes the minimal
   repro; (c) the fix addresses the cause rather than suppressing the symptom,
   and is minimal; (d) no prior regression test was deleted, skipped, or
-  weakened; (e) the project's lint and test commands pass (run them), and
-  required performance evidence fits the current revision and changed scope
-  per the supplied performance reference; (f) for a web UI or otherwise visual
-  bug, drive the app yourself from the same
-  fixture and viewport, capture a post-fix screenshot, and compare it against
-  the before image: the reported symptom is gone and nothing else visibly
+  weakened; (e) project lint and test commands pass (run them), with current
+  evidence for other applicable gates under the supplied policy; (f) for a
+  web UI or otherwise visual bug, drive the app yourself from the same fixture
+  and viewport, capture a post-fix screenshot, and compare it against the
+  before image: the reported symptom is gone and nothing else visibly
   regressed. A green test suite alone does not satisfy (f). If any gate fails
   for an unrelated, pre-existing, or flaky reason, return FAIL and identify it
   as a newly discovered checklist bug. Return PASS or FAIL with specific
@@ -262,9 +259,9 @@ for confirmation. Proceed to the next bug.
 Apply [queue completion](references/incidental-issues.md#finish-or-stop): only
 the outermost owner drains deferred branches, after its current work succeeds.
 Report the checklist path, each item's outcome and commit SHA, and any pending
-branch/entry references. Include performance applicability and comparison
-evidence for the caller's PR body. For a batched caller, return source metadata
-unchanged so it can reply to the correct review threads after pushing.
+branch/entry references. Return required gate evidence to the caller. For a
+batched caller, return source metadata unchanged so it can reply to the correct
+review threads after pushing.
 
 ## Rules
 

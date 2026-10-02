@@ -32,18 +32,16 @@ files yourself either - pass names and paths to subagents.
 
 ## Concurrency
 
-Default to one heavy worker across the full workflow tree, including the
-owner's own implementation, review, and test runs. Nested workflows inherit
-that budget; an idle coordinator or light status polling consumes no heavy
-slot. Keep implementation, review, and checks sequential unless parallel
-work is explicitly authorized by the user or supplied plan.
+Use the caller, harness, and project's capacity limits across the whole
+workflow tree, including the owner's heavy checks. When capacity is unknown
+or constrained, start with one heavy worker. An idle coordinator or light
+status polling consumes no heavy slot. Preserve explicit sequential or
+parallel instructions within those limits.
 
-Authorized parallel work may use at most two heavy workers. First check
-actual and planned changed files and dependencies for both tasks. Run them
-serially if they overlap or independence is uncertain; separate worktrees
-alone do not establish independence. Schedule larger batches in bounded
-waves within this limit. Brief children on occupied slots and their assigned
-files so nested delegation cannot exceed the shared budget.
+Before parallel work, check actual and planned files and dependencies.
+Serialize overlapping edits or uncertain independence; separate worktrees
+alone do not establish independence. Brief children on occupied slots and
+assigned files so nested delegation shares the same budget.
 
 On a usage limit or reset, preserve edits, evidence, and branch/checklist
 references before stopping or retrying. After capacity returns, restart one
@@ -157,7 +155,7 @@ Word each briefing per **writing-for-agents** § Writing Subagent Briefings.
 Each subagent starts with clean context. Give it:
 
 - Skill names and absolute file paths to read.
-- The **agent-conduct** path, which requires the completion contract below.
+- The **agent-conduct** path, including its delegated-work completion contract.
 - The specific task (item, spec section, file list, bug, finding).
 - Expected output (e.g. "Follow TDD cycle and testing-principles, run tests
   and linter"; "Return PASS or FAIL with specific feedback").
@@ -197,37 +195,9 @@ repeating its claim.
 
 ## Completion And Liveness
 
-This section applies to workers and owners in every harness, including agents
-that do not delegate. It does not assign them the orchestration role above.
-
-Workers wait for their own tests, tool sessions, and background children before
-final handback. Return finally only when complete, blocked, or explicitly
-paused. A tool yield is still live work; resume its wait within bounded calls.
-Do not invent a harness requirement to finalize early. If an interim handback
-is unavoidable, label it `INTERIM`, list exact live agent/process/job/wait IDs,
-pending artifacts, ownership, and the commands or calls needed to resume.
-An owner must resume that work, not count it as success or check a marker.
-
-Before reporting running or waiting, inspect the actual agent, process, job,
-or PR state and available output. Silence and a prior promise are not evidence.
-If tools cannot verify state, report it as unknown. When a background wait
-ends, consume its output and report the result in the next update, especially
-for an awaited gate. Read the semantic result; exit 0 alone does not prove a
-gate passed. Send concise progress updates through **final-response**.
-
-Bound potentially long or networked commands with `timeout` or native flags,
-and use bounded, interruptible waits. Report a real timeout instead of waiting
-forever. Do not interrupt required work merely to end the turn.
-
-Before final, blocked, or paused handback, stop unneeded background work and
-verify it stopped. Account for nested work too. Completed agents need no
-cleanup if the harness exposes no close operation. For any retained work,
-report its current state, exact IDs, owner, purpose, and resume or cleanup
-action; unverified state remains unknown.
-
-Tag context updates to active agents `FYI, keep going`. Recipients incorporate
-them and continue the same task through completion. An explicit pause or stop
-ends work; a real blocker or timeout still requires an honest report.
+Apply [completion and liveness](references/completion-liveness.md) to workers
+and owners. Workers need only that contract, not this skill's orchestration
+role.
 
 ## Rules
 

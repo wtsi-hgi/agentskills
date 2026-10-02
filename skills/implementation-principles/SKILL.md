@@ -89,9 +89,10 @@ For each behaviour change:
 If a required quality gate cannot run, report that explicitly. Do not claim it
 passed.
 
-When discovering or verifying quality gates, read
-[performance gates](references/performance-gates.md). Apply the project's
-performance policy to the changed scope alongside correctness gates.
+For project performance gates or meaningful runtime-cost changes, read
+[performance gates](references/performance-gates.md).
+For release preparation or a release PR, read
+[release checks](references/release-checks.md).
 
 ## Root Causes
 
@@ -106,9 +107,12 @@ it there and check every caller: one correction in the shared function is a
 smaller change than one per call site, and repairing only the path the report
 names leaves its siblings broken.
 
-When the cause is genuinely outside the current scope, make the smallest
-in-scope fix and report the rest. Do not paper over it (see **agent-conduct**
-on blockers).
+Reviewers check declared gaps and limitations as well as the diff. A "known
+gap" needs evidence: an assumption such as "retry restores the data" cannot
+dismiss a defect. Distinguish a demonstrated non-defect from a mitigation
+that leaves an issue unresolved. Fix or route real unresolved issues under
+[bugfix routing](../bugfix/references/incidental-issues.md), retaining an owner
+or blocker; listing a limitation alone does not resolve it.
 
 ## Prove It Works
 

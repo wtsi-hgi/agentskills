@@ -82,8 +82,10 @@ silently reopen.
 
 If any search is unavailable, retain the finding in a committed tracking
 entry and disclose the incomplete search. Do not assert that no duplicate
-exists. Recheck before implementation and publication; leave those actions
-pending if the search still cannot establish whether work already covers it.
+exists. Recheck before implementation and publication. If still unavailable,
+record the uncertainty and assess duplication risk before proceeding; it need
+not block unrelated or offline work. Known overlapping fixes require
+reconciliation before duplicate work proceeds.
 An actual current blocker still needs resolution now; reconcile any known
 in-flight fix with the current branch without waiving its required gate.
 
@@ -98,13 +100,13 @@ in-flight fix with the current branch without waiving its required gate.
    local starting base and follow the dependency lifecycle below. An
    unavailable remote or ambiguous base blocks new branch creation; retain
    the finding in the origin's checklist and report the incomplete handoff.
-3. Keep one owner-managed pending branch per small coherent theme and
-   compatible base/dependency, such as test flakes or developer tooling.
-   Reuse it only while its base and dependency remain compatible. Keep each
-   issue's entry and fix-review-commit cycle separate.
+3. A pending branch may group related issues while its base and
+   dependency remain compatible. Keep each issue's entry and
+   fix-review-commit cycle separate; a broad label such as tooling alone
+   does not make unrelated fixes coherent.
    Otherwise create a designated worktree of this repository with
    `git worktree add -b <bugfix-branch> <worktree-path> <base>` using the
-   checklist's random ID in the branch name. Keep unrelated themes separate.
+   checklist's random ID in the branch name.
    A PR that has converged or is waiting for merge takes no new incidental
    items. Leave the original worktree and index intact; never stash, reset,
    or copy unfinished implementation into the bugfix branch. Obey actual
@@ -200,6 +202,8 @@ intended integration base and checking that it is clean with no unpushed or
 unmirrored work. Inspect untracked and ignored artifacts as well as tracked
 changes; preserve evidence and any local work before cleanup. Confirm the
 merged PR head and local tip match, or account for every additional commit.
+Check for task-attributable stashes too: linked worktrees share the stash
+list, so an unrelated stash alone does not block cleanup.
 For squash merges, use the PR's merged state and merged head plus the
 resulting integration diff; an ancestry-only check cannot prove that work
 was lost or remains unmerged.

@@ -61,7 +61,9 @@ and the standing authorization to force-push the feature branch with a lease.
 Discover local lint, test, fixture, and performance gates before review or
 push. Follow
 [gate policy](../implementation-principles/references/performance-gates.md)
-and pass commands, applicability, policy, and base evidence to bugfix workers.
+and pass applicable commands and policy to bugfix workers.
+For release PRs, also read
+[release checks](../implementation-principles/references/release-checks.md).
 
 ## 2. Read one complete snapshot
 
@@ -216,10 +218,10 @@ onto the actual updated base when behind, including after a preceding PR
 merged. Preserve dirty user work in its worktree. Resolve conflicts and inspect
 the resulting diff; in CHANGELOG Unreleased append sections, retain distinct
 entries from both sides under the appropriate sections. Update source-thread
-commit mappings after rebasing. Run applicable local gates, including required
-performance comparisons against that base, across the resulting batch. Refresh
-the PR body's comparison evidence and policy verdict. If nothing needs
-publication, skip only the push; required evidence must still be current.
+commit mappings after rebasing. Run applicable local gates across the resulting
+batch, using project-defined performance baselines. Refresh required evidence
+in the PR body. If nothing needs publication, skip only the push; required
+evidence must still be current.
 
 Confirm that the checked-out branch is the PR head and that the destination
 ref is not `master`, `main`, or `develop`. Use an explicit remote and feature
@@ -340,8 +342,6 @@ fresh paginated snapshot and evaluate in this order:
 Never wait for an event merely because a previous event was observed. The
 state predicate for readiness requires a completed Copilot review for the
 target SHA and no actionable unresolved findings, including overview defects.
-Consume a completed monitor's output before the next status update; report the
-observed result rather than repeating a stale waiting message.
 
 ## 8. Repeat to convergence
 

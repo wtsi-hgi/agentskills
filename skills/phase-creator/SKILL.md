@@ -78,8 +78,7 @@ After all parallel items, include:
 
 ```markdown
 For parallel batch items, use separate subagents per item under the
-`subagents` skill's shared concurrency limits. Schedule bounded waves only
-when that rule admits the tasks; otherwise run sequentially.
+`subagents` skill's shared concurrency limits.
 Launch review subagents using the `<reviewer-skill>` skill
 (review all items in the batch together in a single review
 pass).

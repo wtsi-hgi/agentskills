@@ -27,10 +27,6 @@ Run for every modified package. All must pass.
 
 Discover project gates alongside these test commands and follow
 [gate policy](../implementation-principles/references/performance-gates.md).
-Verify supplied commands, applicability, base evidence, and actual comparison
-results against the current revision and changed scope. A required performance
-gate must pass even when tests are green; report missing benchmark coverage
-when a change adds work per request without a project gate.
 
 ### 3. Verify acceptance test coverage
 
@@ -89,9 +85,6 @@ No issues for modified files.
 - **FAIL** - specific, actionable feedback: missing tests, tests that tolerate
   an injected defect, unmet spec requirements, quality violations, lint
   issues, or failing/missing required performance evidence.
-
-Include performance applicability and policy verdict with evidence for the
-PR body. A successful benchmark process alone is not a passing comparison.
 
 ## Batch Reviews
 

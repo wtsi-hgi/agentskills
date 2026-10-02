@@ -51,8 +51,8 @@ Answer these from the codebase. Ask the user only what cannot be observed.
   transcripts, response bodies, exit codes, log lines, database rows, emitted
   files.
 - **Isolate:** can two instances run side by side (ports, data directories,
-  profiles)? If not, record that refusing to drive a shared instance is the
-  correct behaviour.
+  profiles)? If not, identify whether driving an existing instance is
+  authorized and safe for its other users; otherwise report the blocker.
 
 If the checkout does not build or start, report it as a blocker per
 **agent-conduct**. Repair product code only when the caller explicitly asked
@@ -68,7 +68,7 @@ Ground every section in what the interview found, with no placeholders left.
   a port answering, a prompt). For a short-lived CLI, launch means build once,
   then start each drive in its own session.
 - **Doctor:** one non-mutating check that answers "is this instance worth
-  driving?" - process up, expected build, port owned by us, auth valid.
+  driving?" - process up, expected build, authorized instance, auth valid.
 - **Drive:** the recipe, with real selectors and commands from this repo.
   Prefer stable handles (ARIA labels, data attributes, prompt strings, route
   paths) over screen coordinates and tab order.
@@ -127,10 +127,8 @@ on steps that used to work, or on whatever cadence the user asks for.
 
 1. **Index.** Read `features/README.md` and glob its siblings. Fix missing,
    duplicate, and dead entries.
-2. **Source.** Launch one normal subagent per feature file, sequentially by
-   default. Follow
-   [shared concurrency limits](../subagents/SKILL.md#concurrency)
-   for explicitly authorized parallel work in bounded independent waves.
+2. **Source.** Launch one normal subagent per feature file under
+   [shared concurrency limits](../subagents/SKILL.md#concurrency).
    Brief each to inspect without editing. It answers "how does this feature
    work now?" from source, flags likely drift with file and line citations,
    and returns one live verification recipe.

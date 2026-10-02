@@ -116,7 +116,7 @@ The skills form a layered system:
 [Bugfix routing](../skills/bugfix/references/incidental-issues.md) keeps task
 regressions and blocking issues on the current branch. Independent incidental
 issues get committed entries and durable handoffs at discovery, reusing
-existing fixes or a compatible pending theme branch. Routing also covers
+existing fixes and optionally grouping related issues. Routing also covers
 urgent notification, dependency publication holds, and worktree cleanup.
 The outermost workflow processes its queue at completed-task or converged-PR
 boundaries; nested workflows return pending references.

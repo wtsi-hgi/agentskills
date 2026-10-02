@@ -31,20 +31,14 @@ confirmation or explicit user direction. If closed unmerged, record it and
 report the queue decision needed. If still open, refresh its readiness and
 return the remaining user action without waiting indefinitely.
 
-For the next PR, discover its actual base, fetch it, and rebase when behind
-using the main procedure. Resolve conflicts, preserving CHANGELOG Unreleased
-entries from both sides. Then run applicable local gates including performance,
-publish with the existing lease policy, settle CI, and obtain completed
-Copilot review on the exact head with no actionable unresolved findings.
-Fresh checks are required after each rebase; previous convergence cannot
-substitute for this cycle.
+For each next PR, repeat the main procedure against its actual fetched base.
+Previous convergence cannot substitute for fresh gates and review after a
+rebase.
 
 Recheck the fetched base during waits and before readiness. A moved base
 invalidates any affected queued PR's stored ready state; mark it for refresh
-and return the active PR to the rebase cycle. The final readiness observation
-requires immutable head/base SHAs and zero commits behind that fetched base.
-Report later PRs as queued or needing refresh until they complete this cycle
-in order. Do not call every previously converged PR ready after the base moves.
+and return the active PR to the rebase cycle. Report later PRs as queued or
+needing refresh until they complete the readiness checks in order.
 
 At a blocker, timeout, explicit pause, or user-merge boundary, save current
 states, evidence, pending actions, and retained work ownership. The next turn

@@ -65,6 +65,8 @@ Avoid triggering VS Code modal confirmation prompts:
 
 - Do NOT install system packages.
 - Do NOT modify files outside the current task's scope.
+- For heavy work on shared or quota-constrained machines, read
+  [shared resources](references/shared-resources.md).
 
 ## Discovered Issues
 
@@ -75,10 +77,8 @@ caller applies the routing rules. A directly invoked agent is its own caller.
 
 ## Completion And Live Work
 
-All workers and owners must read and apply
-[completion and liveness](../subagents/SKILL.md#completion-and-liveness), even
-when they do not delegate. It governs final handback, background work,
-evidence for status updates, and contextual messages.
+For delegated or background work, read
+[completion and liveness](../subagents/references/completion-liveness.md).
 
 ## Honesty About Blockers
 
