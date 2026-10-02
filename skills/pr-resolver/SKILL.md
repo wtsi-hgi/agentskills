@@ -47,7 +47,8 @@ gh pr view --json number,baseRefName,headRefName,headRefOid,url
 
 Stop if `gh` is unavailable or unauthenticated. Confirm that the checked-out
 branch is the PR head and is not `master`, `main`, or `develop` before any
-push. Never force-push unless the user explicitly asked.
+push. Follow **agent-conduct** Git Safety for rebasing on updated `develop`
+and the standing authorization to force-push the feature branch with a lease.
 
 ## 2. Read one complete snapshot
 
@@ -173,17 +174,16 @@ Do not reply `fixed` or resolve a fix thread yet; the commit is still local.
 
 ## 5. Push the drained batch once
 
-If there are no local commits or other code changes to publish, skip the push.
-Otherwise run the full local quality gates once across the accumulated batch,
-then push all item commits together:
+First apply **agent-conduct** Git Safety to fetch and rebase the PR branch
+when `develop` has advanced. Update the source-thread commit mappings after
+rebasing. If there are no local changes or rebased commits to publish, skip
+the push. Otherwise run the full local quality gates across the accumulated
+batch on the resulting head, then push all item commits together.
 
-```bash
-branch=$(git branch --show-current)
-case "$branch" in
-  master|main|develop|"") exit 1 ;;
-esac
-git push
-```
+Confirm that the checked-out branch is the PR head and that the destination
+ref is not `master`, `main`, or `develop`. Use an explicit remote and feature
+branch destination. After rebasing, use `--force-with-lease` with the expected
+remote SHA required by **agent-conduct**; otherwise use a normal push.
 
 Capture `TARGET_SHA=$(git rev-parse HEAD)` before the push. Poll with a bounded,
 interruptible harness monitor until the PR head equals `TARGET_SHA`. Do not use
@@ -321,8 +321,9 @@ manual review is needed.
 
 - Do not skip comments: fix, explain, show they are already handled, or report
   a blocked direct human request.
-- Do not push for reply-only resolutions. Do not request another Copilot
-  review when only replies changed unless the user explicitly asks.
+- Replies alone do not require a push or another Copilot review. A rebase
+  required by updated `develop` still follows the push and review workflow.
+  Also request review when the user explicitly asks.
 - Once code changes are pushed, always request Copilot review of that exact
   head.
 - Keep every network wait bounded, interruptible, and keyed to an immutable

@@ -33,11 +33,21 @@ Avoid triggering VS Code modal confirmation prompts:
 
 ## Git Safety
 
-- NEVER push to `master`, `main`, or `develop` branches. No exceptions.
+- NEVER push to `master`, `main`, or `develop` branches, including normal and
+  force pushes. Check the destination ref, not just the checked-out branch.
+- Keep the task's feature branch rebased on the latest remote `develop`.
+  Fetch before checking whether it is current. When `develop` has advanced,
+  rebase onto it instead of merging it into the feature branch. Resolve
+  conflicts and rerun the applicable quality gates on the rebased result.
+- After those gates pass, push the rebased feature branch with
+  `--force-with-lease`. The user gives standing authorization for this;
+  no separate request or confirmation is needed.
+  Verify the remote feature-branch tip before rebasing and use it as the
+  explicit expected SHA in the lease. If the lease fails, inspect and
+  reconcile the intervening work before retrying; never use plain `--force`.
 - Do not push other branches unless the user asks or the task is working on a
-  PR and a push is needed to update the PR, rerun checks, or request review.
-- Do not force-push unless the user explicitly asks, and never to `master`,
-  `main`, or `develop`.
+  PR and a push is needed to update the PR, rerun checks, or request review,
+  or the push applies the standing rebase authorization above.
 - Do NOT modify `.git/` internals.
 - Use targeted `git add <file>` over `git add .`.
 

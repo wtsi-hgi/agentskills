@@ -132,6 +132,5 @@ usability only). Repeat until **2 consecutive clean passes**.
   agents for writing work, etc.).
 - NEVER check a checkbox until the subagent confirms success.
 - NEVER skip or reorder items unless the phase file allows parallel execution.
-- Do not `git push` unless the user asked for it or the phase work is on a
-  PR branch that must be updated. Never push to `master`, `main`, or
-  `develop`.
+- Follow **agent-conduct** Git Safety for push authorization, rebasing feature
+  branches on updated `develop`, and force-pushing with a lease.

@@ -27,7 +27,7 @@ that other things depend on.
 ## Invocation mode
 
 - **Standalone:** Own the checklist and commits. Do not push unless the user
-  explicitly asked.
+  explicitly asked or **agent-conduct**'s standing rebase authorization applies.
 - **Batched caller (for example, pr-resolver):** Own the checklist and commits,
   but never push, reply to reviews, resolve threads, or wait on remote events.
   Return control after the local queue is drained. The caller owns one batched
@@ -237,8 +237,9 @@ Update the checklist (`- [x]` plus indented summary). `git add` the changed
 files plus the checklist. Commit with a short imperative message
 (max 72 chars), e.g. `Fix off-by-one in batch size calculation`.
 
-In standalone mode, do not `git push` unless the user asked. In batched-caller
-mode, never push. Do NOT ask for confirmation. Proceed to the next bug.
+Follow the invocation mode's push rules. In batched-caller mode, the caller
+also owns any rebase and force-push required by **agent-conduct**. Do NOT ask
+for confirmation. Proceed to the next bug.
 
 ### After all bugs
 
@@ -253,7 +254,6 @@ and resolve the correct review threads after pushing.
 - Always create the dated checklist, even for one bug.
 - Always have a red command before briefing an implementor. A bug nobody can
   reproduce is a blocker to report, not a fix to attempt.
-- Do not `git push` unless the user asked for it and this is standalone. A
-  batched caller always owns pushing, even when the user's overall request
-  includes a push. Never push to `master`, `main`, or `develop`.
+- Follow the invocation mode's push rules and **agent-conduct** Git Safety.
+  A batched caller always owns pushing, including authorized force-pushes.
 - One fix-review-commit cycle at a time.
