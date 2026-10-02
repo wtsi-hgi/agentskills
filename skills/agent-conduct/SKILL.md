@@ -73,6 +73,13 @@ read [bugfix routing](../bugfix/references/incidental-issues.md). Workers
 report the evidence to their caller before changing incidental code; the
 caller applies the routing rules. A directly invoked agent is its own caller.
 
+## Completion And Live Work
+
+All workers and owners must read and apply
+[completion and liveness](../subagents/SKILL.md#completion-and-liveness), even
+when they do not delegate. It governs final handback, background work,
+evidence for status updates, and contextual messages.
+
 ## Honesty About Blockers
 
 Never paper over, work around, or hallucinate results to satisfy a

@@ -19,11 +19,18 @@ For each item:
 
 ### 2. Run tests
 
-```
+```bash
 CGO_ENABLED=1 go test -tags netgo --count 1 ./<path> -v -run <TestFunc>
 ```
 
 Run for every modified package. All must pass.
+
+Discover project gates alongside these test commands and follow
+[gate policy](../implementation-principles/references/performance-gates.md).
+Verify supplied commands, applicability, base evidence, and actual comparison
+results against the current revision and changed scope. A required performance
+gate must pass even when tests are green; report missing benchmark coverage
+when a change adds work per request without a project gate.
 
 ### 3. Verify acceptance test coverage
 
@@ -70,7 +77,7 @@ implementation-principles rule makes it blocking.
 
 ### 7. Run linter
 
-```
+```bash
 golangci-lint run
 ```
 
@@ -81,7 +88,10 @@ No issues for modified files.
 - **PASS** - optionally note minor non-blocking suggestions.
 - **FAIL** - specific, actionable feedback: missing tests, tests that tolerate
   an injected defect, unmet spec requirements, quality violations, lint
-  issues.
+  issues, or failing/missing required performance evidence.
+
+Include performance applicability and policy verdict with evidence for the
+PR body. A successful benchmark process alone is not a passing comparison.
 
 ## Batch Reviews
 

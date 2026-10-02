@@ -157,6 +157,7 @@ Word each briefing per **writing-for-agents** § Writing Subagent Briefings.
 Each subagent starts with clean context. Give it:
 
 - Skill names and absolute file paths to read.
+- The **agent-conduct** path, which requires the completion contract below.
 - The specific task (item, spec section, file list, bug, finding).
 - Expected output (e.g. "Follow TDD cycle and testing-principles, run tests
   and linter"; "Return PASS or FAIL with specific feedback").
@@ -168,6 +169,10 @@ Each subagent starts with clean context. Give it:
   [bugfix routing](../bugfix/references/incidental-issues.md).
 
 Pass paths, not skill text.
+
+On resume, include updated context, exact live IDs and pending artifacts, and
+instruct the worker to wait through completion. Check actual worker state
+before choosing a context update or a resume call.
 
 ## Error Handling
 
@@ -190,25 +195,39 @@ Describe the artifact, not the summary you were handed. A subagent reports
 what it intended; read the diff, run the tests, or list the files before
 repeating its claim.
 
-## Liveness and Bounded Tool Calls
+## Completion And Liveness
 
-### All Harnesses
+This section applies to workers and owners in every harness, including agents
+that do not delegate. It does not assign them the orchestration role above.
 
-Brief every subagent to bound its tool calls and shell commands so they
-cannot hang indefinitely: wrap potentially long or networked commands
-with `timeout` (or framework-native timeout flags), and prefer
-test/lint invocations that fail fast. Subagents must abort and report
-rather than wait forever on an unresponsive command.
+Workers wait for their own tests, tool sessions, and background children before
+final handback. Return finally only when complete, blocked, or explicitly
+paused. A tool yield is still live work; resume its wait within bounded calls.
+Do not invent a harness requirement to finalize early. If an interim handback
+is unavoidable, label it `INTERIM`, list exact live agent/process/job/wait IDs,
+pending artifacts, ownership, and the commands or calls needed to resume.
+An owner must resume that work, not count it as success or check a marker.
 
-### Codex Harness
+Before reporting running or waiting, inspect the actual agent, process, job,
+or PR state and available output. Silence and a prior promise are not evidence.
+If tools cannot verify state, report it as unknown. When a background wait
+ends, consume its output and report the result in the next update, especially
+for an awaited gate. Read the semantic result; exit 0 alone does not prove a
+gate passed. Send concise progress updates through **final-response**.
 
-- Send concise progress updates through **final-response** while long-running
-  subagents are active.
-- Track spawned agent IDs. Completed agents need no cleanup when the harness
-  exposes no close operation. Interrupt an agent that is still running after
-  its work becomes irrelevant.
-- Before the final response, ensure every subagent needed for the request has
-  completed, or interrupt it and report the incomplete work.
+Bound potentially long or networked commands with `timeout` or native flags,
+and use bounded, interruptible waits. Report a real timeout instead of waiting
+forever. Do not interrupt required work merely to end the turn.
+
+Before final, blocked, or paused handback, stop unneeded background work and
+verify it stopped. Account for nested work too. Completed agents need no
+cleanup if the harness exposes no close operation. For any retained work,
+report its current state, exact IDs, owner, purpose, and resume or cleanup
+action; unverified state remains unknown.
+
+Tag context updates to active agents `FYI, keep going`. Recipients incorporate
+them and continue the same task through completion. An explicit pause or stop
+ends work; a real blocker or timeout still requires an honest report.
 
 ## Rules
 

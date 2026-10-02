@@ -5,10 +5,10 @@ description: "Resolve GitHub PR review comments from humans and Copilot, includi
 
 # PR Resolver Skill
 
-Read and follow **agent-conduct**. Read **bugfix** before making any code
-change; it owns all fix-review-commit work. This skill owns PR state, review
-replies, batched pushes, checks, and Copilot review requests. Establish the
-outermost queue owner using
+Read and follow **agent-conduct** and **subagents**. Read **bugfix** before any
+code change; it owns all fix-review-commit work. This skill owns PR state,
+review replies, batched pushes, checks, and Copilot review requests. Establish
+the outermost queue owner using
 [bugfix routing](../bugfix/references/incidental-issues.md); inherit an existing
 owner when called by another workflow.
 
@@ -39,6 +39,11 @@ not create churn-only changes to satisfy a reviewer.
 
 ## 1. Confirm access and identify the PR
 
+For multiple supplied PRs, read [ordered PRs](references/ordered-prs.md) and
+retain that order across resumes. A single PR uses the procedure below without
+a separate queue. The PR order and the incidental bug queue have the same
+outer owner but remain separate lists.
+
 `gh` is mandatory. Do not fall back to raw tokens, `curl`, editor integrations,
 or the web UI.
 
@@ -53,18 +58,23 @@ branch is the PR head and is not `master`, `main`, or `develop` before any
 push. Follow **agent-conduct** Git Safety for rebasing on the resolved base
 and the standing authorization to force-push the feature branch with a lease.
 
+Discover local lint, test, fixture, and performance gates before review or
+push. Follow
+[gate policy](../implementation-principles/references/performance-gates.md)
+and pass commands, applicability, policy, and base evidence to bugfix workers.
+
 ## 2. Read one complete snapshot
 
 At entry and after every remote or local state change, refresh all of:
 
 - local `HEAD` and dirty status;
-- PR head SHA;
-- check rollup for that SHA;
+- PR state, head SHA, base ref, and freshly fetched base SHA;
+- check rollup for the PR head SHA;
 - all unresolved review threads, paginated, including thread node ID, first
   comment database ID, author, path, line, body, associated review/commit SHA,
   and resolution state;
-- all Copilot reviews, paginated, including review ID, `commit_id`, and
-  `submitted_at`;
+- all Copilot reviews, paginated, including review ID, `commit_id`,
+  `submitted_at`, `state`, `body`, and `html_url`;
 - current requested reviewers.
 
 Use GraphQL review threads because `isResolved` is required. Copilot authors
@@ -117,33 +127,47 @@ it with `-f cursor="$END_CURSOR"` using the returned `endCursor`; do not stop
 after the first 100 threads. Filter `isResolved == false` only after collecting
 every page.
 
-Fetch completed reviews with REST pagination so `commit_id` and
-`submitted_at` are explicit:
+Fetch reviews with REST pagination so `commit_id` and `submitted_at` are
+explicit; retain state and overview even with zero threads:
 
 ```bash
 gh api --paginate repos/{owner}/{repo}/pulls/{number}/reviews \
-  --jq '.[] | {id, author: .user.login, commit_id, submitted_at}'
+  --jq '.[] | {id, author: .user.login, commit_id, submitted_at, state, body, html_url}'
 ```
 
 Never use the same endpoint without `--paginate`: its default first page can
 omit the newest Copilot review, including a no-comments review, and cause a
 false wait. GraphQL `pullRequest.reviews` is also valid only when traversed to
 completion with `pageInfo` cursors. `reviews(last: 20)` is a valid fast path:
-finding a target-SHA review is conclusive, but not finding one requires
+finding a completed target-SHA review is conclusive, but absence requires
 pagination before concluding it is absent.
 
 Do not infer current state from a timeline event or an unpaginated REST page.
 Timeline events are advisory and never control a wait.
 
+Read the body/overview of each current-head Copilot review, even with no inline
+findings. Triage actionable defects through the same fix queue as threads,
+retaining review ID/link as source metadata. Carry human-attention areas such
+as concurrency, lock order, durability, or security into the ready report with
+the review link, labelled advisory/nonblocking when they allege no actionable
+defect. A completed `COMMENTED` review can satisfy Copilot review; `APPROVED`
+is not required. Pending/dismissed reviews do not prove completion.
+
 ## 3. Reconcile before waiting
 
 Always evaluate terminal facts first:
 
+If the PR merged or closed, record that state and stop its review loop. If the
+head is behind its fetched base or that base advanced since the current gate
+evidence, invalidate readiness and return to step 5 before waiting. Missing or
+stale local gate evidence also requires step 5, even on entry without changes
+to push. A failed fetch leaves base currency unknown and blocks readiness.
+
 1. If an active wait target differs from the PR head, abandon that wait, take a
    new snapshot, and reconcile the new head.
 2. If unresolved threads exist, triage them now.
-3. If a Copilot review already exists for the current PR head SHA, its review
-   wait is complete, even if the request/start event was missed.
+3. If a completed Copilot review exists for the current PR head SHA, consume
+   its overview and findings, even if the request/start event was missed.
 4. If current requested-reviewer state lists Copilot and no review for that SHA
    exists, wait for that review.
 5. Otherwise settle checks, then request Copilot instead of waiting for a
@@ -154,7 +178,7 @@ was requested immediately before pr-resolver started.
 
 ## 4. Build and drain the local work queue
 
-For each unresolved thread, choose exactly one outcome:
+For each unresolved thread or actionable overview finding, choose one outcome:
 
 - **Fix:** Redact secret or personal data, preserve PR/thread/comment IDs, and
   apply [bugfix routing](../bugfix/references/incidental-issues.md). Requested
@@ -166,10 +190,15 @@ For each unresolved thread, choose exactly one outcome:
 - **Blocked:** Report the required decision; do not silently resolve a direct
   human request.
 
-Pass all queued fixes to **bugfix** in batched-caller mode. It must process
-them sequentially using its implementor-reviewer TDD cycle, update its dated
+Pass all queued fixes and discovered gate evidence to **bugfix** in
+batched-caller mode. It must process them sequentially using its
+implementor-reviewer TDD cycle, update its dated
 checklist, and create one commit per item without pushing. Keep a mapping from
 each successful commit to its source thread.
+
+Overview-only findings retain review IDs and links instead of thread IDs.
+Report their disposition in the PR summary; reply/resolve API calls below
+apply only to actual threads.
 
 If the user reports a bug, a local gate exposes a bug, or CI feedback is
 already available while the queue is active, append it to the same bugfix
@@ -183,10 +212,14 @@ commit is still local.
 ## 5. Push the drained batch once
 
 First apply **agent-conduct** Git Safety to fetch and rebase the PR branch
-when the resolved base has advanced. Update the source-thread commit mappings
-after rebasing. If there are no local changes or rebased commits to publish,
-skip the push. Otherwise run the full local quality gates across the accumulated
-batch on the resulting head, then push all item commits together.
+onto the actual updated base when behind, including after a preceding PR
+merged. Preserve dirty user work in its worktree. Resolve conflicts and inspect
+the resulting diff; in CHANGELOG Unreleased append sections, retain distinct
+entries from both sides under the appropriate sections. Update source-thread
+commit mappings after rebasing. Run applicable local gates, including required
+performance comparisons against that base, across the resulting batch. Refresh
+the PR body's comparison evidence and policy verdict. If nothing needs
+publication, skip only the push; required evidence must still be current.
 
 Confirm that the checked-out branch is the PR head and that the destination
 ref is not `master`, `main`, or `develop`. Use an explicit remote and feature
@@ -211,6 +244,7 @@ after the head becomes visible, then poll the check rollup with a bounded,
 interruptible monitor. At every poll, first test these state transitions:
 
 - PR head changed: abandon this target and reconcile the new snapshot;
+- fetched base advanced: invalidate readiness and return to step 5;
 - user supplied new work: stop waiting and drain it;
 - any check failed: inspect its logs and annotations, reproduce locally, and
   enqueue the verified defect through **bugfix**;
@@ -246,10 +280,10 @@ gh api graphql -f query='mutation {
 ### Existing or automatic request
 
 On initial entry with no locally pushed changes, set `TARGET_SHA` to the
-current PR head. If a Copilot review with `commit_id == TARGET_SHA` already
-exists, process its unresolved threads without waiting. If requested-reviewer
-state lists Copilot, go directly to the SHA-aware wait below. Otherwise settle
-checks for the initial head, then request a review.
+current PR head. If a completed Copilot review with `commit_id == TARGET_SHA`
+exists, process its overview and unresolved findings, then test convergence.
+Otherwise, if requested-reviewer state lists Copilot, use the SHA-aware wait
+below. With neither, settle checks for the initial head and request review.
 
 ### After a push
 
@@ -293,19 +327,21 @@ Poll up to 20 minutes with an interruptible monitor. On every poll, fetch a
 fresh paginated snapshot and evaluate in this order:
 
 1. PR head is no longer `TARGET_SHA` -> abandon the stale wait and reconcile.
-2. New user work exists -> stop waiting and run the batched bugfix workflow.
-3. A Copilot review exists with `commit_id == TARGET_SHA` (and, after an
-   explicit request, is not in the recorded review-ID baseline) -> review is
-   complete; fetch threads immediately.
-4. New unresolved Copilot threads attributable to `TARGET_SHA` exist -> review
-   is effectively complete; triage them immediately even if review metadata
-   lags.
-5. Deadline expired -> report the timeout and the last full snapshot.
-6. Otherwise continue waiting.
+2. Fetched base advanced -> invalidate readiness and return to step 5.
+3. New user work exists -> stop waiting and run the batched bugfix workflow.
+4. A completed Copilot review exists with `commit_id == TARGET_SHA` (and after
+   an explicit request, is not in the recorded review-ID baseline) -> review is
+   complete; read its overview and fetch threads immediately.
+5. New unresolved Copilot threads attributable to `TARGET_SHA` exist -> triage
+   immediately, but require completed review metadata before readiness.
+6. Deadline expired -> report the timeout and the last full snapshot.
+7. Otherwise continue waiting.
 
 Never wait for an event merely because a previous event was observed. The
-state predicate for completion is a Copilot review or its threads for the
-target SHA.
+state predicate for readiness requires a completed Copilot review for the
+target SHA and no actionable unresolved findings, including overview defects.
+Consume a completed monitor's output before the next status update; report the
+observed result rather than repeating a stale waiting message.
 
 ## 8. Repeat to convergence
 
@@ -316,8 +352,20 @@ new head. End only when:
 - local `HEAD` equals the PR head and the worktree has no uncommitted workflow
   changes;
 - checks for that head are settled and successful;
-- Copilot has completed a review of that head; and
-- no unresolved actionable review threads remain.
+- applicable local gates, including required performance comparisons, passed
+  on that revision and current base, with evidence in the PR body;
+- Copilot has completed a review of that head;
+- no unresolved actionable findings remain, including review overviews; and
+- the head is zero commits behind the freshly fetched base.
+
+Immediately before reporting ready, fetch the base again, capture immutable
+`BASE_SHA` and `HEAD_SHA`, verify remote PR head still equals local `HEAD`, and
+run `git rev-list --count "$HEAD_SHA..$BASE_SHA"`. It must return 0. Record both
+SHAs and observation time outside the PR's commits; never commit a head-SHA
+checkpoint onto the head it validates. If base advanced during checks/review
+or this final check, invalidate readiness and return to step 5. A prior green
+snapshot is historical evidence only. Report readiness for the observed pair
+of SHAs with current-head advisory risks and their review links.
 
 Count cycles by distinct pushed target SHA, not by polling attempts or event
 transitions. From cycle 3 onward, tell bugfix implementors to consider whether

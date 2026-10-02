@@ -52,8 +52,12 @@ owner without processing them.
 Before fixing anything, read `README.md`, `Makefile`/`justfile`/`package.json`
 scripts, and any CONTRIBUTING doc to identify the project's lint, test, and
 fixture/dev commands (e.g. `make lint`, `make test`, `make dev-fixtures`,
-`npm run lint`). Record the exact commands and pass them to every subagent.
-Subagents must run these gates, not invent their own.
+`npm run lint`). Discover performance commands and applicability using
+[gate policy](../implementation-principles/references/performance-gates.md).
+Record exact commands, scope, policy, and base evidence and pass them with
+that reference to every implementor and reviewer. Reassess applicability as
+the diff or base changes. Subagents must run applicable project gates, not
+invent their own; required performance regressions remain current work.
 
 ## Checklist File
 
@@ -194,9 +198,10 @@ Brief an implementor subagent with:
   reason. Follow TDD and **testing-principles**. Add a behavioural regression
   test encoding the minimal repro when testing-principles calls for one, then
   fix the cause so both the test and the red command pass. Do not modify
-  unrelated tests. Run the project's lint and test
-  commands; both must pass. Report distinct incidental issues to the caller
-  for routing, including unrelated, pre-existing, or flaky gate failures.
+  unrelated tests. Run the project's applicable quality gates, including
+  required performance comparisons; all must pass. Report distinct incidental
+  issues to the caller for routing, including unrelated, pre-existing, or flaky
+  gate failures.
   Required gates still must pass; do not skip or quarantine them. Do not paper
   over, work around, or fake a fix (see agent-conduct § Honesty About Blockers).
   If the bug cannot be fixed due to an outside constraint, revert and report
@@ -222,8 +227,10 @@ Brief a reviewer subagent with:
   follows **testing-principles** and the regression test encodes the minimal
   repro; (c) the fix addresses the cause rather than suppressing the symptom,
   and is minimal; (d) no prior regression test was deleted, skipped, or
-  weakened; (e) the project's lint and test commands pass (run them); (f) for
-  a web UI or otherwise visual bug, drive the app yourself from the same
+  weakened; (e) the project's lint and test commands pass (run them), and
+  required performance evidence fits the current revision and changed scope
+  per the supplied performance reference; (f) for a web UI or otherwise visual
+  bug, drive the app yourself from the same
   fixture and viewport, capture a post-fix screenshot, and compare it against
   the before image: the reported symptom is gone and nothing else visibly
   regressed. A green test suite alone does not satisfy (f). If any gate fails
@@ -255,8 +262,9 @@ for confirmation. Proceed to the next bug.
 Apply [queue completion](references/incidental-issues.md#finish-or-stop): only
 the outermost owner drains deferred branches, after its current work succeeds.
 Report the checklist path, each item's outcome and commit SHA, and any pending
-branch/entry references. For a batched caller, return source metadata unchanged
-so it can reply to the correct review threads after pushing.
+branch/entry references. Include performance applicability and comparison
+evidence for the caller's PR body. For a batched caller, return source metadata
+unchanged so it can reply to the correct review threads after pushing.
 
 ## Rules
 

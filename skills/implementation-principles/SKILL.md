@@ -89,6 +89,10 @@ For each behaviour change:
 If a required quality gate cannot run, report that explicitly. Do not claim it
 passed.
 
+When discovering or verifying quality gates, read
+[performance gates](references/performance-gates.md). Apply the project's
+performance policy to the changed scope alongside correctness gates.
+
 ## Root Causes
 
 Fix the cause, not the symptom. Reproduce the failure first, then trace it
