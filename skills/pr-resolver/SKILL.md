@@ -159,11 +159,14 @@ is not required. Pending/dismissed reviews do not prove completion.
 
 Always evaluate terminal facts first:
 
-If the PR merged or closed, record that state and stop its review loop. If the
-head is behind its fetched base or that base advanced since the current gate
-evidence, invalidate readiness and return to step 5 before waiting. Missing or
-stale local gate evidence also requires step 5, even on entry without changes
-to push. A failed fetch leaves base currency unknown and blocks readiness.
+If the PR merged, apply
+[post-merge cleanup](../agent-conduct/references/post-merge-cleanup.md), record
+the outcome, and stop its review loop. If closed unmerged, record that state
+and stop without merge cleanup. If the head is behind its fetched base or
+that base advanced since the current gate evidence, invalidate readiness and
+return to step 5 before waiting. Missing or stale local gate evidence also
+requires step 5, even on entry without changes to push. A failed fetch leaves
+base currency unknown and blocks readiness.
 
 1. If an active wait target differs from the PR head, abandon that wait, take a
    new snapshot, and reconcile the new head.

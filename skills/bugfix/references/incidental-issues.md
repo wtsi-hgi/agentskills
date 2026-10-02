@@ -200,6 +200,7 @@ entries and branches available for resume.
 Remove a deferred worktree only after verifying its fix merged into the
 intended integration base and applying
 [Git Safety deletion checks](../../agent-conduct/SKILL.md#git-safety).
-Use normal `git worktree remove <worktree-path>` without force. Worktree
-cleanup does not authorize branch deletion; delete a branch only when the
-user or caller has authorized it.
+For a merged task PR, apply the standing authorization and procedure in
+[post-merge cleanup](../../agent-conduct/references/post-merge-cleanup.md).
+Otherwise, branch deletion needs existing user or caller authorization.
+Use normal `git worktree remove <worktree-path>` without force.

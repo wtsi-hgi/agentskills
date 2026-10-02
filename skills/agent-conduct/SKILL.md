@@ -71,6 +71,11 @@ Avoid triggering VS Code modal confirmation prompts:
   stashes; unrelated surviving work need not be cleaned. Report what was
   checked and how at-risk work was accounted for. Retain unaccounted-for work.
   These checks do not authorize deletion.
+- After the hosting service confirms a task PR merged, apply
+  [post-merge cleanup](references/post-merge-cleanup.md). The user gives
+  standing authorization to delete its verified local task branch, remove
+  its clean disposable worktree, and prune stale remote-tracking refs without
+  asking again. This does not authorize remote branch or clone deletion.
 
 ## General
 

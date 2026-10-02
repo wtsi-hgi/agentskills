@@ -26,10 +26,13 @@ An outer owner may drain incidental work at this completion boundary under
 routing; refresh the current PR's base before the final ready report.
 
 On resume after a reported merge, load the same checkpoint and verify the
-PR's actual merged state. Advance to the next queued PR only after that
-confirmation or explicit user direction. If closed unmerged, record it and
-report the queue decision needed. If still open, refresh its readiness and
-return the remaining user action without waiting indefinitely.
+PR's actual merged state. If merged, apply
+[post-merge cleanup](../../agent-conduct/references/post-merge-cleanup.md),
+preserving the queue checkpoint and recording any retained cleanup work.
+Advance to the next queued PR only after merge confirmation or explicit user
+direction. If closed unmerged, record it and report the queue decision needed.
+If still open, refresh its readiness and return the remaining user action
+without waiting indefinitely.
 
 For each next PR, repeat the main procedure against its actual fetched base.
 Previous convergence cannot substitute for fresh gates and review after a
