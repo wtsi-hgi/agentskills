@@ -13,14 +13,15 @@ Use only when explicitly invoked. This authorizes commits, feature-branch
 pushes, PR creation, and review resolution without asking again between steps.
 Honor narrower user instructions. Leave merging to the user.
 
-Keep a short queue of branches, PR links, target branches, dependencies, and
-status. Add branches discovered during implementation or review to this queue.
-Respect dependencies and preserve the queue across user handoffs. Whenever a
-branch waits on a human merge, input, review, or CI, record what it needs and
-continue on an unblocked branch. These steps apply per branch, not to the
-whole queue in lockstep. Revisit waiting branches as responses or results
-arrive, refreshing their state before resuming. Pause the whole delivery only
-when no queued work can advance.
+Save the queue in the owner's branch-owned checklist or another
+project-approved location that survives cleanup. Record each branch, PR,
+target, dependencies, head SHA, status, what it waits on, and next action.
+Add incidental branches and update the record at every state change. On
+resume, reconcile it with live GitHub state before acting.
+
+When a branch waits on a human merge, input, review, or CI, continue on an
+unblocked branch, respecting dependencies. Revisit waiting branches as results
+arrive. Pause the whole delivery only when no queued work can advance.
 
 1. Complete the change using [bugfix](../bugfix/SKILL.md),
    [orchestrator](../orchestrator/SKILL.md), or the project's applicable
@@ -32,16 +33,27 @@ when no queued work can advance.
 3. Use [pr-resolver](../pr-resolver/SKILL.md) on that PR through completion.
    Confirm its current head meets the required checks and approvals and has no
    merge conflicts before calling it ready.
-4. As soon as a PR is ready, link it and ask the user to merge it and tell you
-   when done. Do not wait for all PRs to be ready. Continue other unblocked
-   work while awaiting their response; do not merge or enable auto-merge.
+4. Ask for one merge at a time, choosing by dependency order, then user impact.
+   As soon as that PR is checked against the current target and ready, link it
+   and ask the user to merge it and tell you when done. Give the planned order
+   for the rest. Other PRs with that target stay queued until rebased onto each
+   merged result and rechecked; do not present them as ready together. If PRs
+   overlap in files, explain that they must merge in sequence. Continue other
+   unblocked work while waiting; do not merge or enable auto-merge yourself.
 5. When the user reports a merge, verify on GitHub that the PR was merged into
    its intended target, then fetch the updated target. A closed PR or the
    user's report alone is not merge verification.
+   Apply [post-merge cleanup](../agent-conduct/references/post-merge-cleanup.md)
+   to its worktree, local branch, and stale remote-tracking refs, preserving
+   the queue first. Report what was removed or kept and why. List any clones
+   now eligible for deletion and ask once for permission to delete them.
 6. Rebase the next unblocked branch's remaining work onto its updated target,
    adjusting the PR base if a merged dependency requires it. Resolve conflicts,
    rerun the needed checks, and push following agent-conduct. Run pr-resolver
    again for a changed head; otherwise refresh its checks and review status.
+   Preparing this next PR takes the next available worker slot ahead of long
+   implementation, investigation, or soak work. If another worker can safely
+   pause to free capacity, pause it and resume it afterwards.
    Repeat from step 4 when ready. Branches still needing implementation or a
    PR start at step 1, so every branch receives the full workflow.
 
