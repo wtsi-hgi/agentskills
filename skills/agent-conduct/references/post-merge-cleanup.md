@@ -14,6 +14,11 @@
    inspect the resulting integration diff rather than requiring the task
    commits to be ancestors. Preserve pending dependency references, evidence,
    checkpoints, at-risk files and stashes outside any worktree being removed.
+   Check `git worktree list` for this task's abandoned detached
+   [scratch copies](../SKILL.md#scratch-copies); remove existing copies under
+   those rules. For missing copies, run
+   `git worktree prune --dry-run --expire now`, then omit `--dry-run` only if
+   every candidate is confirmed abandoned and passes the deletion checks.
 4. Leave the task branch before deleting it. In a primary worktree, switch
    safely to the local integration branch, or use
    `git switch --detach <fetched-base-sha>`. Do not reset or discard dirty work
