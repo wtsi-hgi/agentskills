@@ -16,6 +16,31 @@ These rules apply to ALL agents regardless of skill.
 - Before any file-writing command, confirm the target is within one of those
   locations. Create worktrees with normal Git commands, not clones or edits
   to `.git/` internals.
+- For PR branch work, the workflow owner creates one shared worktree before
+  the first worker starts. Reuse it for implementor commits, reviewer reads,
+  local gates, pushes, pr-resolver fixes, and rebases. Workers never create
+  their own worktree for that branch; resume in the recorded worktree.
+- Create new PR branches from the freshly fetched base, from the main clone:
+
+  ```bash
+  git fetch origin && git worktree add -b <topic>-<8 hex> ../<repo>-<topic> origin/<base>
+  ```
+
+  Use a short topic and eight random hex digits. Keep the worktree beside the
+  main clone, never inside a clone. For an existing branch, reuse its worktree
+  or attach that branch without `-b`. Dependent branches use the recorded SHA
+  under
+  [routing](../bugfix/references/incidental-issues.md#dependent-local-branches).
+- Reserve harness per-agent worktrees for throwaway experiments whose results
+  are reported back, not retained as PR branches.
+- Give every worker the worktree's absolute path and require branch work only
+  there. Reviewers leave it unchanged; mutants and experiments belong in a
+  scratch copy or scratchpad.
+- Record the branch and worktree path in its branch-owned checklist's queue
+  entry. In committed records, make the path relative to the main clone.
+- Remove a PR worktree only through
+  [post-merge cleanup](references/post-merge-cleanup.md), never when a worker
+  finishes.
 
 ## Scratch Work
 

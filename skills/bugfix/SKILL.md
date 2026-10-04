@@ -47,6 +47,9 @@ another issue appears and again at completion. A batched caller's local queue
 contains only work routed to its current branch; return deferred items to the
 owner without processing them.
 
+Before PR branch workers, apply
+[Workspace Boundary](../agent-conduct/SKILL.md#workspace-boundary).
+
 ## Discover Quality Gates (once, up front)
 
 Before fixing anything, read `README.md`, `Makefile`/`justfile`/`package.json`

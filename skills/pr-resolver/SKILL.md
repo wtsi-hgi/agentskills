@@ -11,6 +11,8 @@ review replies, batched pushes, checks, and Copilot review requests. Establish
 the outermost queue owner using
 [bugfix routing](../bugfix/references/incidental-issues.md); inherit an existing
 owner when called by another workflow.
+Before workers, apply
+[Workspace Boundary](../agent-conduct/SKILL.md#workspace-boundary).
 
 ## Invariants
 

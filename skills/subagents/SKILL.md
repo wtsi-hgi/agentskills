@@ -156,6 +156,8 @@ Each subagent starts with clean context. Give it:
 
 - Skill names and absolute file paths to read.
 - The **agent-conduct** path, including its delegated-work completion contract.
+- The worktree path and role limits from
+  [Workspace Boundary](../agent-conduct/SKILL.md#workspace-boundary).
 - The specific task (item, spec section, file list, bug, finding).
 - Expected output (e.g. "Follow TDD cycle and testing-principles, run tests
   and linter"; "Return PASS or FAIL with specific feedback").

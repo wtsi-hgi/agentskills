@@ -16,6 +16,8 @@ Honor narrower user instructions. Leave merging to the user.
 Save the queue in the owner's branch-owned checklist or another
 project-approved location that survives cleanup. Record each branch, PR,
 target, dependencies, head SHA, status, what it waits on, and next action.
+Include its worktree per
+[Workspace Boundary](../agent-conduct/SKILL.md#workspace-boundary).
 Add incidental branches and update the record at every state change. On
 resume, reconcile it with live GitHub state before acting.
 
@@ -23,7 +25,9 @@ When a branch waits on a human merge, input, review, or CI, continue on an
 unblocked branch, respecting dependencies. Revisit waiting branches as results
 arrive. Pause the whole delivery only when no queued work can advance.
 
-1. Complete the change using [bugfix](../bugfix/SKILL.md),
+1. Establish the branch worktree per
+   [Workspace Boundary](../agent-conduct/SKILL.md#workspace-boundary).
+   Complete the change using [bugfix](../bugfix/SKILL.md),
    [orchestrator](../orchestrator/SKILL.md), or the project's applicable
    implementation and review skills. Preserve their tests, reviews, and
    completion requirements. Reuse completed work where its evidence still

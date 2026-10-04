@@ -28,7 +28,7 @@ completed origin's handoff.
 Inspect the actual working changes, including staged, unstaged, and untracked
 work. A changed line or a diff against the base is a clue, not proof of cause.
 When ownership is uncertain, compare the same symptom against the resolved
-base in a separate worktree; do not disturb the current work to reproduce it.
+base in a scratch copy; do not disturb the current work to reproduce it.
 Use evidence appropriate to the failure, including intermittent failures.
 
 - Requested work and regressions caused by the current task stay on the
@@ -104,9 +104,8 @@ in-flight fix with the current branch without waiving its required gate.
    dependency remain compatible. Keep each issue's entry and
    fix-review-commit cycle separate; a broad label such as tooling alone
    does not make unrelated fixes coherent.
-   Otherwise create a designated worktree of this repository with
-   `git worktree add -b <bugfix-branch> <worktree-path> <base>` using the
-   checklist's random ID in the branch name.
+   Otherwise the owner creates the branch worktree under
+   [Workspace Boundary](../../agent-conduct/SKILL.md#workspace-boundary).
    A PR that has converged or is waiting for merge takes no new incidental
    items. Leave the original worktree and index intact; never stash, reset,
    or copy unfinished implementation into the bugfix branch. Obey actual
@@ -197,10 +196,5 @@ entries and branches available for resume.
 
 ## Worktree Cleanup
 
-Remove a deferred worktree only after verifying its fix merged into the
-intended integration base and applying
-[Git Safety deletion checks](../../agent-conduct/SKILL.md#git-safety).
-For a merged task PR, apply the standing authorization and procedure in
+Follow [Workspace Boundary](../../agent-conduct/SKILL.md#workspace-boundary) and
 [post-merge cleanup](../../agent-conduct/references/post-merge-cleanup.md).
-Otherwise, branch deletion needs existing user or caller authorization.
-Use normal `git worktree remove <worktree-path>` without force.
