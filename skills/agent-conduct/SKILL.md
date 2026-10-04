@@ -51,6 +51,7 @@ A scratch copy is a temporary detached worktree in a scratchpad/temp directory:
 git worktree add --detach <scratchpad-or-tmp path> <sha>
 ```
 
+Include the branch's topic or checklist ID in the scratch copy's path.
 Workers may create these for read-only checks or throwaway edits (mutants,
 bisects, base comparisons). Never commit in them. Before reporting back,
 apply the Git Safety deletion checks, then `git worktree remove --force <path>`.
