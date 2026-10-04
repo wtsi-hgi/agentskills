@@ -23,7 +23,7 @@ These rules apply to ALL agents regardless of skill.
 - Create new PR branches from the freshly fetched base, from the main clone:
 
   ```bash
-  git fetch origin && git worktree add -b <topic>-<8 hex> ../<repo>-<topic> origin/<base>
+  git fetch origin && git worktree add --no-track -b <topic>-<8 hex> ../<repo>-<topic> origin/<base>
   ```
 
   Use a short topic and eight random hex digits. Keep the worktree beside the
@@ -35,12 +35,26 @@ These rules apply to ALL agents regardless of skill.
   are reported back, not retained as PR branches.
 - Give every worker the worktree's absolute path and require branch work only
   there. Reviewers leave it unchanged; mutants and experiments belong in a
-  scratch copy or scratchpad.
+  [scratch copy](#scratch-copies) or scratchpad.
 - Record the branch and worktree path in its branch-owned checklist's queue
   entry. In committed records, make the path relative to the main clone.
-- Remove a PR worktree only through
+- Remove a merged PR worktree through
   [post-merge cleanup](references/post-merge-cleanup.md), never when a worker
-  finishes.
+  finishes. Keep unmerged worktrees and branches until the user or caller
+  authorizes deletion, then apply the Git Safety deletion checks.
+
+### Scratch Copies
+
+A scratch copy is a temporary detached worktree in a scratchpad/temp directory:
+
+```bash
+git worktree add --detach <scratchpad-or-tmp path> <sha>
+```
+
+Workers may create these for read-only checks or throwaway edits (mutants,
+bisects, base comparisons). Never commit in them. Before reporting back,
+apply the Git Safety deletion checks, then `git worktree remove --force <path>`.
+Only their throwaway files and edits are authorized for discard.
 
 ## Scratch Work
 
@@ -62,6 +76,8 @@ Avoid triggering VS Code modal confirmation prompts:
 
 - NEVER push to `master`, `main`, or `develop` branches, including normal and
   force pushes. Check the destination ref, not just the checked-out branch.
+- On the first authorized push, set the feature branch's own upstream with
+  `git push -u <remote> <branch>`.
 - Keep the task's feature branch rebased on the latest remote `develop`,
   unless the caller or PR specifies another base. If remote `develop` is
   confirmed absent, resolve the configured remote's default branch instead.

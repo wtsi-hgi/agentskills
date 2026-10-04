@@ -28,7 +28,8 @@ completed origin's handoff.
 Inspect the actual working changes, including staged, unstaged, and untracked
 work. A changed line or a diff against the base is a clue, not proof of cause.
 When ownership is uncertain, compare the same symptom against the resolved
-base in a scratch copy; do not disturb the current work to reproduce it.
+base in a [scratch copy](../../agent-conduct/SKILL.md#scratch-copies).
+Leave the current work untouched.
 Use evidence appropriate to the failure, including intermittent failures.
 
 - Requested work and regressions caused by the current task stay on the
