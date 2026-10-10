@@ -1,6 +1,6 @@
 ---
 name: orchestrator
-description: "Orchestrates implementation and review of phase plans via subagents, and drives the real app through the project's verify skill when one exists. Use when given a phase MD file to complete."
+description: "Orchestrates implementation, review, and user-path verification of phase plans via subagents. Use when given a phase MD file to complete."
 ---
 
 # Orchestrator Skill
@@ -62,23 +62,11 @@ until PASS.
 
 ### 4. Verify user-visible behaviour
 
-If the phase changed behaviour a user can observe, glob
-`.github/skills/verify-*/SKILL.md`. That is the contract **verification**
-publishes; do not search elsewhere.
-
-- **Found:** launch a subagent with the verify skill path, its feature map
-  path, and the features this phase touched. "Follow the skill: launch,
-  doctor, drive each named feature, capture evidence, clean up. Return
-  VERIFIED, NOT VERIFIED, or INCONCLUSIVE per feature, each with its evidence
-  path." Treat NOT VERIFIED or INCONCLUSIVE as a review failure: uncheck the
-  affected item's `reviewed` marker, route it through the fix-and-review cycle
-  in step 3, then re-drive before restoring the marker. A drive that fails on
-  stale skill steps is drift in the verify skill, not a product failure.
-  Launch a subagent with the **verification** skill path and verify skill
-  directory in maintenance mode to repair only the verify skill, then re-drive
-  the affected feature.
-- **Not found:** say so in your final report, and name **verification** as the
-  skill that creates one. Do not create one mid-phase.
+Apply
+[user-path verification](../testing-principles/SKILL.md#user-path-verification).
+Delegate required drives with the **verification** skill path and affected
+features. Keep affected `reviewed` markers unchecked until VERIFIED; follow
+verification's failure handling before resuming.
 
 ### 5. Phase completion
 
@@ -88,11 +76,7 @@ path that belongs to the phase, including the phase file. Inspect the staged
 diff before committing to confirm it contains the complete phase and no
 unrelated changes.
 
-Drive evidence is kept. Leave it where the verify skill puts it and cite that
-path in your report, so a reviewer can see the proof without re-running the
-drive. Whether it is committed follows the project's evidence policy; with
-none, leave it out of the phase commit rather than adding screenshots or logs
-to it.
+Cite the retained verification evidence in your report.
 
 ### 6. Spec-aware PR review (after all phases)
 

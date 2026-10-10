@@ -1,14 +1,12 @@
 ---
 name: verification
-description: "Create, prove, and maintain a project-local skill that drives the real app the way a user does and captures evidence. Use when a project has no scripted way to prove user-visible behaviour, when an existing verify skill has gone stale, or when a workflow needs proof beyond tests and linters."
+description: "Verify user-visible changes through the real app. Create or maintain a project-local verify skill when its recipe is missing or stale."
 ---
 
 # Verification Skill
 
-Tests and linters prove the code does what its tests say. They do not prove a
-user can do the thing. This skill produces a project-local **verify skill**
-that launches the real app, drives a named feature the way a user would, and
-captures evidence.
+Prove changed behaviour through real user paths. Reuse existing E2E tests or
+project-local verify skills; create or repair recipes when needed.
 
 Read and follow **agent-conduct**, **subagents**, and **writing-for-agents**
 before starting. **subagents** owns delegation. Apply
@@ -17,23 +15,37 @@ mid-task, by an agent that has never seen the app.
 
 ## Output
 
-This skill owns the location, so callers find a verify skill without
-searching. The path is fixed:
+Create `.agents/skills/verify-<app>/SKILL.md` at the repository root, with a
+`features/` directory containing `README.md` and one file per feature. `<app>`
+names the app or surface, allowing several in a monorepo.
 
-- `.github/skills/verify-<app>/SKILL.md` - the verify skill. `<app>` is the
-  app or surface it drives, so a monorepo can hold several.
-- `.github/skills/verify-<app>/features/` - the feature map: a `README.md`
-  index plus one file per user-facing feature.
+For Claude Code discovery, create a relative directory symlink at
+`.claude/skills/verify-<app>` pointing to `../../.agents/skills/verify-<app>`.
+Keep one source; preserve any conflicting existing entry and report it.
+Pass resolved absolute skill paths to workers.
 
-Callers detect a verify skill by globbing
-`.github/skills/verify-*/SKILL.md`. That glob is the published contract, so
-place the skill there whatever harness is in use. It does not need to sit in
-the harness's own skills directory: its callers invoke it by absolute path,
-the same way every other skill in this repo is passed to a subagent. Symlink
-it into the harness directory only if a human also wants to invoke it by name,
-and never move it out of the fixed path.
+## Run Verification
 
-## Procedure
+Apply
+[user-path verification](../testing-principles/SKILL.md#user-path-verification).
+
+1. Glob `.agents/skills/verify-*/SKILL.md` from the repository root. Match the
+   affected features to the skills and feature maps; deduplicate resolved
+   skill paths. Cover changed paths missing from the maps too.
+2. Follow each relevant recipe: launch, doctor, drive, capture evidence,
+   cleanup. Without a covering recipe, use the project's existing harness or
+   a reproducible direct drive. Create a reusable skill when useful within
+   the authorized scope; a missing skill never excuses missing proof.
+3. Record each feature, expected and observed outcomes, tested revision
+   (including any uncommitted diff), verdict, and evidence paths. Keep evidence
+   after cleanup under the project's evidence policy; with none, leave it
+   uncommitted. Reuse proof only while its scope and tested artifact match.
+4. Return VERIFIED with passing evidence, NOT VERIFIED for a product failure,
+   or INCONCLUSIVE for missing access, environment, or evidence. Route product
+   failures through **bugfix**; repair stale recipes through Maintenance Pass
+   and re-drive. Name blockers; block affected work until VERIFIED.
+
+## Create a Verify Skill
 
 ### 1. Interview the repo, not the user
 
@@ -88,10 +100,10 @@ Give each feature file these four headings:
 - `What It Is` - the feature from the user's point of view.
 - `How To Reach It` - the user's route to it.
 - `How To Drive It` - the harness steps, using the Drive recipe.
+  Include expected outcomes and side effects.
 - `Gotchas` - prerequisites, shared state, anything that misleads.
 
-The map is the maintained record of what needs proving. A proof that drives
-one convenient entry point is incomplete while the map lists others.
+For each selected feature, cover every mapped entry point.
 
 ### 4. Prove the skill before handing it over
 
@@ -104,6 +116,7 @@ feature, capture evidence, clean up. Then confirm the evidence still exists
 where the skill says it does. Fix what fails, and run cleanup after each
 failed attempt so nothing is left holding a port. A generated skill that was
 never executed is a draft, not a deliverable.
+This proves the executed recipe, not the whole feature map.
 
 ## Proof Standards
 

@@ -106,6 +106,9 @@ path, and modified files list.
 ### 5. Run linters and tests
 
 Use commands from the conventions skill. Note failures.
+Apply
+[user-path verification](../testing-principles/SKILL.md#user-path-verification)
+to changed behaviour, refreshing affected proof after subsequent fixes.
 
 ### 6. Compile findings
 

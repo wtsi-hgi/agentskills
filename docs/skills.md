@@ -39,8 +39,8 @@ These skills are tech-stack-agnostic and used across all projects:
 | **bugfix** | Orchestrates bug fixes via implementor and reviewer subagents using TDD. Reproduces each bug with a red command before fixing it, handles bugs sequentially, tracks them in a dated checklist, and commits each fix. |
 | **deliver** | Explicit workflow through review and verified user merges. |
 | **frontend-design** | Create distinctive, production-grade frontend interfaces that avoid generic AI aesthetics. Use when building web components, pages, dashboards, or styling web UI. |
-| **orchestrator** | Orchestrates implementation and review of phase plans via subagents, and drives the real app through the project's verify skill when one exists. Use when given a phase MD file to complete. |
-| **verification** | Creates, proves, and maintains a project-local skill that drives the real app the way a user does and captures evidence. Use when a project has no scripted way to prove user-visible behaviour. |
+| **orchestrator** | Implements, reviews, and verifies phases via subagents. |
+| **verification** | Verifies user paths; creates and repairs verify skills. |
 | **pr-reviewer** | Reviews changes on current branch vs base. Checks code quality, bugs, usability, and optionally spec conformance. Fixes issues via implementor subagents. |
 | **pr-resolver** | Resolve GitHub PR review comments from humans and Copilot. Use when asked to address PR comments, distinguish required human change requests from questions or suggestions, evaluate invalid or low-value comments, reply and resolve threads, and push only when needed for Copilot re-review. |
 | **spec-writer** | Orchestrates spec creation and review via subagents. Use when designing a new feature or writing a spec. |

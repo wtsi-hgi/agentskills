@@ -59,6 +59,8 @@ fixture/dev commands (e.g. `make lint`, `make test`, `make dev-fixtures`,
 [gate policy](../implementation-principles/references/performance-gates.md).
 Pass applicable commands and policy to each implementor and reviewer;
 subagents must run these gates, not invent their own.
+For user-visible changes, include
+[user-path verification](../testing-principles/SKILL.md#user-path-verification).
 
 ## Checklist File
 
@@ -237,6 +239,9 @@ Brief a reviewer subagent with:
   for an unrelated, pre-existing, or flaky reason, return FAIL and identify it
   as a newly discovered checklist bug. Return PASS or FAIL with specific
   feedback."
+
+Before PASS, require current user-path evidence under the discovered gates;
+follow **verification** for failed or inconclusive drives.
 
 **PASS ->** step 4. **FAIL ->** new implementor with feedback, then new
 reviewer. Route distinct incidental findings before the next cycle; keep

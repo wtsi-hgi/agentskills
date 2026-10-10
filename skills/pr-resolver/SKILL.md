@@ -227,6 +227,9 @@ commit mappings after rebasing. Run applicable local gates across the resulting
 batch, using project-defined performance baselines. Refresh required evidence
 in the PR body. If nothing needs publication, skip only the push; required
 evidence must still be current.
+Include bugfix's
+[user-path evidence](../testing-principles/SKILL.md#user-path-verification)
+for the resulting batch.
 
 Confirm that the checked-out branch is the PR head and that the destination
 ref is not `master`, `main`, or `develop`. Use an explicit remote and feature

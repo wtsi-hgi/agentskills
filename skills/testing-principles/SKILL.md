@@ -24,6 +24,17 @@ same theming mechanism production uses. Compare the element against its own
 fill and nearby surfaces rather than against token names. This holds for a
 test, for a review, and for a bug's red command alike.
 
+## User-Path Verification
+
+Before completing a user-visible behaviour change, prove the affected paths
+through the real app's supported interface. Existing E2E tests count when they
+exercise those paths and assert the required outcomes. Keep targeted regression
+tests; run the full suite when project policy or change scope requires it.
+
+Follow [verification](../verification/SKILL.md#run-verification) for discovery,
+execution, evidence, and failure handling. After later edits or rebases,
+refresh affected proof before completion or publication.
+
 ## Avoid
 
 Do not write tests whose only claim is an implementation detail: private
