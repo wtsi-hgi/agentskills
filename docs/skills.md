@@ -34,6 +34,7 @@ These skills are tech-stack-agnostic and used across all projects:
 | **writing-for-agents** | Standards for documents agents read and act on: skill files, subagent briefings, AGENTS.md/CLAUDE.md, and docs a skill points at. |
 | **prose-principles** | Sentence-level prose rules shared by every kind of writing here: words to replace, filler to cut, plain constructions to use. |
 | **final-response** | Applies prose-principles to every chat message, including progress updates, cuts filler, repetition, process narration, and fake enthusiasm, and ends each message with the user's next action. |
+| **tighten** | Explicit rewrite of the previous answer in at most 60 words, or a given limit, keeping only the answer, the best fix, and what it leaves uncovered. |
 | **unslop** | Applies prose-principles to a Markdown file, and adds repository Markdown mechanics for specs, phase plans, checklists, docs, and READMEs. |
 | **subagents** | Shared rules for orchestrating agents that delegate work to subagents. Referenced by orchestrator, bugfix, spec-writer, pr-reviewer, and pr-resolver. |
 | **bugfix** | Orchestrates bug fixes via implementor and reviewer subagents using TDD. Reproduces each bug with a red command before fixing it, handles bugs sequentially, tracks them in a dated checklist, and commits each fix. |
@@ -146,6 +147,22 @@ $deliver Take the completed work on this branch through PR resolution.
 Use `/deliver` in harnesses that expose skills as slash commands. Ordinary
 feature and bugfix requests do not activate this workflow. It uses the existing
 skills' quality gates and reports blockers or timeouts as incomplete delivery.
+
+### Shorten an Answer
+
+**final-response** cuts filler, but an answer can still carry true, relevant
+detail the reader doesn't need. Explicitly invoke
+[tighten](../skills/tighten/SKILL.md) to rewrite the previous answer in at
+most 60 words, or give a limit:
+
+```text
+$tighten
+$tighten 40
+```
+
+Use `/tighten` in harnesses that expose skills as slash commands. The rewrite
+keeps the answer, the best fix, and what the fix leaves uncovered, and drops
+internals, repetition, and unverified claims.
 
 ## Skill File Conventions
 

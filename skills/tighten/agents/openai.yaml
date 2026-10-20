@@ -1,0 +1,6 @@
+interface:
+  display_name: "Tighten"
+  short_description: "Rewrites the previous answer in about 60 words"
+  default_prompt: "Use $tighten to rewrite your previous answer in at most 60 words."
+policy:
+  allow_implicit_invocation: false

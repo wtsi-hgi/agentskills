@@ -3,3 +3,6 @@
 
 # Automatically synced skills
 /skills/synced/
+
+# Skills some harnesses move here when they remove synced skills
+/skills/.trash/
