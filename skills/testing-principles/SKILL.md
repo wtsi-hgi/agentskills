@@ -42,6 +42,11 @@ helpers, source layout, filenames, imports, CSS classes, deleted files,
 removed functions, removed routes, removed modules/processes, or the mere
 absence of an old feature.
 
+Do not test a dependency's behaviour (that belongs in its project), test-only
+helpers, or language features. Give every test synchronisation aid (sleep,
+channel, hook, wrapper) an evident purpose, and derive each wait's bound from
+what it waits on, never a guess.
+
 ## Properties and Generated Input
 
 A worked example the spec names earns a table test. A claim that must hold

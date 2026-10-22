@@ -137,7 +137,7 @@ reviewer can re-run the same comparison instead of taking your word for it.
 - New layers, interfaces, factories, wrappers, helpers, or configuration when
   direct code is clearer.
 - New dependencies for behaviour the project or standard library already
-  provides.
+  provides, or reimplementing what an existing dependency already exports.
 - Parallel implementations of an existing workflow or business rule.
 - Broad refactors, premature optimization, concurrency, or configurability
   unrelated to the current requirement.

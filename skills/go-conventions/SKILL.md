@@ -45,7 +45,10 @@ All new source files must start with:
 - Range over integers: `for i := range n` (no C-style loops in new code).
 - `log/slog` over `log` or `fmt.Println` for operational output.
 - `fmt.Errorf` with `%w`; sentinel errors as package-level `var` with
-  `errors.New`; `errors.Is`/`As` for checking.
+  `errors.New`; `errors.Is`, or `errors.AsType[T]` rather than `errors.As`
+  with a target variable.
+- `time` unit constants, not raw nanosecond counts; `for b.Loop()` in
+  benchmarks; `defer` for a function's final cleanup step.
 - `slices`/`maps` packages instead of hand-written loops.
 - Named return values only when they genuinely aid readability.
 - Goroutines must have clear exit paths; use `context.Context` for cancellation.
@@ -66,6 +69,13 @@ All new source files must start with:
 - `t.TempDir()` for filesystem ops.
 - Each `Convey` block independent; no shared mutable state.
 - Never put `So()` in loops >20 iterations; count and assert final count.
+- Use the matching assertion (`ShouldWrap`, `ShouldHaveLength`, ...), not
+  `So(cond, ShouldBeTrue)`.
+- Undo state changes (permissions, env, globals) with `Reset`, registered
+  before the change; a failing `So` skips any later `defer`. Pass cleanup
+  functions directly: `Reset(h.Cleanup)`.
+- Never block on a bare channel receive; `select` with a timeout so a missed
+  signal fails the test instead of hanging it.
 - Follow **testing-principles** for test intent; this section covers GoConvey
   mechanics.
 - Every spec.md acceptance test MUST have a corresponding GoConvey test. No
